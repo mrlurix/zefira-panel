@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # ============================================================
 #  ZEFIRA PANEL - one-command Linux installer
 #
 #  Fresh server :
-#      bash <(curl -fsSL https://raw.githubusercontent.com/USERNAME/zefira/main/install.sh)
+#      bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)
 #  Inside a cloned repo :
 #      sudo bash install.sh
 #  Uninstall :
@@ -11,7 +11,7 @@
 # ============================================================
 set -uo pipefail
 
-REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/USERNAME/zefira.git}"
+REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira.git}"
 TARGET="/opt/zefira"
 SERVICE="zefira"
 PORT="${ZEFIRA_PORT:-8000}"
@@ -64,10 +64,10 @@ python3 -m venv .venv
 echo "==> [4/6] Admin credentials..."
 ENV_FILE="$TARGET/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
-    ADMIN_USER="${ZEFIRA_ADMIN_USERNAME:-admin}"
+    ADMIN_USER="${ZEFIRA_ADMIN_mrlurix:-admin}"
     ADMIN_PASS="${ZEFIRA_ADMIN_PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16)}"
     cat > "$ENV_FILE" <<EOF
-ZEFIRA_ADMIN_USERNAME=$ADMIN_USER
+ZEFIRA_ADMIN_mrlurix=$ADMIN_USER
 ZEFIRA_ADMIN_PASSWORD=$ADMIN_PASS
 EOF
     chmod 600 "$ENV_FILE"

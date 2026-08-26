@@ -1,25 +1,25 @@
-# ZEFIRA PANEL
+﻿# ZEFIRA PANEL
 
-**Multi-protocol proxy sales & management panel** — red/black themed, security-hardened, single-file SQLite.
+**Multi-protocol proxy sales & management panel** â€” red/black themed, security-hardened, single-file SQLite.
 
-`FastAPI + uvicorn + SQLAlchemy` · VLESS-REALITY / VMess / Trojan / Shadowsocks / Hysteria2 / WireGuard / OpenVPN · Clash subscriptions · TOTP 2FA · BackPack tunnel manager · Telegram alerts
+`FastAPI + uvicorn + SQLAlchemy` Â· VLESS-REALITY / VMess / Trojan / Shadowsocks / Hysteria2 / WireGuard / OpenVPN Â· Clash subscriptions Â· TOTP 2FA Â· BackPack tunnel manager Â· Telegram alerts
 
 ---
 
-## ⚡ One-command install (Ubuntu/Debian/Alma/Rocky)
+## âš¡ One-command install (Ubuntu/Debian/Alma/Rocky)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/USERNAME/zefira/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)
 ```
 
-> Replace `USERNAME` with the GitHub account the repo is pushed to (or set `ZEFIRA_REPO_URL`).
+> Replace `mrlurix` with the GitHub account the repo is pushed to (or set `ZEFIRA_REPO_URL`).
 > The installer creates `/opt/zefira`, a systemd service, a random admin password and prints the login URL.
 
 Uninstall: `sudo bash install.sh --uninstall`
 
-## 🛡️ Security-first
+## ðŸ›¡ï¸ Security-first
 
-41→**67 automated attack checks** ship in `security_test.py` (SQLi, XSS, JWT tampering, CSRF, brute-force,
+41â†’**67 automated attack checks** ship in `security_test.py` (SQLi, XSS, JWT tampering, CSRF, brute-force,
 XFF spoofing, path traversal, memory-DoS, mass-assignment, input fuzzing...). Run it against your own instance:
 
 ```bash
@@ -29,7 +29,7 @@ XFF spoofing, path traversal, memory-DoS, mass-assignment, input fuzzing...). Ru
 
 Latest result: **67/67 PASS**
 
-## 📖 Full documentation
+## ðŸ“– Full documentation
 
 Everything (protocols, inbounds, tunnels, REALITY keys, backups, API reference) is documented **inside the panel**
 under **Docs**, and mirrored in this README below.
@@ -102,7 +102,7 @@ Manual run:
 
 On first run the admin password is printed to the console,
 or preset it with environment variables:
-    $env:ZEFIRA_ADMIN_USERNAME="admin"
+    $env:ZEFIRA_ADMIN_mrlurix="admin"
     $env:ZEFIRA_ADMIN_PASSWORD="YourStrongPass123"
 
 Server settings
@@ -147,4 +147,4 @@ GET    /sub/{token}             public subscription endpoint
 
 ## License
 
-Released under the **MIT License** — see [LICENSE](LICENSE).
+Released under the **MIT License** â€” see [LICENSE](LICENSE).
