@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <main class="login-wrap">
+    <form id="login-form" class="login-card" autocomplete="off">
+      <div class="login-logo">
+        <img src="/static/logo.png" alt="Zefira" width="64" height="64" class="logo-round">
+        <h1>ZEFIRA</h1>
+        <p>Multi-Protocol Proxy Sales Panel</p>
+      </div>
+      <label class="field">
+        <span>Username</span>
+        <input type="text" name="username" minlength="3" maxlength="64" required autofocus spellcheck="false">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" minlength="8" maxlength="128" required>
+      </label>
+      <label class="field hidden" id="code-field">
+        <span>Two-Factor Code (TOTP)</span>
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="------" dir="ltr">
+      </label>
+      <div id="login-error" class="login-error" role="alert"></div>
+      <button type="submit" id="login-btn" class="btn btn-primary btn-block">Sign in</button>
+      <p class="login-foot">ZEFIRA PANEL &copy; 2026 &mdash; Secured Connection</p>
+    </form>
+  </main>
+  <script src="/static/auth.js" defer></script>
+</body>
+</html>
