@@ -9,7 +9,7 @@
 #  Uninstall :
 #      sudo bash install.sh --uninstall
 # ============================================================
-set -uo pipefail
+set -euo pipefail
 
 REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira.git}"
 TARGET="/opt/zefira"
@@ -32,11 +32,11 @@ fi
 
 echo "==> [1/6] Installing system packages..."
 if command -v apt-get >/dev/null; then
-    apt-get update -y && apt-get install -y python3 python3-venv python3-pip git curl
+    apt-get update -y && apt-get install -y python3 python3-venv python3-pip python3-dev build-essential git curl rsync
 elif command -v dnf >/dev/null; then
-    dnf install -y python3 python3-pip git curl
+    dnf install -y python3 python3-pip python3-devel gcc git curl rsync
 elif command -v yum >/dev/null; then
-    yum install -y python3 python3-pip git curl
+    yum install -y python3 python3-pip python3-devel gcc git curl rsync
 else
     echo "[!] Unsupported distro: install python3 + venv + git manually."; exit 1
 fi
@@ -64,10 +64,10 @@ python3 -m venv .venv
 echo "==> [4/6] Admin credentials..."
 ENV_FILE="$TARGET/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
-    ADMIN_USER="${ZEFIRA_ADMIN_mrlurix:-admin}"
+    ADMIN_USER="${ZEFIRA_ADMIN_USERNAME:-admin}"
     ADMIN_PASS="${ZEFIRA_ADMIN_PASSWORD:-$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16)}"
     cat > "$ENV_FILE" <<EOF
-ZEFIRA_ADMIN_mrlurix=$ADMIN_USER
+ZEFIRA_ADMIN_USERNAME=$ADMIN_USER
 ZEFIRA_ADMIN_PASSWORD=$ADMIN_PASS
 EOF
     chmod 600 "$ENV_FILE"
@@ -81,7 +81,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=$TARGET
-EnvironmentFile=$ENV_FILE
+EnvironmentFile=-$ENV_FILE
 ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers
 Restart=always
 RestartSec=3
