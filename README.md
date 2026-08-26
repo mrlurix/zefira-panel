@@ -1,150 +1,75 @@
-﻿# ZEFIRA PANEL
+﻿# Zefira
 
-**Multi-protocol proxy sales & management panel** â€” red/black themed, security-hardened, single-file SQLite.
+Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
 
-`FastAPI + uvicorn + SQLAlchemy` Â· VLESS-REALITY / VMess / Trojan / Shadowsocks / Hysteria2 / WireGuard / OpenVPN Â· Clash subscriptions Â· TOTP 2FA Â· BackPack tunnel manager Â· Telegram alerts
+Works with VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and OpenVPN. You can also enable VLESS-REALITY for anti-filter setups. One user can have multiple protocols at once and gets a single subscription link.
 
----
+Built with FastAPI + SQLite. No Docker required, just Python.
 
-## âš¡ One-command install (Ubuntu/Debian/Alma/Rocky)
+### Install on a server (one line)
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)
 ```
 
-> Replace `mrlurix` with the GitHub account the repo is pushed to (or set `ZEFIRA_REPO_URL`).
-> The installer creates `/opt/zefira`, a systemd service, a random admin password and prints the login URL.
+The script installs Python deps, creates a systemd service and prints your login URL + password. Works on Ubuntu / Debian / Alma / Rocky.
 
-Uninstall: `sudo bash install.sh --uninstall`
+To remove later: `sudo bash install.sh --uninstall`
 
-## ðŸ›¡ï¸ Security-first
-
-41â†’**67 automated attack checks** ship in `security_test.py` (SQLi, XSS, JWT tampering, CSRF, brute-force,
-XFF spoofing, path traversal, memory-DoS, mass-assignment, input fuzzing...). Run it against your own instance:
+### Manual install
 
 ```bash
-.venv\Scripts\python security_test.py http://127.0.0.1:8000 admin YOURPASS   # Windows
-.venv/bin/python security_test.py http://127.0.0.1:8000 admin YOURPASS       # Linux
+git clone https://github.com/mrlurix/zefira.git
+cd zefira
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-server-header --no-proxy-headers
 ```
 
-Latest result: **67/67 PASS**
+First run prints the admin username/password in the terminal. If you set `ZEFIRA_ADMIN_PASSWORD` before starting, it will use that instead.
 
-## ðŸ“– Full documentation
+Default login: `http://YOUR_SERVER_IP:8000`
 
-Everything (protocols, inbounds, tunnels, REALITY keys, backups, API reference) is documented **inside the panel**
-under **Docs**, and mirrored in this README below.
+### What you get
+
+- Users with traffic limit, expiry date, and notes. Start-on-first-use is supported if you want the timer to start only after the first connection.
+- Multiple protocols per user, all in one subscription. Supports normal base64 subs and Clash YAML (`?format=clash`).
+- Inbounds: define extra ports/hosts per protocol and every user gets links for all of them.
+- Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
+- BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable.
+- QR codes for every subscription, ZIP download for configs.
+- 2FA with any authenticator app, full audit log, system stats, Telegram notifications if you want.
+- JSON backup / restore (password confirmed). Also imports/exports all settings.
+
+All docs are also inside the panel under **Docs** (left menu).
+
+### Settings you might want to change
+
+Most things are in the panel itself: **Settings -> Server / Hosts Settings** (domain, ports, DNS, REALITY settings) and **Settings -> Remote Access** (public URL, trusted proxies).
+
+If you prefer env files, copy `.env.example` to `.env`. Env vars are only used as defaults on first start.
+
+### Security
+
+I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login, CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, encrypted secrets at rest, and audit logging. 
+
+There is a test suite with 60+ checks that hits the running panel from the outside:
+
+```bash
+python security_test.py http://127.0.0.1:8000 admin YOURPASS
+```
+
+It should print `62/62 checks passed` or similar - if not, open an issue.
+
+### API
+
+It's a normal REST API, all under `/api/*`. Check the Docs page in the panel for the full table, or just open browser devtools while using the panel.
+
+### License
+
+MIT - see [LICENSE](LICENSE). Do what you want, just keep the notice.
 
 ---
 
-ZEFIRA PANEL
-
-Supported protocols (multi-select per user)
---------------------------------------------
-VLESS-REALITY (anti-censorship) - X25519 REALITY keypair generated in-panel,
-    masquerade SNI rotation (yahoo/samsung/microsoft), xtls-rprx-vision flow
-VLESS / VMess / Trojan (TLS+WS) - subscription links, v2rayNG/NekoBox/Streisand compatible
-Shadowsocks (AES-256-GCM)
-Hysteria2
-WireGuard   - real X25519 keys per user, ready wg .conf
-OpenVPN     - panel-managed CA + per-user signed certificates, complete .ovpn
-
-Subscription formats
----------------------
-/sub/{token}              base64 v2ray links (or plain text when WG/OVPN included)
-/sub/{token}?format=clash Clash/ClashMeta YAML (auto-detected from User-Agent too)
-
-Marzban/PasarGuard-style features
-----------------------------------
-- Multi-protocol single user, one subscription for all
-- VLESS-REALITY anti-filter protocol with in-panel key management
-- Start-on-first-use expiry strategy (counts down from first connection)
-- Limited status when volume is exhausted; manual usage editing via PATCH add_used_gb
-- User templates (save/load/delete presets in Add-User dialog)
-- Clash/ClashMeta subscription output
-- Hosts/server settings editable from dashboard (incl. REALITY port & SNI list)
-- System monitoring widget, JSON backup/restore (password-confirmed), audit log
-
-Remote access & tunneling
---------------------------
-Settings -> "Remote Access & Tunneling":
-- Public base URL: used in subscription links / QR codes behind any tunnel
-- Trusted proxies: ONLY these IPs/CIDRs may set X-Forwarded-For (anti-spoofing)
-- One-click ready scripts: SSH forward, SSH reverse, socat, gost, realm
-
-Typical flows:
-  Normal tunnel  (panel on server):  ssh -N -L 8000:127.0.0.1:8000 user@SERVER
-  Reverse tunnel (panel behind NAT): ssh -N -R 0.0.0.0:8000:127.0.0.1:8000 user@VPS
-                                     (+ GatewayPorts yes in sshd_config)
-IMPORTANT: always run uvicorn with --no-proxy-headers so only OUR trusted_proxies
-logic decides which X-Forwarded-For values are honored (uvicorn's default proxy
-middleware would otherwise let ANY local client spoof their IP).
-
-Security test suite
---------------------
-security_test.py fires ~38 attacks: auth boundary, CSRF, SQLi payloads,
-JWT alg=none/tampering/bad-signature, brute-force throttling, XFF spoof bypass,
-path traversal, stored XSS, oversized payloads, method abuse, sub-token probing,
-2FA guessing limits. Run against your own instance:
-
-    .venv\\Scripts\\python security_test.py http://127.0.0.1:8000 admin YOURPASS
-
-Current status: 38/38 PASS.
-
-Install & run
---------------
-cd zefira
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.\start.bat        <- auto-installs deps and opens the browser
-
-Manual run:
-.venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header
-
-On first run the admin password is printed to the console,
-or preset it with environment variables:
-    $env:ZEFIRA_ADMIN_mrlurix="admin"
-    $env:ZEFIRA_ADMIN_PASSWORD="YourStrongPass123"
-
-Server settings
----------------
-Preferred way: Settings -> "Server / Hosts Settings" inside the panel (stored in DB).
-Environment variables are used only as initial defaults:
-    ZEFIRA_DOMAIN, ZEFIRA_SUB_PORT, ZEFIRA_HY2_PORT, ZEFIRA_WG_PORT,
-    ZEFIRA_DNS, ZEFIRA_OVPN_PORT, ZEFIRA_OVPN_PROTO, ZEFIRA_SESSION_TTL
-
-Security implemented
----------------------
-1. TOTP 2FA (local QR, Fernet-encrypted secret at rest)
-2. scrypt hashing + timing-safe compare + dummy-hash anti-enumeration
-3. JWT session in HttpOnly SameSite=Strict cookie; global invalidation on password change/restore
-4. Login rate limit: 8 tries / 15 min per IP+user (includes 2FA failures)
-5. CSRF guard on POST/PATCH/DELETE + 1 MB request body cap
-6. Strict CSP (no inline scripts/styles), frame-ancestors none, noindex
-7. Parameterized SQLAlchemy queries + strict Pydantic validation
-8. Safe DOM rendering (no innerHTML for user data) against XSS
-9. Audit log of security events (login ok/fail, user CRUD, settings, backup/restore)
-10. 256-bit random subscription tokens; token reset regenerates ALL protocol secrets
-
-Deployment checklist (real world)
-----------------------------------
-- Serve behind Nginx/Caddy with HTTPS so cookies become Secure automatically
-- Keep uvicorn single-worker (in-memory rate limiter) or move limiting to Nginx
-- Protect instance/ca.key and instance/secret.key; backup instance/zefira.db regularly
-- Harden your actual VPN servers separately (firewall, fail2ban, updates)
-
-API summary
-------------
-POST   /api/login | /api/logout | /api/change-password
-GET    /api/me | /api/stats | /api/system | /api/users?q= | /api/audit | /api/settings | /api/backup
-PUT    /api/settings
-POST   /api/users | /api/restore | /api/users/{id}/reset-token | /api/2fa/setup|enable|disable
-PATCH  /api/users/{id}
-DELETE /api/users/{id}
-GET    /api/users/{id}/config   (single file or ZIP bundle)
-GET    /api/users/{id}/qr       (QR of subscription link)
-GET    /sub/{token}             public subscription endpoint
-```
-
-## License
-
-Released under the **MIT License** â€” see [LICENSE](LICENSE).
+If you like it, give it a star. Issues and PRs are welcome.
