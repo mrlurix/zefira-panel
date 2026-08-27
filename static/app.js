@@ -623,17 +623,27 @@ async function loadSrvSettings() {
     const srv = await api("/api/settings");
     const f = $("#srv-form");
     for (const [k, v] of Object.entries(srv)) {
-      if (f.elements[k]) f.elements[k].value = v;
+      if (f.elements[k]) {
+        if (k === "per_user_subdomain") f.elements[k].checked = String(v) === "1" || v === true;
+        else f.elements[k].value = v;
+      }
     }
     const rp = document.querySelector('[name="reality_port"]');
     const rs = document.querySelector('[name="reality_sni"]');
     if (rp) rp.value = srv.reality_port;
     if (rs) rs.value = srv.reality_sni;
+    const ce = document.querySelector('[name="cdn_enabled"]');
+    const cs = document.querySelector('[name="cdn_sni"]');
+    if (ce) ce.checked = String(srv.cdn_enabled) === "1" || srv.cdn_enabled === true;
+    if (cs) cs.value = srv.cdn_sni || "";
   } catch (_) {}
 }
-$("#srv-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const f = e.target;
+document.getElementById("cdn-preset")?.addEventListener("change", (e) => {
+  if (e.target.value) document.querySelector('[name="cdn_sni"]').value = e.target.value;
+});
+
+async function saveAllSettings() {
+  const f = $("#srv-form");
   const body = {};
   body.domain = f.domain.value.trim();
   body.sub_port = parseInt(f.sub_port.value, 10);
@@ -645,12 +655,21 @@ $("#srv-form").addEventListener("submit", async (e) => {
   body.wg_pub = f.wg_pub.value.trim();
   body.reality_port = parseInt(document.querySelector('[name="reality_port"]').value, 10) || 443;
   body.reality_sni = document.querySelector('[name="reality_sni"]').value.trim() || "www.yahoo.com,www.samsung.com,www.microsoft.com";
+  body.obfuscated_host = f.obfuscated_host.value.trim();
+  body.per_user_subdomain = f.per_user_subdomain.checked;
+  body.cdn_enabled = document.querySelector('[name="cdn_enabled"]').checked;
+  body.cdn_sni = document.querySelector('[name="cdn_sni"]').value.trim();
   try {
     await api("/api/settings", { method: "PUT", body });
-    toast("Server settings saved \u2014 new configs will use them");
+    toast("Server settings saved — new configs will use them");
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
+}
+document.getElementById("save-reality-btn")?.addEventListener("click", saveAllSettings);
+$("#srv-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await saveAllSettings();
 });
 
 $("#reality-gen-btn").addEventListener("click", async () => {

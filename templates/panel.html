@@ -203,6 +203,20 @@
             <label class="field"><span>Private Key (for your Xray server config &mdash; keep secret!)</span><textarea id="reality-priv" readonly rows="2"></textarea></label>
             <button type="button" id="reality-copy-btn" class="btn btn-sm btn-ghost">Copy Both Keys</button>
           </div>
+          <hr class="sep">
+          <p class="hint" style="margin-top:0"><b>CDN SNI Spoofing</b> — when enabled, the SNI in configs becomes the CDN domain instead of your server. Traffic still goes to your obfuscated host, but DPI sees CDN's SNI.</p>
+          <label class="proto-check wide"><input type="checkbox" name="cdn_enabled"><span>Enable CDN SNI Spoofing</span></label>
+          <label class="field"><span>CDN SNI</span>
+            <select id="cdn-preset" style="margin-bottom:8px">
+              <option value="">Custom...</option>
+              <option value="www.cloudflare.com">Cloudflare — www.cloudflare.com</option>
+              <option value="www.fastly.com">Fastly — www.fastly.com</option>
+              <option value="www.akamaized.net">Akamai — www.akamaized.net</option>
+              <option value="www.google.com">Google — www.google.com</option>
+            </select>
+            <input type="text" name="cdn_sni" placeholder="www.cloudflare.com" spellcheck="false">
+          </label>
+          <button type="button" id="save-reality-btn" class="btn btn-primary" style="margin-top:10px">Save Anti-Censorship Settings</button>
         </div>
 
       </div>
@@ -317,6 +331,8 @@
             </label>
           </div>
           <label class="field"><span>WireGuard server public key</span><input type="text" name="wg_pub" placeholder="Server PublicKey from wg show" dir="ltr" spellcheck="false"></label>
+          <label class="field"><span>Obfuscated host (weird URL to hide real IP)</span><input type="text" name="obfuscated_host" placeholder="e.g. cdn.weird.workers.dev — leave empty to use domain" spellcheck="false"></label>
+          <label class="proto-check wide"><input type="checkbox" name="per_user_subdomain"><span>Per-user weird subdomain — each config gets a random prefix (needs wildcard DNS *.host)</span></label>
           <button type="submit" class="btn btn-primary">Save Server Settings</button>
         </form>
 

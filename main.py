@@ -76,6 +76,7 @@ STRONG_PW_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{10,128}$")
 SRV_KEYS = {
     "domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns",
     "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "reality_pub",
+    "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni",
 }
 PENDING_YEAR = 2098
 
@@ -478,8 +479,10 @@ def api_settings_get(admin: Admin = Depends(require_admin)):
 @app.put("/api/settings")
 def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni"):
+        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni"):
             v = getattr(data, k)
+            if k in ("per_user_subdomain", "cdn_enabled"):
+                v = "1" if v else "0"
             row = s.get(Setting, k)
             if row is None:
                 s.add(Setting(key=k, value=str(v)))
@@ -826,13 +829,59 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             added_users += 1
         if data.settings:
             for k, v in data.settings.items():
-                if k in SRV_KEYS or k in TUNNEL_KEYS or k == "reality_priv_enc":
-                    row = s.get(Setting, k)
-                    if row is None:
-                        s.add(Setting(key=k, value=str(v)))
+                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc"}:
+                    continue
+                sval = str(v)
+                if len(sval) > 500:
+                    continue
+                ok = True
+                if k in ("domain", "obfuscated_host", "cdn_sni"):
+                    if sval and not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", sval):
+                        ok = False
+                elif k == "dns":
+                    if sval and not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", sval):
+                        ok = False
+                elif k.endswith("_port"):
+                    try:
+                        ok = 1 <= int(sval) <= 65535
+                    except (TypeError, ValueError):
+                        ok = False
+                elif k in ("ovpn_proto",):
+                    ok = sval in ("udp", "tcp")
+                elif k in ("per_user_subdomain", "cdn_enabled"):
+                    ok = sval.lower() in ("0", "1", "true", "false", "yes", "no", "on", "off", "")
+                    if ok:
+                        sval = "1" if sval.lower() in ("1", "true", "yes", "on") else "0"
+                elif k == "reality_sni":
+                    if not re.fullmatch(r"[a-zA-Z0-9.,\- ]{0,300}", sval):
+                        ok = False
+                elif k == "wg_pub":
+                    if len(sval) > 200:
+                        ok = False
+                elif k in ("public_url",):
+                    if sval and not re.fullmatch(r"https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?", sval):
+                        ok = False
+                elif k in ("trusted_proxies",):
+                    if len(sval) > 500:
+                        ok = False
                     else:
-                        row.value = str(v)
-                    restored_settings += 1
+                        for part in sval.split(","):
+                            part = part.strip()
+                            if not part:
+                                continue
+                            try:
+                                ipaddress.ip_network(part, strict=False)
+                            except ValueError:
+                                ok = False
+                                break
+                if not ok:
+                    continue
+                row = s.get(Setting, k)
+                if row is None:
+                    s.add(Setting(key=k, value=sval))
+                else:
+                    row.value = sval
+                restored_settings += 1
         if data.admins:
             for ra in data.admins:
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))

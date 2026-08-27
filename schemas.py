@@ -86,6 +86,10 @@ class SettingsIn(BaseModel):
         max_length=300,
         pattern=SNI_RE,
     )
+    obfuscated_host: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    per_user_subdomain: bool = False
+    cdn_enabled: bool = False
+    cdn_sni: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
 
 
 class TemplateCreateIn(BaseModel):

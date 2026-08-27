@@ -35,7 +35,52 @@ DEFAULT_SRV = {
     "reality_port": 443,
     "reality_sni": "www.yahoo.com,www.samsung.com,www.microsoft.com",
     "reality_pub": "",
+    "obfuscated_host": "",
+    "per_user_subdomain": "0",
+    "cdn_enabled": "0",
+    "cdn_sni": "",
 }
+
+
+def _effective_host(secret: str, srv: dict) -> str:
+    obf = (srv.get("obfuscated_host") or "").strip()
+    if not obf:
+        return srv["domain"]
+    if "://" in obf:
+        try:
+            from urllib.parse import urlparse
+
+            host = urlparse(obf).hostname
+            if host:
+                obf = host
+        except Exception:
+            pass
+    obf = obf.strip().strip("/")
+    if not obf:
+        return srv["domain"]
+    per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
+    if per_user:
+        prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
+        return f"{prefix}.{obf}"
+    return obf
+
+
+def _cdn_sni(srv: dict) -> str | None:
+    if str(srv.get("cdn_enabled", "0")).lower() not in ("1", "true", "yes", "on"):
+        return None
+    cdn = (srv.get("cdn_sni") or "").strip()
+    if not cdn:
+        return None
+    if "://" in cdn:
+        try:
+            from urllib.parse import urlparse
+
+            h = urlparse(cdn).hostname
+            if h:
+                cdn = h
+        except Exception:
+            pass
+    return cdn.strip().strip("/") or None
 
 
 def generate_reality_keypair() -> tuple:
@@ -105,12 +150,14 @@ def serialize_secrets(secret_map: dict) -> str:
 
 
 def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict) -> str | None:
-    host = srv["domain"]
+    host = _effective_host(secret, srv)
+    cdn = _cdn_sni(srv)
+    sni = cdn or host
     name = f"Zefira-{username}-{index}"
     if protocol == "vless":
         return (
             f"vless://{secret}@{host}:{srv['sub_port']}?encryption=none&security=tls"
-            f"&sni={host}&fp=chrome&type=ws&host={host}&path=%2Fzefira#{name}"
+            f"&sni={sni}&fp=chrome&type=ws&host={host}&path=%2Fzefira#{name}"
         )
     if protocol == "vmess":
         obj = {
@@ -126,12 +173,12 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
             "host": host,
             "path": "/zefira",
             "tls": "tls",
-            "sni": host,
+            "sni": sni,
         }
         return "vmess://" + _b64(json.dumps(obj, separators=(",", ":")))
     if protocol == "trojan":
         return (
-            f"trojan://{secret}@{host}:{srv['sub_port']}?security=tls&sni={host}"
+            f"trojan://{secret}@{host}:{srv['sub_port']}?security=tls&sni={sni}"
             f"&type=ws&host={host}&path=%2Fzefira&allowInsecure=0#{name}"
         )
     if protocol == "ss":
@@ -140,13 +187,13 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     if protocol == "hysteria2":
         return (
             f"hysteria2://{secret}@{host}:{srv['hy2_port']}"
-            f"?sni={host}&insecure=0#Zefira-{username}-{index}"
+            f"?sni={sni}&insecure=0#Zefira-{username}-{index}"
         )
     return None
 
 
 def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | None:
-    host = srv["domain"]
+    host = _effective_host(secret, srv)
     pub = srv.get("reality_pub") or "REPLACE_WITH_REALITY_PUBLIC_KEY"
     sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
     sni = sni_list[(index - 1) % len(sni_list)] if sni_list else host
@@ -167,62 +214,78 @@ def _json_scalar(v) -> str:
 def clash_yaml(u: dict, srv: dict) -> str:
     protos = u.get("protocols") or []
     secrets_map = u.get("secret_map") or {}
-    host = srv["domain"]
     proxies = []
     names = []
 
-    def ws_opts(path="/zefira"):
-        return {"path": path, "headers": {"Host": host}}
+    def ws_opts(h, path="/zefira"):
+        return {"path": path, "headers": {"Host": h}}
+
+    def _hs(sec):
+        h = _effective_host(sec, srv)
+        c = _cdn_sni(srv)
+        return h, (c or h)
 
     if "vmess" in protos and secrets_map.get("vmess"):
+        sec = secrets_map["vmess"]
+        host_eff, sni_eff = _hs(sec)
         n = f"Zefira-{u['username']}-VMess"
         names.append(n)
         proxies.append({
-            "name": n, "type": "vmess", "server": host, "port": int(srv["sub_port"]),
-            "uuid": secrets_map["vmess"], "alterId": 0, "cipher": "auto",
-            "tls": True, "servername": host, "network": "ws", "ws-opts": ws_opts(),
+            "name": n, "type": "vmess", "server": host_eff, "port": int(srv["sub_port"]),
+            "uuid": sec, "alterId": 0, "cipher": "auto",
+            "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff),
         })
     if "vless" in protos and secrets_map.get("vless"):
+        sec = secrets_map["vless"]
+        host_eff, sni_eff = _hs(sec)
         n = f"Zefira-{u['username']}-VLESS"
         names.append(n)
         proxies.append({
-            "name": n, "type": "vless", "server": host, "port": int(srv["sub_port"]),
-            "uuid": secrets_map["vless"], "tls": True, "servername": host,
-            "network": "ws", "ws-opts": ws_opts(), "client-fingerprint": "chrome",
+            "name": n, "type": "vless", "server": host_eff, "port": int(srv["sub_port"]),
+            "uuid": sec, "tls": True, "servername": sni_eff,
+            "network": "ws", "ws-opts": ws_opts(host_eff), "client-fingerprint": "chrome",
         })
     if "reality" in protos and secrets_map.get("reality"):
+        sec = secrets_map["reality"]
+        host_eff = _effective_host(sec, srv)
         sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
-        sni = sni_list[0] if sni_list else host
-        sid = hashlib.sha1(f"{secrets_map['reality']}:1".encode()).hexdigest()[:8]
+        sni = sni_list[0] if sni_list else host_eff
+        sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
         n = f"Zefira-{u['username']}-REALITY"
         names.append(n)
         proxies.append({
-            "name": n, "type": "vless", "server": host, "port": int(srv["reality_port"]),
-            "uuid": secrets_map["reality"], "flow": "xtls-rprx-vision",
+            "name": n, "type": "vless", "server": host_eff, "port": int(srv["reality_port"]),
+            "uuid": sec, "flow": "xtls-rprx-vision",
             "tls": True, "servername": sni, "client-fingerprint": "chrome",
             "reality-opts": {"public-key": srv.get("reality_pub") or "", "short-id": sid},
         })
     if "trojan" in protos and secrets_map.get("trojan"):
+        sec = secrets_map["trojan"]
+        host_eff, sni_eff = _hs(sec)
         n = f"Zefira-{u['username']}-Trojan"
         names.append(n)
         proxies.append({
-            "name": n, "type": "trojan", "server": host, "port": int(srv["sub_port"]),
-            "password": secrets_map["trojan"], "sni": host, "udp": True,
-            "network": "ws", "ws-opts": ws_opts(),
+            "name": n, "type": "trojan", "server": host_eff, "port": int(srv["sub_port"]),
+            "password": sec, "sni": sni_eff, "udp": True,
+            "network": "ws", "ws-opts": ws_opts(host_eff),
         })
     if "ss" in protos and secrets_map.get("ss"):
+        sec = secrets_map["ss"]
+        host_eff = _effective_host(sec, srv)
         n = f"Zefira-{u['username']}-SS"
         names.append(n)
         proxies.append({
-            "name": n, "type": "ss", "server": host, "port": int(srv["sub_port"]),
-            "cipher": "aes-256-gcm", "password": secrets_map["ss"], "udp": True,
+            "name": n, "type": "ss", "server": host_eff, "port": int(srv["sub_port"]),
+            "cipher": "aes-256-gcm", "password": sec, "udp": True,
         })
     if "hysteria2" in protos and secrets_map.get("hysteria2"):
+        sec = secrets_map["hysteria2"]
+        host_eff, sni_eff = _hs(sec)
         n = f"Zefira-{u['username']}-Hy2"
         names.append(n)
         proxies.append({
-            "name": n, "type": "hysteria2", "server": host, "port": int(srv["hy2_port"]),
-            "password": secrets_map["hysteria2"], "sni": host,
+            "name": n, "type": "hysteria2", "server": host_eff, "port": int(srv["hy2_port"]),
+            "password": sec, "sni": sni_eff,
         })
 
     lines = [
@@ -256,6 +319,7 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
     )
     peer = srv.get("wg_pub") or "SERVER_PUBLIC_KEY_HERE"
     addr = f"10.7.0.{(u['id'] % 250) + 2}"
+    host = _effective_host(secret, srv)
     lines = [
         "[Interface]",
         f"PrivateKey = {secret}",
@@ -266,7 +330,7 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
         "[Peer]",
         f"# Client PublicKey = {base64.b64encode(pub).decode()}",
         f"PublicKey = {peer}",
-        f"Endpoint = {srv['domain']}:{srv['wg_port']}",
+        f"Endpoint = {host}:{srv['wg_port']}",
         "AllowedIPs = 0.0.0.0/0, ::/0",
         "PersistentKeepalive = 25",
         "",
@@ -340,11 +404,12 @@ def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
     marker_k = "<ZEFIRA-KEY>"
     cert_pem = blob.split(marker_c)[1].split(marker_k)[0].strip()
     key_pem = blob.split(marker_k)[1].strip()
+    host = _effective_host(blob, srv)
     lines = [
         "client",
         "dev tun",
         f"proto {srv.get('ovpn_proto', 'udp')}",
-        f"remote {srv['domain']} {srv['ovpn_port']}",
+        f"remote {host} {srv['ovpn_port']}",
         "resolv-retry infinite",
         "nobind",
         "persist-key",
