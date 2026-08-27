@@ -300,6 +300,13 @@ def _ensure_ca():
         serialization.NoEncryption(),
     ))
     CA_CERT_PATH.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    try:
+        import os
+
+        os.chmod(CA_KEY_PATH, 0o600)
+        os.chmod(CA_CERT_PATH, 0o644)
+    except OSError:
+        pass
     return cert, key
 
 

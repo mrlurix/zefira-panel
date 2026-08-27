@@ -249,6 +249,12 @@ class Database:
 
     def init(self) -> None:
         Base.metadata.create_all(self.engine)
+        try:
+            import os
+
+            os.chmod(self.engine.url.database, 0o600)
+        except (OSError, AttributeError):
+            pass
         with self.engine.begin() as conn:
             self._add_column(conn, "admins", "totp_enabled", "totp_enabled BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "admins", "totp_secret", "totp_secret TEXT")

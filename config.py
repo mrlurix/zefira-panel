@@ -4,7 +4,11 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
-INSTANCE_DIR.mkdir(exist_ok=True)
+INSTANCE_DIR.mkdir(mode=0o700, exist_ok=True)
+try:
+    os.chmod(INSTANCE_DIR, 0o700)
+except OSError:
+    pass
 
 
 def _load_or_create_secret() -> str:
@@ -13,6 +17,10 @@ def _load_or_create_secret() -> str:
         return path.read_text(encoding="utf-8").strip()
     key = secrets.token_hex(48)
     path.write_text(key, encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
     return key
 
 
