@@ -1326,6 +1326,13 @@ def subscription(token: str, request: Request):
     return PlainTextResponse(body, media_type=ct, headers={"Cache-Control": "no-store", "subscription-userinfo": info})
 
 
+try:
+    from config import SUBSCRIPTION_PATH
+    if SUBSCRIPTION_PATH != "/sub":
+        app.add_api_route(SUBSCRIPTION_PATH.rstrip("/") + "/{token}", subscription, methods=["GET"])
+except ImportError:
+    pass
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 

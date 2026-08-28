@@ -231,12 +231,20 @@ class AuditLog(Base):
 
 class Database:
     def __init__(self, path: Path):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.engine = create_engine(
-            f"sqlite:///{path}",
-            connect_args={"check_same_thread": False},
-            future=True,
-        )
+        import os
+
+        db_url = os.environ.get("DATABASE_URL", "").strip()
+        if db_url:
+            self.engine = create_engine(db_url, future=True, pool_pre_ping=True)
+            self._external_db = True
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.engine = create_engine(
+                f"sqlite:///{path}",
+                connect_args={"check_same_thread": False},
+                future=True,
+            )
+            self._external_db = False
 
         from sqlalchemy import event
 
@@ -249,12 +257,13 @@ class Database:
 
     def init(self) -> None:
         Base.metadata.create_all(self.engine)
-        try:
-            import os
+        if not getattr(self, "_external_db", False):
+            try:
+                import os
 
-            os.chmod(self.engine.url.database, 0o600)
-        except (OSError, AttributeError):
-            pass
+                os.chmod(self.engine.url.database, 0o600)
+            except (OSError, AttributeError):
+                pass
         with self.engine.begin() as conn:
             self._add_column(conn, "admins", "totp_enabled", "totp_enabled BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "admins", "totp_secret", "totp_secret TEXT")

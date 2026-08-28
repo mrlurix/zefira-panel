@@ -26,6 +26,10 @@ def _load_or_create_secret() -> str:
 
 SECRET_KEY = _load_or_create_secret()
 SESSION_TTL = int(os.environ.get("ZEFIRA_SESSION_TTL", "28800"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+SUBSCRIPTION_PATH = os.environ.get("SUBSCRIPTION_PATH", "/sub").strip() or "/sub"
+if not SUBSCRIPTION_PATH.startswith("/"):
+    SUBSCRIPTION_PATH = "/" + SUBSCRIPTION_PATH
 DOMAIN = os.environ.get("ZEFIRA_DOMAIN", "zefira.example.com")
 SUB_PORT = os.environ.get("ZEFIRA_SUB_PORT", "443")
 WG_PORT = os.environ.get("ZEFIRA_WG_PORT", "51820")
