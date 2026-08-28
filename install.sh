@@ -96,14 +96,34 @@ echo "==> [6/6] Firewall (best effort)..."
 command -v ufw >/dev/null && ufw allow "$PORT/tcp" 2>/dev/null || true
 command -v firewall-cmd >/dev/null && firewall-cmd --add-port="$PORT/tcp" --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
 
-sleep 2
+sleep 3
+echo "==> Verifying..."
+if curl -fsS http://127.0.0.1:$PORT/login >/dev/null 2>&1; then
+    echo "[ok] Panel is running locally on port $PORT"
+else
+    echo "[!] Panel NOT responding on 127.0.0.1:$PORT"
+    echo "--- systemctl status ---"
+    systemctl status "$SERVICE" --no-pager 2>&1 | head -n 40 || true
+    echo "--- journal ---"
+    journalctl -u "$SERVICE" -n 60 --no-pager 2>&1 | tail -n 40 || true
+    echo "[!] Fix the error above, then: systemctl restart $SERVICE"
+fi
+if ss -tlnp 2>/dev/null | grep -q ":$PORT "; then
+    echo "[ok] Port $PORT is listening (0.0.0.0)"
+else
+    echo "[!] Port $PORT not listening - check if another service uses it: ss -tlnp | grep $PORT"
+fi
+
 IP=$(curl -fsS4 https://api.ipify.org 2>/dev/null || echo SERVER_IP)
 echo
 echo "============================================================"
 echo "  ZEFIRA INSTALLED"
-echo "  URL      : http://$IP:$PORT"
-echo "  Login    : see $ENV_FILE"
-echo "  Service  : systemctl status $SERVICE"
-echo "  Logs     : journalctl -u $SERVICE -f"
+echo "  URL (public) : http://$IP:$PORT  (use http://, not https://)"
+echo "  URL (local)  : http://127.0.0.1:$PORT"
+echo "  Login        : cat $ENV_FILE"
+echo "  Service      : systemctl status $SERVICE"
+echo "  Logs         : journalctl -u $SERVICE -n 100 --no-pager"
+echo "  Firewall     : if still not reachable, open port $PORT in hosting panel"
+echo "               : (Hetzner/AWS/Contabo console -> Firewall / Security Group)"
 echo "  !! Change the admin password + enable 2FA now !!"
 echo "============================================================"
