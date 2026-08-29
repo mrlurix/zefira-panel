@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}$"
 Protocol = Literal[
@@ -29,6 +29,13 @@ class UserCreateIn(BaseModel):
     days: int = Field(ge=1, le=3650)
     start_on_first_use: bool = False
 
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
+
 
 class UserPatchIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -41,6 +48,13 @@ class UserPatchIn(BaseModel):
     set_volume_gb: Optional[float] = Field(default=None, gt=0, le=100000)
     set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
     reset_used: bool = False
+
+    @field_validator("set_note", mode="before")
+    @classmethod
+    def _strip_set_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
 
 
 class TelegramSettingsIn(BaseModel):
@@ -186,6 +200,13 @@ class RestoreUserIn(BaseModel):
     duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
     created_at: Optional[str] = None
     expires_at: str
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
 
 
 class RestoreAdminIn(BaseModel):
