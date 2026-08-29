@@ -37,7 +37,7 @@ ask() {
 ask_secret() {
     local prompt="$1" var
     if [[ $INTERACTIVE -eq 0 ]]; then echo ""; return; fi
-    read -rsp "$prompt (empty=random): " var; echo; echo "$var"
+    read -rsp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
 }
 urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$1"; }
 
