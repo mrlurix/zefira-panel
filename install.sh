@@ -194,7 +194,7 @@ After=network.target
 [Service]
 WorkingDirectory=$TARGET
 EnvironmentFile=-$ENV_FILE
-ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port $PORT --no-server-header --no-proxy-headers
+ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers
 Restart=always
 RestartSec=3
 
