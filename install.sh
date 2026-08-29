@@ -45,6 +45,11 @@ urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.
 PORT=$(ask "Panel port" "8000")
 PORT=$(echo "$PORT" | tr -cd '0-9'); [[ -z "$PORT" ]] && PORT=8000
 
+# ---------- helpers (validation) ----------
+is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; }
+is_valid_subpath() { [[ "$1" =~ ^/[a-zA-Z0-9/_-]*$ ]] && [[ "$1" != *".."* ]]; }
+is_valid_username() { [[ "$1" =~ ^[a-zA-Z0-9_]{3,32}$ ]]; }
+
 # ---------- 2. Domain + SSL ----------
 DOMAIN=""
 EMAIL=""
@@ -53,6 +58,7 @@ if [[ $INTERACTIVE -eq 1 ]]; then
     read -rp "Domain for SSL (empty = use IP, no SSL) []: " DOMAIN
     DOMAIN=$(echo "$DOMAIN" | xargs)
     if [[ -n "$DOMAIN" ]]; then
+        if ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid domain: $DOMAIN"; exit 1; fi
         EMAIL=$(ask "Email for Let's Encrypt" "admin@$DOMAIN")
         read -rp "Issue SSL certificate now? (needs port 80 free) [y/N]: " USE_SSL
     fi
@@ -60,10 +66,12 @@ else
     DOMAIN="${ZEFIRA_DOMAIN:-}"
     EMAIL="${ZEFIRA_SSL_EMAIL:-}"
 fi
+if [[ -n "$DOMAIN" ]] && ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid ZEFIRA_DOMAIN: $DOMAIN"; exit 1; fi
 
 # ---------- 3. Admin ----------
 if [[ $INTERACTIVE -eq 1 ]]; then
     ADMIN_USER=$(ask "Admin username" "admin")
+    if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username (a-z, 0-9, _ , 3-32 chars)"; exit 1; fi
     ADMIN_PASS=$(ask_secret "Admin password")
     if [[ -z "$ADMIN_PASS" ]]; then
         ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16)
@@ -112,6 +120,9 @@ if [[ $INTERACTIVE -eq 1 ]]; then
 else
     SUB_PATH="${SUBSCRIPTION_PATH:-/sub}"
 fi
+if ! is_valid_subpath "$SUB_PATH"; then echo "[!] Invalid subscription path (use /sub or /my-path, a-z 0-9 / _ -)"; exit 1; fi
+if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username"; exit 1; fi
+if ((PORT < 1 || PORT > 65535)); then echo "[!] Invalid port: $PORT"; exit 1; fi
 
 # ---------- 6. Telegram + Nginx ----------
 TG_TOKEN=""; TG_CHAT=""

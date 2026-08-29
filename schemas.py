@@ -131,6 +131,26 @@ class TunnelNodeIn(BaseModel):
     forwarded_ports: str = Field(default="", max_length=200, pattern=HOST_PORT_PAIRS_RE)
     udp_forward: bool = False
 
+    @classmethod
+    def _check_ports(cls, v: str) -> str:
+        if not v:
+            return v
+        for pair in v.split(","):
+            pair = pair.strip()
+            if not pair:
+                continue
+            if ":" not in pair:
+                raise ValueError("forwarded_ports must be like 443:8000")
+            a, b = pair.split(":", 1)
+            if not (a.isdigit() and b.isdigit() and 1 <= int(a) <= 65535 and 1 <= int(b) <= 65535):
+                raise ValueError(f"port out of range in {pair!r}")
+        return v
+
+    def __init__(self, **data):
+        if "forwarded_ports" in data and isinstance(data["forwarded_ports"], str):
+            data["forwarded_ports"] = self._check_ports(data["forwarded_ports"])
+        super().__init__(**data)
+
 
 class InboundIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)

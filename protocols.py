@@ -43,6 +43,8 @@ DEFAULT_SRV = {
 
 
 def _effective_host(secret: str, srv: dict) -> str:
+    if srv.get("_is_inbound_variant"):
+        return srv["domain"]
     obf = (srv.get("obfuscated_host") or "").strip()
     if not obf:
         return srv["domain"]
@@ -442,6 +444,9 @@ def _variant_srv(srv: dict, inbound: dict) -> dict:
     v["hy2_port"] = int(inbound["port"])
     if inbound.get("host"):
         v["domain"] = inbound["host"]
+        v["_is_inbound_variant"] = True
+        v["obfuscated_host"] = ""
+        v["per_user_subdomain"] = "0"
     return v
 
 

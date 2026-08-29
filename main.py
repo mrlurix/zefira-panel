@@ -812,12 +812,14 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             )
         )
     seen_names = set()
+    seen_tokens = set()
     deduped = []
     for pu in prepared_users:
-        if pu.username in seen_names:
+        if pu.username in seen_names or pu.token in seen_tokens:
             skipped += 1
             continue
         seen_names.add(pu.username)
+        seen_tokens.add(pu.token)
         deduped.append(pu)
     prepared_users = deduped
     with db.s() as s:
