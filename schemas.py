@@ -104,6 +104,7 @@ class SettingsIn(BaseModel):
     per_user_subdomain: bool = False
     cdn_enabled: bool = False
     cdn_sni: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    block_direct_ip: bool = False
 
 
 class TemplateCreateIn(BaseModel):

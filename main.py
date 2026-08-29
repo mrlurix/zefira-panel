@@ -76,7 +76,7 @@ STRONG_PW_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{10,128}$")
 SRV_KEYS = {
     "domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns",
     "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "reality_pub",
-    "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni",
+    "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip",
 }
 PENDING_YEAR = 2098
 
@@ -218,6 +218,22 @@ async def security_headers_middleware(request: Request, call_next):
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
+
+
+@app.middleware("http")
+async def block_direct_ip_middleware(request: Request, call_next):
+    if cached_setting("block_direct_ip") == "1":
+        host = request.headers.get("host", "").split(":")[0].strip()
+        if host:
+            try:
+                ip = ipaddress.ip_address(host)
+                if not ip.is_private and not ip.is_loopback and not ip.is_link_local and not ip.is_multicast:
+                    if request.url.path in ("/", "/login", "/panel") or request.url.path.startswith("/api/"):
+                        if not request.url.path.startswith("/sub"):
+                            return JSONResponse({"detail": "Direct IP access to panel is disabled, use domain"}, status_code=403)
+            except ValueError:
+                pass
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -479,9 +495,9 @@ def api_settings_get(admin: Admin = Depends(require_admin)):
 @app.put("/api/settings")
 def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni"):
+        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
             v = getattr(data, k)
-            if k in ("per_user_subdomain", "cdn_enabled"):
+            if k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
                 v = "1" if v else "0"
             row = s.get(Setting, k)
             if row is None:
@@ -490,6 +506,8 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
                 row.value = str(v)
         audit(s, "SETTINGS_UPDATE", f"by {admin.username}", client_ip(request))
         s.commit()
+    for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
+        _settings_cache.pop(k, None)
     log.info("Server settings updated by %s", admin.username)
     srv = load_srv()
     return {k: srv[k] for k in sorted(SRV_KEYS)}

@@ -39,12 +39,18 @@ DEFAULT_SRV = {
     "per_user_subdomain": "0",
     "cdn_enabled": "0",
     "cdn_sni": "",
+    "block_direct_ip": "0",
 }
 
 
 def _effective_host(secret: str, srv: dict) -> str:
     if srv.get("_is_inbound_variant"):
-        return srv["domain"]
+        base = srv["domain"]
+        per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
+        if per_user:
+            prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
+            return f"{prefix}.{base}"
+        return base
     obf = (srv.get("obfuscated_host") or "").strip()
     if not obf:
         return srv["domain"]
@@ -445,8 +451,6 @@ def _variant_srv(srv: dict, inbound: dict) -> dict:
     if inbound.get("host"):
         v["domain"] = inbound["host"]
         v["_is_inbound_variant"] = True
-        v["obfuscated_host"] = ""
-        v["per_user_subdomain"] = "0"
     return v
 
 

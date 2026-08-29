@@ -624,7 +624,7 @@ async function loadSrvSettings() {
     const f = $("#srv-form");
     for (const [k, v] of Object.entries(srv)) {
       if (f.elements[k]) {
-        if (k === "per_user_subdomain") f.elements[k].checked = String(v) === "1" || v === true;
+        if (f.elements[k].type === "checkbox") f.elements[k].checked = String(v) === "1" || v === true;
         else f.elements[k].value = v;
       }
     }
@@ -657,6 +657,7 @@ async function saveAllSettings() {
   body.reality_sni = document.querySelector('[name="reality_sni"]').value.trim() || "www.yahoo.com,www.samsung.com,www.microsoft.com";
   body.obfuscated_host = f.obfuscated_host.value.trim();
   body.per_user_subdomain = f.per_user_subdomain.checked;
+  body.block_direct_ip = f.block_direct_ip.checked;
   body.cdn_enabled = document.querySelector('[name="cdn_enabled"]').checked;
   body.cdn_sni = document.querySelector('[name="cdn_sni"]').value.trim();
   try {

@@ -333,6 +333,7 @@
           <label class="field"><span>WireGuard server public key</span><input type="text" name="wg_pub" placeholder="Server PublicKey from wg show" dir="ltr" spellcheck="false"></label>
           <label class="field"><span>Obfuscated host (weird URL to hide real IP)</span><input type="text" name="obfuscated_host" placeholder="e.g. cdn.weird.workers.dev — leave empty to use domain" spellcheck="false"></label>
           <label class="proto-check wide"><input type="checkbox" name="per_user_subdomain"><span>Per-user weird subdomain — each config gets a random prefix (needs wildcard DNS *.host)</span></label>
+          <label class="proto-check wide"><input type="checkbox" name="block_direct_ip"><span>Block direct IP access to panel (anti-filter — only allow domain, hides panel from IP scan)</span></label>
           <button type="submit" class="btn btn-primary">Save Server Settings</button>
         </form>
 
