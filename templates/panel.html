@@ -37,6 +37,10 @@
         <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
         <span>Anti-Censorship</span>
       </button>
+      <button class="nav-btn" data-section="blocker" data-title="Content Filter">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <span>Site Blocker</span>
+      </button>
 
       <button class="nav-btn" data-section="docs" data-title="Documentation">
         <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -183,6 +187,29 @@
       </div>
     </section>
 
+
+    <section id="section-blocker" class="section">
+      <div class="settings-grid">
+        <div class="card form-card">
+          <div class="card-head"><h2>Porn Blocker</h2></div>
+          <p class="hint" style="margin-top:0">Block all major porn sites for every user. When enabled, Clash configs get extra <code>REJECT</code> rules and the panel shows the preset count.</p>
+          <label class="proto-check wide"><input type="checkbox" id="porn-toggle"><span>Enable porn blocking</span></label>
+          <p class="hint" id="porn-count"></p>
+        </div>
+        <div class="card form-card">
+          <div class="card-head"><h2>Custom Blocked Sites</h2></div>
+          <p class="hint" style="margin-top:0">Add any domain to block (e.g. <code>example.com</code>). It will be added to Clash configs as <code>DOMAIN-SUFFIX,example.com,REJECT</code>.</p>
+          <div class="field-row">
+            <div class="search-box" style="flex:1">
+              <input type="text" id="block-domain" placeholder="example.com" spellcheck="false">
+            </div>
+            <button id="block-add-btn" class="btn btn-primary">Block Site</button>
+          </div>
+          <ul class="audit-list" id="block-list"></ul>
+          <div id="block-empty" class="empty-state hidden"><p>No custom blocked sites.</p></div>
+        </div>
+      </div>
+    </section>
 
     <section id="section-reality" class="section">
       <div class="settings-grid">

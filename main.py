@@ -23,6 +23,7 @@ from config import BASE_DIR, SESSION_TTL
 from database import (
     Admin,
     AuditLog,
+    BlockedSite,
     Database,
     Inbound,
     Setting,
@@ -32,6 +33,8 @@ from database import (
     utcnow,
 )
 from schemas import (
+    BlockedSiteIn,
+    BlockToggleIn,
     ChangePasswordIn,
     InboundIn,
     InboundPatchIn,
@@ -144,6 +147,19 @@ def load_inbounds() -> list:
     with db.s() as s:
         rows = s.scalars(select(Inbound).order_by(Inbound.id)).all()
         return [r.to_dict() for r in rows]
+
+
+def load_blocked_for_clash() -> list:
+    blocked = []
+    if cached_setting("porn_block_enabled") == "1":
+        blocked.extend(PORN_PRESET)
+    try:
+        with db.s() as s:
+            rows = s.scalars(select(BlockedSite).where(BlockedSite.enabled == True)).all()  # noqa: E712
+            blocked.extend([r.domain for r in rows])
+    except Exception:
+        pass
+    return list(dict.fromkeys(blocked))
 
 
 TG_KEYS = {"tg_bot_token", "tg_chat_id"}
@@ -1012,6 +1028,68 @@ def api_inbounds_delete(inbound_id: int, request: Request, admin: Admin = Depend
 
 
 
+PORN_PRESET = [
+    "pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com", "redtube.com",
+    "youporn.com", "tube8.com", "beeg.com", "spankbang.com", "tnaflix.com",
+    "xvideos2.com", "hclips.com", "empflix.com", "porntrex.com", "hdzog.com",
+]
+
+
+@app.get("/api/blocklist")
+def api_blocklist_get(admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        sites = [b.to_dict() for b in s.scalars(select(BlockedSite).order_by(BlockedSite.domain)).all()]
+    porn_enabled = cached_setting("porn_block_enabled") == "1"
+    return {"porn_enabled": porn_enabled, "sites": sites, "porn_count": len(PORN_PRESET) if porn_enabled else 0, "porn_domains": PORN_PRESET if porn_enabled else []}
+
+
+@app.post("/api/blocklist")
+def api_blocklist_add(data: BlockedSiteIn, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        if s.scalar(select(BlockedSite).where(BlockedSite.domain == data.domain.lower())):
+            raise HTTPException(status_code=409, detail="This domain is already blocked")
+        cnt = s.execute(sqltext("SELECT COUNT(*) FROM blocked_sites")).scalar()
+        if cnt is not None and cnt >= 500:
+            raise HTTPException(status_code=409, detail="Block list is full (500 max)")
+        site = BlockedSite(domain=data.domain.lower(), category="custom", enabled=data.enabled)
+        s.add(site)
+        s.commit()
+        out = site.to_dict()
+        audit(s, "BLOCK_ADD", f"{data.domain} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Blocked site added %s by %s", data.domain, admin.username)
+    return out
+
+
+@app.delete("/api/blocklist/{site_id}")
+def api_blocklist_delete(site_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        site = s.get(BlockedSite, site_id)
+        if not site:
+            raise HTTPException(status_code=404, detail="Blocked site not found")
+        dom = site.domain
+        s.delete(site)
+        audit(s, "BLOCK_DELETE", f"{dom} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Blocked site removed %s by %s", dom, admin.username)
+    return {"ok": True}
+
+
+@app.put("/api/blocklist/porn")
+def api_blocklist_porn(data: BlockToggleIn, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        row = s.get(Setting, "porn_block_enabled")
+        val = "1" if data.porn_enabled else "0"
+        if row is None:
+            s.add(Setting(key="porn_block_enabled", value=val))
+        else:
+            row.value = val
+        audit(s, "PORN_TOGGLE", f"{'ON' if data.porn_enabled else 'OFF'} by {admin.username}", client_ip(request))
+        s.commit()
+    _settings_cache.pop("porn_block_enabled", None)
+    return {"porn_enabled": data.porn_enabled}
+
+
 @app.get("/api/telegram")
 def api_telegram_get(admin: Admin = Depends(require_admin)):
     return {
@@ -1334,9 +1412,10 @@ def subscription(token: str, request: Request):
             raise HTTPException(status_code=404, detail="Not Found")
         udict = user.to_full_dict()
     srv = load_srv()
+    blocked = load_blocked_for_clash()
     info = _sub_info(udict)
     if want_clash:
-        yaml_text = protocols.clash_yaml(udict, srv)
+        yaml_text = protocols.clash_yaml(udict, srv, blocked)
         return PlainTextResponse(
             yaml_text,
             media_type="text/yaml; charset=utf-8",

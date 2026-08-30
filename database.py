@@ -174,6 +174,25 @@ class Inbound(Base):
         }
 
 
+class BlockedSite(Base):
+    __tablename__ = "blocked_sites"
+
+    id = Column(Integer, primary_key=True)
+    domain = Column(String(253), unique=True, nullable=False, index=True)
+    category = Column(String(20), nullable=False, default="custom")
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "domain": self.domain,
+            "category": self.category,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+        }
+
+
 class TunnelNode(Base):
     __tablename__ = "tunnel_nodes"
 

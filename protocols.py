@@ -219,7 +219,13 @@ def _json_scalar(v) -> str:
     return json.dumps(v, ensure_ascii=False)
 
 
-def clash_yaml(u: dict, srv: dict) -> str:
+PORN_DOMAINS = [
+    "pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com", "redtube.com",
+    "youporn.com", "tube8.com", "beeg.com", "spankbang.com", "tnaflix.com",
+    "xvideos2.com", "hclips.com", "empflix.com", "porntrex.com", "hdzog.com",
+]
+
+def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
     protos = u.get("protocols") or []
     secrets_map = u.get("secret_map") or {}
     proxies = []
@@ -308,6 +314,9 @@ def clash_yaml(u: dict, srv: dict) -> str:
     lines.append("proxy-groups:")
     lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": names}))
     lines.append("rules:")
+    if blocked:
+        for d in blocked:
+            lines.append(f"  - DOMAIN-SUFFIX,{d},REJECT")
     lines.append('  - MATCH,Zefira')
     return "\n".join(lines) + "\n"
 

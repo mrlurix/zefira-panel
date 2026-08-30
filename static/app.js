@@ -329,6 +329,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
+    if (btn.dataset.section === "blocker") loadBlocklist();
   });
 });
 document.querySelectorAll("[data-goto]").forEach((el) => {
@@ -910,6 +911,65 @@ $("#inbounds-tbody").addEventListener("click", async (e) => {
       toast("Inbound deleted");
     }
     loadInbounds();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+
+async function loadBlocklist() {
+  try {
+    const data = await api("/api/blocklist");
+    const chk = $("#porn-toggle");
+    if (chk) chk.checked = !!data.porn_enabled;
+    const cnt = $("#porn-count");
+    if (cnt) cnt.textContent = data.porn_enabled ? `Blocking ${data.porn_count} porn domains + ${data.sites.length} custom` : `Porn blocking is OFF — ${data.sites.length} custom domains blocked`;
+    const ul = $("#block-list");
+    ul.textContent = "";
+    for (const site of data.sites) {
+      const li = document.createElement("li");
+      const span = document.createElement("span");
+      span.textContent = site.domain;
+      li.appendChild(span);
+      const delBtn = iconBtn("Unblock", ICONS.trash, "bad");
+      delBtn.dataset.id = site.id;
+      delBtn.dataset.domain = site.domain;
+      li.appendChild(delBtn);
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.justifyContent = "space-between";
+      ul.appendChild(li);
+    }
+    const empty = $("#block-empty");
+    if (empty) empty.classList.toggle("hidden", data.sites.length > 0);
+  } catch (_) {}
+}
+
+$("#porn-toggle")?.addEventListener("change", async (e) => {
+  try {
+    await api("/api/blocklist/porn", { method: "PUT", body: { porn_enabled: e.target.checked } });
+    toast(e.target.checked ? "Porn blocking enabled" : "Porn blocking disabled");
+    loadBlocklist();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); e.target.checked = !e.target.checked; }
+});
+
+$("#block-add-btn")?.addEventListener("click", async () => {
+  const inp = $("#block-domain");
+  const domain = inp.value.trim().toLowerCase();
+  if (!domain) { toast("Enter a domain", false); return; }
+  try {
+    await api("/api/blocklist", { method: "POST", body: { domain } });
+    inp.value = "";
+    toast(`Blocked ${domain}`);
+    loadBlocklist();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+
+$("#block-list")?.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".row-btn");
+  if (!btn) return;
+  if (!confirm(`Unblock "${btn.dataset.domain}"?`)) return;
+  try {
+    await api(`/api/blocklist/${btn.dataset.id}`, { method: "DELETE" });
+    toast("Domain unblocked");
+    loadBlocklist();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 

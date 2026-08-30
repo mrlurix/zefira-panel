@@ -128,6 +128,17 @@ class TunnelSettingsIn(BaseModel):
     trusted_proxies: str = Field(default="", max_length=500)
 
 
+class BlockedSiteIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    domain: str = Field(min_length=1, max_length=253, pattern=HOST_RE)
+    enabled: bool = True
+
+
+class BlockToggleIn(BaseModel):
+    porn_enabled: bool = False
+
+
 HOST_PORT_PAIRS_RE = r"^$|^[0-9]{1,5}:[0-9]{1,5}(\s*,\s*[0-9]{1,5}:[0-9]{1,5})*$"
 Transport = Literal[
     "tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "kcp", "quic",
