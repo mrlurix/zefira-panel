@@ -785,14 +785,17 @@ def api_backup(request: Request, admin: Admin = Depends(require_admin)):
              "days": t.days, "start_on_first_use": t.start_on_first_use}
             for t in tpl_rows
         ]
+        blocked_rows = s.scalars(select(BlockedSite)).all()
+        blocked_out = [b.to_dict() for b in blocked_rows]
     payload = {
         "zefira_backup": True,
-        "version": 5,
+        "version": 6,
         "exported_at": utcnow().isoformat(timespec="seconds") + "Z",
         "settings": settings,
         "admins": admins,
         "users": users,
         "templates": templates_out,
+        "blocked_sites": blocked_out,
     }
     body = json.dumps(payload, indent=2)
     with db.s() as s:
@@ -817,7 +820,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             s.commit()
         raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     now = utcnow()
-    added_users = skipped = restored_settings = restored_admins = restored_templates = 0
+    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = 0
     prepared_users = []
     for ru in data.users:
         try:
@@ -918,6 +921,21 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 else:
                     row.value = sval
                 restored_settings += 1
+        if data.blocked_sites is not None:
+            for bs in data.blocked_sites:
+                try:
+                    dom = str(bs.get("domain", "")).strip().lower()
+                    if not dom or not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", dom):
+                        skipped += 1
+                        continue
+                    if s.scalar(select(BlockedSite).where(BlockedSite.domain == dom)):
+                        skipped += 1
+                        continue
+                    s.add(BlockedSite(domain=dom, category="custom", enabled=True))
+                    restored_blocked += 1
+                except Exception:
+                    skipped += 1
+                    continue
         if data.admins:
             for ra in data.admins:
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
@@ -943,7 +961,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -954,6 +972,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             "skipped": skipped,
             "restored_settings": restored_settings,
             "restored_admins": restored_admins,
+            "restored_blocked": restored_blocked,
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)
@@ -1053,7 +1072,11 @@ def api_blocklist_add(data: BlockedSiteIn, request: Request, admin: Admin = Depe
             raise HTTPException(status_code=409, detail="Block list is full (500 max)")
         site = BlockedSite(domain=data.domain.lower(), category="custom", enabled=data.enabled)
         s.add(site)
-        s.commit()
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            raise HTTPException(status_code=409, detail="This domain is already blocked")
         out = site.to_dict()
         audit(s, "BLOCK_ADD", f"{data.domain} by {admin.username}", client_ip(request))
         s.commit()

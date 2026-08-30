@@ -241,3 +241,4 @@ class RestoreIn(RestoreConfirmIn):
     admins: Optional[List[RestoreAdminIn]] = None
     settings: Optional[dict] = None
     templates: Optional[List[dict]] = None
+    blocked_sites: Optional[List[dict]] = None
