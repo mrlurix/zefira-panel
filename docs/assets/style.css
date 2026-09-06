@@ -33,7 +33,9 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 12px 22px 0;
+  width: calc(100% - 44px);
+  max-width: 860px;
+  margin: 12px auto 0;
   padding: 7px 16px;
   background: rgba(16, 16, 26, .55);
   backdrop-filter: blur(16px) saturate(1.3);

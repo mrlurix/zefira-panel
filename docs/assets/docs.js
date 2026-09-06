@@ -110,7 +110,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var resultsBox = overlay.querySelector("#sp-results");
 
   var index = null, items = [], sel = 0, lastQ = "";
-  fetch("assets/search-index.json").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
+  fetch("assets/search-index.json?v=3").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
 
   function render() {
     resultsBox.innerHTML = "";
@@ -184,8 +184,11 @@ document.querySelectorAll("pre").forEach(function (pre) {
   document.addEventListener("keydown", function (e) {
     var tag = (document.activeElement && document.activeElement.tagName) || "";
     var typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); isOpen() ? close() : open(); }
+    // e.code is layout-independent (works with Persian keyboard too)
+    var isK = e.key.toLowerCase() === "k" || e.code === "KeyK";
+    var isSlash = e.key === "/" || e.code === "Slash";
+    if ((e.ctrlKey || e.metaKey) && isK) { e.preventDefault(); isOpen() ? close() : open(); }
     else if (e.key === "Escape" && isOpen()) close();
-    else if (e.key === "/" && !typing && !isOpen()) { e.preventDefault(); open(); }
+    else if (isSlash && !typing && !isOpen()) { e.preventDefault(); open(); }
   });
 })();
