@@ -7,31 +7,36 @@
   });
 })();
 
-// Mobile sidebar
-document.getElementById("nav-toggle").addEventListener("click", function () {
-  document.getElementById("sidebar").classList.toggle("open");
-});
-document.querySelectorAll(".sidebar a").forEach(function (a) {
-  a.addEventListener("click", function () {
-    document.getElementById("sidebar").classList.remove("open");
+var navToggle = document.getElementById("nav-toggle");
+if (navToggle) {
+  navToggle.addEventListener("click", function () {
+    document.getElementById("sidebar").classList.toggle("open");
   });
-});
+  document.querySelectorAll(".sidebar a").forEach(function (a) {
+    a.addEventListener("click", function () {
+      document.getElementById("sidebar").classList.remove("open");
+    });
+  });
+}
 
 // Sidebar search filter
-document.getElementById("nav-search").addEventListener("input", function (e) {
-  var q = e.target.value.toLowerCase();
-  document.querySelectorAll(".sidebar a").forEach(function (a) {
-    a.style.display = a.textContent.toLowerCase().includes(q) ? "" : "none";
+var navSearch = document.getElementById("nav-search");
+if (navSearch) {
+  navSearch.addEventListener("input", function (e) {
+    var q = e.target.value.toLowerCase();
+    document.querySelectorAll(".sidebar a").forEach(function (a) {
+      a.style.display = a.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+    document.querySelectorAll(".sidebar .nav-group").forEach(function (g) {
+      var next = g.nextElementSibling, visible = false;
+      while (next && next.tagName === "A") {
+        if (next.style.display !== "none") { visible = true; break; }
+        next = next.nextElementSibling;
+      }
+      g.style.display = visible || !q ? "" : "none";
+    });
   });
-  document.querySelectorAll(".sidebar .nav-group").forEach(function (g) {
-    var next = g.nextElementSibling, visible = false;
-    while (next && next.tagName === "A") {
-      if (next.style.display !== "none") { visible = true; break; }
-      next = next.nextElementSibling;
-    }
-    g.style.display = visible || !q ? "" : "none";
-  });
-});
+}
 
 // Copy buttons for code blocks
 document.querySelectorAll("pre").forEach(function (pre) {
