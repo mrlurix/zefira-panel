@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -135,9 +136,13 @@ def gen_totp_secret() -> str:
     return base64.b32encode(os.urandom(20)).decode().rstrip("=")
 
 
-def totp_now(secret: str, offset: int = 0) -> str:
-    pad = "=" * ((8 - len(secret) % 8) % 8)
-    key = base64.b32decode(secret.upper() + pad)
+def totp_now(secret: str, offset: int = 0) -> str | None:
+    try:
+        pad = "=" * ((8 - len(secret) % 8) % 8)
+        key = base64.b32decode(secret.upper() + pad)
+    except (binascii.Error, ValueError):
+        # Malformed secret (e.g. hand-edited backup): never crash, never match.
+        return None
     counter = struct.pack(">Q", int(time.time() // 30) + offset)
     digest = hmac.new(key, counter, hashlib.sha1).digest()
     o = digest[-1] & 0x0F
@@ -149,7 +154,8 @@ def verify_totp(secret: str, code: str, window: int = 1) -> bool:
     if not secret or not code or not code.isdigit() or len(code) != 6:
         return False
     for offset in range(-window, window + 1):
-        if hmac.compare_digest(totp_now(secret, offset), code):
+        expected = totp_now(secret, offset)
+        if expected is not None and hmac.compare_digest(expected, code):
             return True
     return False
 

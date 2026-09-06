@@ -269,17 +269,27 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
+def parse_host_header(raw_host: str | None) -> str:
+    """Strip an optional port from a Host header, IPv6-aware.
+
+    "1.2.3.4:8000" -> "1.2.3.4", "[::1]:8000" -> "::1".
+    A naive split(":")[0] breaks on IPv6 literals and would bypass
+    block_direct_ip, so this parsing lives in one tested place.
+    """
+    raw = (raw_host or "").strip()
+    if raw.startswith("["):
+        host = raw[1:].split("]", 1)[0]
+    elif raw.count(":") == 1:
+        host = raw.rsplit(":", 1)[0]
+    else:
+        host = raw
+    return host.strip()
+
+
 @app.middleware("http")
 async def block_direct_ip_middleware(request: Request, call_next):
     if cached_setting("block_direct_ip") == "1":
-        raw_host = request.headers.get("host", "").strip()
-        if raw_host.startswith("["):
-            host = raw_host[1:].split("]", 1)[0]
-        elif raw_host.count(":") == 1:
-            host = raw_host.rsplit(":", 1)[0]
-        else:
-            host = raw_host
-        host = host.strip()
+        host = parse_host_header(request.headers.get("host", ""))
         if host:
             try:
                 ip = ipaddress.ip_address(host)
@@ -466,6 +476,9 @@ def api_change_password(
         log.warning("Password change throttled user=%s", admin.username)
         raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     if not verify_password(data.current_password, admin.password_hash):
+        with db.s() as s:
+            audit(s, "PW_FAIL", f"wrong current password by {admin.username}", client_ip(request), ok=False)
+            s.commit()
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     if not STRONG_PW_RE.match(data.new_password):
         raise HTTPException(
@@ -749,9 +762,6 @@ def api_ssl_renew(request: Request, admin: Admin = Depends(require_admin)):
     if not state["domains"]:
         raise HTTPException(status_code=400, detail="No certificate yet — issue one first")
     fqdn = state["domains"][0]
-    with db.s() as s:
-        audit(s, "SSL_RENEW", f"{fqdn} by {admin.username}", client_ip(request))
-        s.commit()
     ok, msg = _run_certbot(fqdn, None, keep_until_expiring=True)
     with db.s() as s:
         if ok:
@@ -759,6 +769,7 @@ def api_ssl_renew(request: Request, admin: Admin = Depends(require_admin)):
             _save_settings(s, {"ssl_expires": _read_cert_expiry(cert_path) or ""})
             for k in SSL_SETTING_KEYS:
                 _settings_cache.pop(k, None)
+        audit(s, "SSL_RENEW", f"{fqdn} by {admin.username} -> {'ok' if ok else msg[:120]}", client_ip(request), ok=ok)
         s.commit()
     log.info("SSL renew %s by %s ok=%s", fqdn, admin.username, ok)
     if not ok:
@@ -1217,9 +1228,15 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         if data.admins:
             for ra in data.admins:
                 # Cross-server restores carry secrets encrypted with the OLD
-                # master key. Enabling 2FA with an undecryptable secret would
+                # master key, and hand-edited files may carry garbage.
+                # Enabling 2FA with an undecryptable/malformed secret would
                 # lock the admin out with no recovery: fail safe to disabled.
-                keep_2fa = bool(ra.totp_enabled and ra.totp_secret and decrypt_text(ra.totp_secret))
+                dec = decrypt_text(ra.totp_secret) if ra.totp_secret else ""
+                keep_2fa = bool(
+                    ra.totp_enabled
+                    and dec
+                    and re.fullmatch(r"[A-Z2-7]{16,64}", dec)
+                )
                 if ra.totp_enabled and not keep_2fa:
                     tfa_dropped += 1
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))

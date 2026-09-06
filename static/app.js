@@ -1123,6 +1123,7 @@ restoreFile.addEventListener("change", () => {
 $("#restore-btn").addEventListener("click", async () => {
   const file = restoreFile.files[0];
   if (!file) return;
+  if (file.size > 64 * 1048576) { toast("File is larger than 64 MB — the server will refuse it", false); return; }
   let parsed;
   try {
     parsed = JSON.parse(await file.text());
