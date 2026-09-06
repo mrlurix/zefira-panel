@@ -59,6 +59,7 @@ class VpnUser(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     start_on_first_use = Column(Boolean, nullable=False, default=False)
     duration_days = Column(Integer, nullable=True)
+    device_limit = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     expires_at = Column(DateTime, nullable=False)
 
@@ -75,6 +76,7 @@ class VpnUser(Base):
             "used_gb": round(self.used_gb, 2),
             "token": self.token,
             "is_active": self.is_active,
+            "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
             "pending_start": self.is_pending_start(),
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
@@ -105,6 +107,7 @@ class VpnUser(Base):
             "token": self.token,
             "secret_data": self.secret_data,
             "is_active": self.is_active,
+            "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
             "duration_days": self.duration_days,
             "created_at": self.created_at.isoformat(timespec="seconds"),
@@ -121,6 +124,7 @@ class UserTemplate(Base):
     volume_gb = Column(Float, nullable=False)
     days = Column(Integer, nullable=False)
     start_on_first_use = Column(Boolean, nullable=False, default=False)
+    device_limit = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -130,6 +134,7 @@ class UserTemplate(Base):
             "volume_gb": self.volume_gb,
             "days": self.days,
             "start_on_first_use": self.start_on_first_use,
+            "device_limit": self.device_limit,
         }
 
 
@@ -283,6 +288,8 @@ class Database:
                 os.chmod(self.engine.url.database, 0o600)
             except (OSError, AttributeError):
                 pass
+        if getattr(self, "_external_db", False):
+            return
         with self.engine.begin() as conn:
             self._add_column(conn, "admins", "totp_enabled", "totp_enabled BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "admins", "totp_secret", "totp_secret TEXT")
@@ -292,6 +299,8 @@ class Database:
             self._add_column(conn, "vpn_users", "protocols", "protocols TEXT NOT NULL DEFAULT ''")
             self._add_column(conn, "vpn_users", "start_on_first_use", "start_on_first_use BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "vpn_users", "duration_days", "duration_days INTEGER")
+            self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
+            self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
 
     @staticmethod

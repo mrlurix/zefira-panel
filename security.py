@@ -40,8 +40,12 @@ def verify_password(password: str, stored: str | None) -> bool:
         if len(parts) != 6 or parts[0] != "scrypt":
             return False
         n, r, p = int(parts[1]), int(parts[2]), int(parts[3])
+        if not (2**10 <= n <= 2**20 and 1 <= r <= 32 and 1 <= p <= 32):
+            return False
         salt = bytes.fromhex(parts[4])
         expected = bytes.fromhex(parts[5])
+        if not (16 <= len(expected) <= 64 and len(salt) <= 64):
+            return False
         dk = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, dklen=len(expected))
         return hmac.compare_digest(dk, expected)
     except (ValueError, TypeError):

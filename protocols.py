@@ -307,8 +307,14 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
         "allow-lan: false",
         "mode: rule",
         "log-level: info",
-        "proxies:",
     ]
+    try:
+        _dev_lim = u.get("device_limit")
+        if _dev_lim:
+            lines.append(f"# zefira-device-limit: {int(_dev_lim)}")
+    except (TypeError, ValueError):
+        pass
+    lines.append("proxies:")
     for p in proxies:
         lines.append("  - " + _json_scalar(p))
     lines.append("proxy-groups:")
@@ -329,13 +335,35 @@ FILE_EXT = {
     "vless": ".txt", "reality": ".txt", "vmess": ".txt", "trojan": ".txt", "ss": ".txt",
     "hysteria2": ".txt", "wireguard": ".conf", "openvpn": ".ovpn",
 }
+def _valid_wg_pubkey(v: str | None) -> str:
+    try:
+        if not v:
+            return ""
+        vv = v.strip()
+        if len(vv) != 44:
+            return ""
+        if len(base64.b64decode(vv, validate=True)) != 32:
+            return ""
+        return vv
+    except Exception:
+        return ""
+
+
 def _wg_config(u: dict, srv: dict, secret: str) -> str:
-    priv_obj = x25519.X25519PrivateKey.from_private_bytes(base64.b64decode(secret))
+    try:
+        raw = base64.b64decode(secret, validate=True)
+        if len(raw) != 32:
+            raise ValueError("bad key length")
+        priv_obj = x25519.X25519PrivateKey.from_private_bytes(raw)
+    except Exception:
+        raise ValueError("invalid wireguard secret")
     pub = priv_obj.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )
-    peer = srv.get("wg_pub") or "SERVER_PUBLIC_KEY_HERE"
-    addr = f"10.7.0.{(u['id'] % 250) + 2}"
+    peer_valid = _valid_wg_pubkey(srv.get("wg_pub"))
+    peer = peer_valid or base64.b64encode(b"\x01" + b"\x00" * 31).decode()
+    uid = int(u.get("id", 0) or 0)
+    addr = f"10.7.{(uid // 250) % 250}.{(uid % 250) + 2}"
     host = _effective_host(secret, srv)
     lines = [
         "[Interface]",
@@ -343,15 +371,20 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
         f"Address = {addr}/32",
         f"DNS = {srv.get('dns', '1.1.1.1')}",
         "MTU = 1420",
-        "",
-        "[Peer]",
         f"# Client PublicKey = {base64.b64encode(pub).decode()}",
+        "",
+    ]
+    if not peer_valid:
+        lines.append("# WARNING: Replace PublicKey below with your WireGuard server public key")
+        lines.append("# (Panel -> Settings -> Server / Hosts Settings -> WireGuard server public key)")
+    lines.extend([
+        "[Peer]",
         f"PublicKey = {peer}",
         f"Endpoint = {host}:{srv['wg_port']}",
         "AllowedIPs = 0.0.0.0/0, ::/0",
         "PersistentKeepalive = 25",
         "",
-    ]
+    ])
     return "\n".join(lines)
 
 
@@ -419,8 +452,13 @@ def _issue_client_cert(username: str):
 def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
     marker_c = "<ZEFIRA-CERT>"
     marker_k = "<ZEFIRA-KEY>"
-    cert_pem = blob.split(marker_c)[1].split(marker_k)[0].strip()
-    key_pem = blob.split(marker_k)[1].strip()
+    try:
+        cert_pem = blob.split(marker_c)[1].split(marker_k)[0].strip()
+        key_pem = blob.split(marker_k)[1].strip()
+    except (IndexError, AttributeError):
+        raise ValueError("invalid openvpn secret")
+    if "-----BEGIN CERTIFICATE-----" not in cert_pem or "-----BEGIN PRIVATE KEY-----" not in key_pem:
+        raise ValueError("invalid openvpn secret")
     host = _effective_host(blob, srv)
     lines = [
         "client",
@@ -504,9 +542,15 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
                 if link:
                     links.append(link)
         elif p == "wireguard":
-            files.append((f"{u['username']}-wg.conf", _wg_config(u, srv, sec)))
+            try:
+                files.append((f"{u['username']}-wg.conf", _wg_config(u, srv, sec)))
+            except ValueError:
+                continue
         elif p == "openvpn":
-            files.append((f"{u['username']}.ovpn", _ovpn_config(u, srv, sec)))
+            try:
+                files.append((f"{u['username']}.ovpn", _ovpn_config(u, srv, sec)))
+            except ValueError:
+                continue
     if links:
         files.insert(0, (f"{u['username']}-subscription.txt", "\n".join(links) + "\n"))
     return files
@@ -543,9 +587,15 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
                 if link:
                     links.append(link)
         elif p == "wireguard":
-            extras.append("### WireGuard ###\n" + _wg_config(u, srv, sec))
+            try:
+                extras.append("### WireGuard ###\n" + _wg_config(u, srv, sec))
+            except ValueError:
+                continue
         elif p == "openvpn":
-            extras.append("### OpenVPN ###\n" + _ovpn_config(u, srv, sec))
+            try:
+                extras.append("### OpenVPN ###\n" + _ovpn_config(u, srv, sec))
+            except ValueError:
+                continue
     only_links = bool(links) and not extras
     if only_links:
         encoded = base64.b64encode("\n".join(links).encode()).decode()

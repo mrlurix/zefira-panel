@@ -28,6 +28,7 @@ class UserCreateIn(BaseModel):
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
     start_on_first_use: bool = False
+    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
 
     @field_validator("note", mode="before")
     @classmethod
@@ -47,6 +48,7 @@ class UserPatchIn(BaseModel):
     set_note: Optional[str] = Field(default=None, max_length=200)
     set_volume_gb: Optional[float] = Field(default=None, gt=0, le=100000)
     set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
+    set_device_limit: Optional[int] = Field(default=None, ge=-1, le=1000)
     reset_used: bool = False
 
     @field_validator("set_note", mode="before")
@@ -115,6 +117,7 @@ class TemplateCreateIn(BaseModel):
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
     start_on_first_use: bool = False
+    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
 
 
 class TunnelSettingsIn(BaseModel):
@@ -208,6 +211,7 @@ class RestoreUserIn(BaseModel):
     token: str = Field(pattern=r"^[a-f0-9]{32}$")
     secret_data: str = Field(default="", max_length=40000)
     is_active: bool = True
+    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
     start_on_first_use: bool = False
     duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
     created_at: Optional[str] = None

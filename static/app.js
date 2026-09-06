@@ -185,6 +185,13 @@ function userRow(u) {
   strong.textContent = u.username;
   unWrap.appendChild(strong);
   unWrap.appendChild(protoBadges(u.protocols || []));
+  if (u.device_limit) {
+    const dev = document.createElement("span");
+    dev.className = "badge proto";
+    dev.textContent = `max ${u.device_limit} dev`;
+    dev.title = `Up to ${u.device_limit} devices can use this account`;
+    unWrap.appendChild(dev);
+  }
   unTd.appendChild(unWrap);
 
   const note = document.createElement("td");
@@ -363,6 +370,7 @@ $("#add-user-form").addEventListener("submit", async (e) => {
   const f = e.target;
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast("Select at least one protocol", false); return; }
+  const devVal = parseInt(f.device_limit.value, 10);
   try {
     await api("/api/users", {
       method: "POST",
@@ -372,7 +380,8 @@ $("#add-user-form").addEventListener("submit", async (e) => {
         volume_gb: parseFloat(f.volume.value),
         days: parseInt(f.days.value, 10),
         note: f.note.value.trim(),
-        start_on_first_use: $("#sofu-check").checked
+        start_on_first_use: $("#sofu-check").checked,
+        device_limit: Number.isFinite(devVal) && devVal >= 1 ? devVal : null
       }
     });
     f.reset();
@@ -414,7 +423,7 @@ $("#tpl-select").addEventListener("change", () => {
   f.volume.value = t.volume_gb;
   f.days.value = t.days;
   $("#sofu-check").checked = !!t.start_on_first_use;
-});
+  f.device_limit.value = t.device_limit || "";
 $("#tpl-save-btn").addEventListener("click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
@@ -424,7 +433,7 @@ $("#tpl-save-btn").addEventListener("click", async () => {
   try {
     await api("/api/templates", {
       method: "POST",
-      body: { name, protocols: protos, volume_gb: parseFloat(f.volume.value), days: parseInt(f.days.value, 10), start_on_first_use: $("#sofu-check").checked }
+      body: { name, protocols: protos, volume_gb: parseFloat(f.volume.value), days: parseInt(f.days.value, 10), start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = parseInt(f.device_limit.value, 10); return Number.isFinite(v) && v >= 1 ? v : null; })() }
     });
     toast(`Template "${name}" saved`);
     loadTemplates();
@@ -494,6 +503,7 @@ $("#users-table").addEventListener("click", async (e) => {
       f.note.value = u.note || "";
       f.volume.value = u.volume_gb;
       f.expires.value = u.pending_start ? "" : (u.expires_at || "").slice(0, 16);
+      f.device_limit.value = u.device_limit || "";
       f.reset_used.checked = false;
       f.dataset.uid = id;
       $("#edit-modal").classList.remove("hidden");
@@ -506,6 +516,16 @@ $("#users-table").addEventListener("click", async (e) => {
     }
     if (btn.dataset.act === "download") {
       window.open(`/api/users/${id}/config`, "_blank");
+      try {
+        const u = (typeof USERS_CACHE !== "undefined" ? USERS_CACHE : []).find((x) => String(x.id) === String(id));
+        if (u && (u.protocols || []).includes("wireguard")) {
+          const srv = await api("/api/settings");
+          if (!srv.wg_pub) {
+            toast("Downloaded, but set the WireGuard server public key in Settings or it won't connect", false);
+            return;
+          }
+        }
+      } catch (_) {}
       toast("Downloading config...");
       return;
     }
@@ -984,6 +1004,10 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
   if (f.note.value.trim() !== "") body.set_note = f.note.value.trim();
   if (f.volume.value) body.set_volume_gb = parseFloat(f.volume.value);
   if (f.expires.value) body.set_expires_at = f.expires.value;
+  if (f.device_limit.value !== "") {
+    const dv = parseInt(f.device_limit.value, 10);
+    body.set_device_limit = Number.isFinite(dv) && dv >= 1 ? dv : 0;
+  }
   if (f.reset_used.checked) body.reset_used = true;
   if (!Object.keys(body).length) { toast("Nothing changed", false); return; }
   try {

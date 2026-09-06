@@ -82,8 +82,21 @@ def check(name, cond, detail=""):
 
 print(f"=== ZEFIRA PENTEST -> {BASE} ===")
 
-# ---- 1. Authentication boundary ----
+# ---- 0. Live-data guard: restore/atomicity tests wipe users ----
 st, token, rawcookie = login()
+if "--allow-live" not in sys.argv and st == 200:
+    _auth = {"Cookie": f"zefira_session={token}", "X-Requested-With": "XMLHttpRequest"}
+    try:
+        _sst, _, _sbody = req("GET", "/api/stats", headers=_auth)
+        _total = json.loads(_sbody).get("total_users", 0) if _sst == 200 else 0
+    except Exception:
+        _total = 0
+    if _total and _total > 0:
+        print(f"ABORT: panel has {_total} user(s). This suite runs restore tests that WIPE users.")
+        print("Back up first (Settings -> Download Backup), then re-run with: --allow-live")
+        sys.exit(2)
+
+# ---- 1. Authentication boundary ----
 check("login works & sets cookie", st == 200 and token != "", f"status={st}")
 check("cookie HttpOnly flag", "httponly" in rawcookie.lower())
 check("cookie SameSite=strict", "samesite=strict" in rawcookie.lower())

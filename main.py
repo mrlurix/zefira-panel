@@ -293,8 +293,12 @@ async def require_admin(request: Request) -> Admin:
     payload = decode_session(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Session expired")
+    try:
+        admin_pk = int(payload.get("sub", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Session expired")
     with db.s() as s:
-        admin = s.get(Admin, int(payload.get("sub", 0)))
+        admin = s.get(Admin, admin_pk)
         if not admin or payload.get("ver") != admin.token_version:
             raise HTTPException(status_code=401, detail="Session expired")
         request.state.admin_id = admin.id
@@ -332,20 +336,21 @@ def panel_page(request: Request):
 @app.post("/api/login")
 def api_login(data: LoginIn, request: Request, response: Response):
     ip = client_ip(request)
+    safe_user = re.sub(r"[\r\n]", "", data.username)[:64]
     ukey = f"u|{data.username.lower()}"
     key = f"{ip}|{data.username.lower()}"
     if not login_user_limiter.hit(ukey) or not login_limiter.hit(key):
-        log.warning("Rate-limited login attempt ip=%s user=%s", ip, data.username)
-        notify_async(f"\u26a0 Zefira: brute-force lockout triggered from IP {ip} (user: {data.username})")
+        log.warning("Rate-limited login attempt ip=%s user=%s", ip, safe_user)
+        notify_async(f"\u26a0 Zefira: brute-force lockout triggered from IP {ip} (user: {safe_user})")
         raise HTTPException(status_code=429, detail="Too many attempts, try again in a few minutes")
     fail_msg = "Invalid username or password"
     with db.s() as s:
         admin = s.scalar(select(Admin).where(Admin.username == data.username.lower()))
         if admin is None:
             dummy_verify(data.password)
-            audit(s, "LOGIN_FAIL", f"user={data.username}", ip, ok=False)
+            audit(s, "LOGIN_FAIL", f"user={safe_user}", ip, ok=False)
             s.commit()
-            log.warning("Failed login (unknown user) ip=%s user=%s", ip, data.username)
+            log.warning("Failed login (unknown user) ip=%s user=%s", ip, safe_user)
             raise HTTPException(status_code=401, detail=fail_msg)
         if not verify_password(data.password, admin.password_hash):
             audit(s, "LOGIN_FAIL", f"user={admin.username}", ip, ok=False)
@@ -577,6 +582,7 @@ def api_templates_create(data: TemplateCreateIn, request: Request, admin: Admin 
             row.volume_gb = data.volume_gb
             row.days = data.days
             row.start_on_first_use = data.start_on_first_use
+            row.device_limit = data.device_limit
             action = "updated"
         else:
             s.add(UserTemplate(
@@ -585,6 +591,7 @@ def api_templates_create(data: TemplateCreateIn, request: Request, admin: Admin 
                 volume_gb=data.volume_gb,
                 days=data.days,
                 start_on_first_use=data.start_on_first_use,
+                device_limit=data.device_limit,
             ))
             action = "created"
         audit(s, "TEMPLATE_SAVE", f"{data.name} {action} by {admin.username}", client_ip(request))
@@ -782,7 +789,8 @@ def api_backup(request: Request, admin: Admin = Depends(require_admin)):
         tpl_rows = s.scalars(select(UserTemplate)).all()
         templates_out = [
             {"name": t.name, "protocols": t.protocols, "volume_gb": t.volume_gb,
-             "days": t.days, "start_on_first_use": t.start_on_first_use}
+             "days": t.days, "start_on_first_use": t.start_on_first_use,
+             "device_limit": t.device_limit}
             for t in tpl_rows
         ]
         blocked_rows = s.scalars(select(BlockedSite)).all()
@@ -840,6 +848,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 protocols=ru.protocols or ru.protocol,
                 note=ru.note or "",
                 volume_gb=ru.volume_gb,
+                device_limit=ru.device_limit,
                 used_gb=ru.used_gb,
                 token=ru.token,
                 secret_data=ru.secret_data or "",
@@ -936,6 +945,59 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 except Exception:
                     skipped += 1
                     continue
+        if data.templates is not None:
+            for rt in data.templates:
+                try:
+                    if not isinstance(rt, dict):
+                        skipped += 1
+                        continue
+                    tname = str(rt.get("name", "")).strip()[:40]
+                    if not tname:
+                        skipped += 1
+                        continue
+                    raw_protos = rt.get("protocols", "")
+                    if isinstance(raw_protos, list):
+                        plist = [str(pp) for pp in raw_protos]
+                    else:
+                        plist = [pp for pp in str(raw_protos).split(",") if pp]
+                    plist = [pp for pp in dict.fromkeys(plist) if pp in protocols.PROTOCOLS]
+                    if not plist:
+                        skipped += 1
+                        continue
+                    tvol = float(rt.get("volume_gb", 0))
+                    tdays = int(rt.get("days", 0))
+                    if not (0 < tvol <= 100000 and 1 <= tdays <= 3650):
+                        skipped += 1
+                        continue
+                    tsofu = bool(rt.get("start_on_first_use", False))
+                    try:
+                        tdev = rt.get("device_limit")
+                        tdev = int(tdev) if tdev is not None else None
+                        if tdev is not None and not 1 <= tdev <= 1000:
+                            tdev = None
+                    except (TypeError, ValueError):
+                        tdev = None
+                    existing_t = s.scalar(select(UserTemplate).where(UserTemplate.name == tname))
+                    if existing_t:
+                        trow = s.get(UserTemplate, existing_t)
+                        trow.protocols = ",".join(plist)
+                        trow.volume_gb = tvol
+                        trow.days = tdays
+                        trow.start_on_first_use = tsofu
+                        trow.device_limit = tdev
+                    else:
+                        s.add(UserTemplate(
+                            name=tname,
+                            protocols=",".join(plist),
+                            volume_gb=tvol,
+                            days=tdays,
+                            start_on_first_use=tsofu,
+                            device_limit=tdev,
+                        ))
+                    restored_templates += 1
+                except (TypeError, ValueError):
+                    skipped += 1
+                    continue
         if data.admins:
             for ra in data.admins:
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
@@ -961,10 +1023,11 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates} by {admin.username}",
             client_ip(request),
         )
         s.commit()
+    _settings_cache.clear()
     response = JSONResponse(
         {
             "ok": True,
@@ -973,6 +1036,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             "restored_settings": restored_settings,
             "restored_admins": restored_admins,
             "restored_blocked": restored_blocked,
+            "restored_templates": restored_templates,
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)
@@ -1255,6 +1319,7 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
             protocols=",".join(proto_list),
             note=data.note,
             volume_gb=data.volume_gb,
+            device_limit=data.device_limit,
             token=secrets.token_hex(16),
             secret_data=protocols.serialize_secrets(secret_map),
             start_on_first_use=data.start_on_first_use,
@@ -1272,6 +1337,8 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
         flags = f" [{','.join(proto_list)}]"
         if data.start_on_first_use:
             flags += " starts-on-first-use"
+        if data.device_limit:
+            flags += f" max-{data.device_limit}-dev"
         audit(s, "USER_CREATE", f"{data.username}{flags} by {admin.username}", client_ip(request))
         s.commit()
     notify_async(f"\u2713 Zefira: user <b>{data.username}</b> created [{','.join(proto_list)}] by {admin.username}")
@@ -1312,6 +1379,13 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
         if data.reset_used:
             user.used_gb = 0.0
             changes.append("used=0")
+        if data.set_device_limit is not None:
+            if data.set_device_limit <= 0:
+                user.device_limit = None
+                changes.append("dev=unlimited")
+            else:
+                user.device_limit = data.set_device_limit
+                changes.append(f"dev={data.set_device_limit}")
         if data.set_expires_at:
             try:
                 explicit = datetime.strptime(data.set_expires_at, "%Y-%m-%dT%H:%M").replace(tzinfo=None)
