@@ -62,6 +62,16 @@ ask_secret() {
 urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$1"; }
 is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; }
 is_valid_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; }
+is_valid_dbident() { [[ "$1" =~ ^[A-Za-z0-9_.-]{1,253}$ ]]; }
+# Quote a value for systemd EnvironmentFile (double quotes + escape \, ", $, `).
+# CR/LF are stripped: they would break the KEY=VALUE line and silently corrupt
+# secrets (e.g. a password with $ would be variable-expanded by systemd).
+env_escape() {
+    local v="$1"
+    v=${v//$'\r'/}; v=${v//$'\n'/}
+    v=${v//\\/\\\\}; v=${v//\"/\\\"}; v=${v//\$/\\\$}; v=${v//\`/\\\`}
+    printf '"%s"' "$v"
+}
 is_valid_subpath() { [[ "$1" =~ ^/[a-zA-Z0-9/_-]*$ ]] && [[ "$1" != *".."* ]]; }
 is_valid_username() { [[ "$1" =~ ^[a-zA-Z0-9_]{3,32}$ ]]; }
 
@@ -131,6 +141,18 @@ elif [[ "$DB_CHOICE" == "4" ]]; then
     DB_URL="postgresql+psycopg2://$DB_USER:$DB_PASS_ENC@$DB_HOST:$DB_PORT/$DB_NAME"
 fi
 [[ -n "${DATABASE_URL:-}" ]] && DB_URL="$DATABASE_URL"
+if [[ -n "$DB_URL" && "$DB_URL" != sqlite* ]]; then
+    # DB_URL is operator-influenced (host/user/name/port prompts); reject
+    # metacharacters so a typo fails fast here instead of a broken panel later.
+    if [[ "$DB_CHOICE" == "2" || "$DB_CHOICE" == "3" || "$DB_CHOICE" == "4" ]]; then
+        if ! is_valid_dbident "$DB_HOST" || ! is_valid_dbident "$DB_USER" || ! is_valid_dbident "$DB_NAME"; then
+            echo "[!] Invalid DB host/user/name (letters, digits, _ . - only)"; exit 1
+        fi
+        if ! [[ "$DB_PORT" =~ ^[0-9]{1,5}$ ]] || ((DB_PORT < 1 || DB_PORT > 65535)); then
+            echo "[!] Invalid DB port: $DB_PORT"; exit 1
+        fi
+    fi
+fi
 
 # ---------- Step 5/7 · Subscription path ----------
 step 5 "Subscription path"
@@ -205,16 +227,16 @@ if [[ "$DB_CHOICE" == "4" ]]; then ".venv/bin/pip" install -q psycopg2-binary 2>
 echo "==> [4/6] Writing .env ..."
 ENV_FILE="$TARGET/.env"
 if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16); fi
-cat > "$ENV_FILE" <<EOF
-ZEFIRA_ADMIN_USERNAME=$ADMIN_USER
-ZEFIRA_ADMIN_PASSWORD=$ADMIN_PASS
-ZEFIRA_DOMAIN=$DOMAIN
-ZEFIRA_PORT=$PORT
-SUBSCRIPTION_PATH=$SUB_PATH
-EOF
-[[ -n "$DB_URL" ]] && echo "DATABASE_URL=$DB_URL" >> "$ENV_FILE"
-[[ -n "$TG_TOKEN" ]] && echo "TG_BOT_TOKEN=$TG_TOKEN" >> "$ENV_FILE"
-[[ -n "$TG_CHAT" ]] && echo "TG_CHAT_ID=$TG_CHAT" >> "$ENV_FILE"
+{
+    echo "ZEFIRA_ADMIN_USERNAME=$(env_escape "$ADMIN_USER")"
+    echo "ZEFIRA_ADMIN_PASSWORD=$(env_escape "$ADMIN_PASS")"
+    echo "ZEFIRA_DOMAIN=$(env_escape "$DOMAIN")"
+    echo "ZEFIRA_PORT=$(env_escape "$PORT")"
+    echo "SUBSCRIPTION_PATH=$(env_escape "$SUB_PATH")"
+    [[ -n "$DB_URL" ]] && echo "DATABASE_URL=$(env_escape "$DB_URL")"
+    [[ -n "$TG_TOKEN" ]] && echo "TG_BOT_TOKEN=$(env_escape "$TG_TOKEN")"
+    [[ -n "$TG_CHAT" ]] && echo "TG_CHAT_ID=$(env_escape "$TG_CHAT")"
+} > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 # ---------- systemd ----------

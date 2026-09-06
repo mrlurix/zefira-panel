@@ -119,7 +119,7 @@
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
           <input type="search" id="search" placeholder="Search by username or note...">
         </div>
-        <select id="sort-sel" style="max-width:190px">
+        <select id="sort-sel" class="mw-190">
           <option value="newest">Sort: Newest</option>
           <option value="expiry">Sort: Nearest expiry</option>
           <option value="usage">Sort: Most used</option>
@@ -152,10 +152,10 @@
 
 ﻿    <section id="section-inbounds" class="section">
       <div class="toolbar">
-        <div class="search-box" style="max-width:140px">
+        <div class="search-box mw-140">
           <input type="text" id="ib-name" placeholder="name" spellcheck="false">
         </div>
-        <select id="ib-proto" style="max-width:180px">
+        <select id="ib-proto" class="mw-180">
           <option value="vless">VLESS</option>
           <option value="reality">VLESS-REALITY</option>
           <option value="vmess">VMess</option>
@@ -163,10 +163,10 @@
           <option value="ss">Shadowsocks</option>
           <option value="hysteria2">Hysteria2</option>
         </select>
-        <div class="search-box" style="max-width:120px">
+        <div class="search-box mw-120">
           <input type="number" id="ib-port" placeholder="port" min="1" max="65535">
         </div>
-        <div class="search-box" style="flex:1">
+        <div class="search-box flex-1">
           <input type="text" id="ib-host" placeholder="Host / domain override (optional)" spellcheck="false">
         </div>
         <button id="ib-add-btn" class="btn btn-primary">
@@ -176,7 +176,7 @@
       </div>
 
       <div class="card">
-        <p class="hint" style="margin-top:0;margin-bottom:12px">Each enabled inbound adds an extra endpoint for user configs of the same protocol (Marzban-style multi-inbound). With no inbounds defined, the global ports from Server Settings are used.</p>
+        <p class="hint mt-0-mb-12">Each enabled inbound adds an extra endpoint for user configs of the same protocol (Marzban-style multi-inbound). With no inbounds defined, the global ports from Server Settings are used.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Name</th><th>Protocol</th><th>Port</th><th>Host override</th><th>Enabled</th><th>Actions</th></tr></thead>
@@ -192,15 +192,15 @@
       <div class="settings-grid">
         <div class="card form-card">
           <div class="card-head"><h2>Porn Blocker</h2></div>
-          <p class="hint" style="margin-top:0">Block all major porn sites for every user. When enabled, Clash configs get extra <code>REJECT</code> rules and the panel shows the preset count.</p>
+          <p class="hint mt-0">Block all major porn sites for every user. When enabled, Clash configs get extra <code>REJECT</code> rules and the panel shows the preset count.</p>
           <label class="proto-check wide"><input type="checkbox" id="porn-toggle"><span>Enable porn blocking</span></label>
           <p class="hint" id="porn-count"></p>
         </div>
         <div class="card form-card">
           <div class="card-head"><h2>Custom Blocked Sites</h2></div>
-          <p class="hint" style="margin-top:0">Add any domain to block (e.g. <code>example.com</code>). It will be added to Clash configs as <code>DOMAIN-SUFFIX,example.com,REJECT</code>.</p>
+          <p class="hint mt-0">Add any domain to block (e.g. <code>example.com</code>). It will be added to Clash configs as <code>DOMAIN-SUFFIX,example.com,REJECT</code>.</p>
           <div class="field-row">
-            <div class="search-box" style="flex:1">
+            <div class="search-box flex-1">
               <input type="text" id="block-domain" placeholder="example.com" spellcheck="false">
             </div>
             <button id="block-add-btn" class="btn btn-primary">Block Site</button>
@@ -216,7 +216,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>Anti-Censorship / REALITY</h2></div>
-          <p class="hint" style="margin-top:0">Generate an X25519 REALITY keypair. Put the private key into your server's Xray config; the panel embeds the public key inside every VLESS-REALITY link automatically. REALITY masquerades as normal TLS traffic to real websites &mdash; extremely resistant to DPI blocking.</p>
+          <p class="hint mt-0">Generate an X25519 REALITY keypair. Put the private key into your server's Xray config; the panel embeds the public key inside every VLESS-REALITY link automatically. REALITY masquerades as normal TLS traffic to real websites &mdash; extremely resistant to DPI blocking.</p>
           <div class="field-row">
             <label class="field"><span>REALITY port</span><input type="number" name="reality_port" min="1" max="65535"></label>
             <label class="field"><span>Masquerade SNI list (comma separated)</span><input type="text" name="reality_sni" placeholder="www.yahoo.com,www.samsung.com"></label>
@@ -231,10 +231,10 @@
             <button type="button" id="reality-copy-btn" class="btn btn-sm btn-ghost">Copy Both Keys</button>
           </div>
           <hr class="sep">
-          <p class="hint" style="margin-top:0"><b>CDN SNI Spoofing</b> — when enabled, the SNI in configs becomes the CDN domain instead of your server. Traffic still goes to your obfuscated host, but DPI sees CDN's SNI.</p>
+          <p class="hint mt-0"><b>CDN SNI Spoofing</b> — when enabled, the SNI in configs becomes the CDN domain instead of your server. Traffic still goes to your obfuscated host, but DPI sees CDN's SNI.</p>
           <label class="proto-check wide"><input type="checkbox" name="cdn_enabled"><span>Enable CDN SNI Spoofing</span></label>
           <label class="field"><span>CDN SNI</span>
-            <select id="cdn-preset" style="margin-bottom:8px">
+            <select id="cdn-preset" class="mb-8">
               <option value="">Custom...</option>
               <option value="www.cloudflare.com">Cloudflare — www.cloudflare.com</option>
               <option value="www.fastly.com">Fastly — www.fastly.com</option>
@@ -243,7 +243,7 @@
             </select>
             <input type="text" name="cdn_sni" placeholder="www.cloudflare.com" spellcheck="false">
           </label>
-          <button type="button" id="save-reality-btn" class="btn btn-primary" style="margin-top:10px">Save Anti-Censorship Settings</button>
+          <button type="button" id="save-reality-btn" class="btn btn-primary mt-10">Save Anti-Censorship Settings</button>
         </div>
 
       </div>
@@ -255,20 +255,12 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>Remote Access &amp; Tunneling</h2></div>
-          <p class="hint" style="margin-top:0">Reach the panel through a normal or reverse tunnel (SSH, socat, gost, realm). Set your public URL so subscription links &amp; QR codes stay correct behind any tunnel. Only list proxy IPs in Trusted Proxies &mdash; they are the ONLY addresses allowed to set X-Forwarded-For.</p>
+          <p class="hint mt-0">Reach the panel through a normal or reverse tunnel (SSH, socat, gost, realm). Set your public URL so subscription links &amp; QR codes stay correct behind any tunnel. Only list proxy IPs in Trusted Proxies &mdash; they are the ONLY addresses allowed to set X-Forwarded-For.</p>
           <label class="field"><span>Public base URL (used in sub links / QR)</span><input type="text" id="tunnel-public-url" placeholder="https://panel.example.com" spellcheck="false"></label>
           <label class="field"><span>Trusted proxies (IP/CIDR, comma separated)</span><input type="text" id="tunnel-trusted" placeholder="10.0.0.5, 192.168.1.0/24"></label>
           <button type="button" id="tunnel-save-btn" class="btn btn-primary btn-block">Save Tunnel Settings</button>
           <hr class="sep">
-          <p class="hint">Ready-to-run tunnel scripts (uses your public URL host):</p>
-          <div class="reality-actions">
-            <button type="button" class="btn btn-sm btn-ghost" data-tunnel-script="ssh_forward">SSH Forward</button>
-            <button type="button" class="btn btn-sm btn-ghost" data-tunnel-script="ssh_reverse">SSH Reverse</button>
-            <button type="button" class="btn btn-sm btn-ghost" data-tunnel-script="socat">socat</button>
-            <button type="button" class="btn btn-sm btn-ghost" data-tunnel-script="gost">gost</button>
-            <button type="button" class="btn btn-sm btn-ghost" data-tunnel-script="realm">realm</button>
-          </div>
-          <ul class="sec-list">
+          <ul class="sec-list mt-0">
             <li>Normal tunnel: SSH -L forwards a local port to the panel on the server</li>
             <li>Reverse tunnel: SSH -R exposes this panel from behind NAT via a VPS</li>
             <li>Keep uvicorn bound to 127.0.0.1 and let the tunnel expose it</li>
@@ -277,7 +269,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>BackPack Tunnel Nodes</h2></div>
-          <p class="hint" style="margin-top:0">Manage <b>BackPack</b> reverse tunnels (Iran &harr; Kharej) from here. Create a tunnel, download the setup guide with the secure token, run the wizard answers on both servers, then press <b>Check now</b> to see if the Iran side is reachable. Get BackPack: <span dir="ltr">github.com/AminMGMT/BackPack</span></p>
+          <p class="hint mt-0">Manage <b>BackPack</b> reverse tunnels (Iran &harr; Kharej) from here. Create a tunnel, download the setup guide with the secure token, run the wizard answers on both servers, then press <b>Check now</b> to see if the Iran side is reachable. Get BackPack: <span dir="ltr">github.com/AminMGMT/BackPack</span></p>
           <div class="field-row">
             <label class="field"><span>Tunnel name</span><input type="text" id="node-name" placeholder="My Tunnel" maxlength="40"></label>
             <label class="field"><span>Transport</span>
@@ -328,7 +320,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>Two-Factor Auth (TOTP)</h2></div>
-          <p class="hint" style="margin-top:0">Use Google Authenticator or Authy. Even if your password leaks, nobody can sign in without your phone.</p>
+          <p class="hint mt-0">Use Google Authenticator or Authy. Even if your password leaks, nobody can sign in without your phone.</p>
           <div id="tfa-status-line" class="tfa-status"></div>
           <div id="tfa-setup-area" class="hidden">
             <div class="qr-box"><img id="tfa-qr" alt="QR Code"></div>
@@ -341,7 +333,7 @@
 
         <form id="srv-form" class="card form-card">
           <div class="card-head"><h2>Server / Hosts Settings</h2></div>
-          <p class="hint" style="margin-top:0">These values are embedded into generated configs and subscription links.</p>
+          <p class="hint mt-0">These values are embedded into generated configs and subscription links.</p>
           <label class="field"><span>Domain or server IP</span><input type="text" name="domain" placeholder="vpn.example.com" spellcheck="false"></label>
           <div class="field-row">
             <label class="field"><span>V2Ray/Trojan/SS port</span><input type="number" name="sub_port" min="1" max="65535" required></label>
@@ -366,7 +358,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>SSL Certificate (Let's Encrypt)</h2></div>
-          <p class="hint" style="margin-top:0">Enter your domain and the panel fetches a free certificate itself. Requirements: domain DNS points to this server, port 80 is free, and certbot is installed.</p>
+          <p class="hint mt-0">Enter your domain and the panel fetches a free certificate itself. Requirements: domain DNS points to this server, port 80 is free, and certbot is installed.</p>
           <div class="field-row">
             <label class="field"><span>Domain</span><input type="text" id="ssl-domain" placeholder="example.com" spellcheck="false"></label>
             <label class="field"><span>Subdomain (optional)</span><input type="text" id="ssl-subdomain" placeholder="panel" spellcheck="false"></label>
@@ -381,7 +373,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>Telegram Notifications</h2></div>
-          <p class="hint" style="margin-top:0">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
+          <p class="hint mt-0">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
           <label class="field"><span>Bot token (kept encrypted)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
           <label class="field"><span>Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
           <div class="reality-actions">
@@ -393,7 +385,7 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>Backup & Restore</h2></div>
-          <p class="hint" style="margin-top:0">Download a full JSON snapshot (users, secrets, settings, admin). Keep it safe &mdash; it contains everything.</p>
+          <p class="hint mt-0">Download a full JSON snapshot (users, secrets, settings, admin). Keep it safe &mdash; it contains everything.</p>
           <button type="button" id="backup-btn" class="btn btn-primary btn-block">Download Backup</button>
           <hr class="sep">
           <p class="hint">Restore replaces ALL current users and server settings from a backup file.</p>

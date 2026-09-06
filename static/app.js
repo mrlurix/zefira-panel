@@ -742,10 +742,6 @@ $("#tunnel-save-btn").addEventListener("click", async () => {
     if (err.message !== "auth") toast(err.message, false);
   }
 });
-document.querySelectorAll("[data-tunnel-script]").forEach((btn) => {
-  btn.addEventListener("click", () => window.open(`/api/tunnel/scripts/${btn.dataset.tunnelScript}`, "_blank"));
-});
-
 const NODE_STATUS_LABEL = { online: "\u25cf online", offline: "\u25cb offline", unknown: "? not checked" };
 
 function renderNodes(nodes) {

@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
 <title>FAQ &amp; Troubleshooting — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
 <link rel="stylesheet" href="assets/style.css">
@@ -37,6 +39,7 @@
 <p class="subtitle">Fast answers to common problems.</p>
 
 <h2>Login &amp; access</h2>
+<div class="callout warn">LAN / tunnel mode (<code>start-lan.bat</code>) serves the panel over plain HTTP. Anyone on that network can sniff your session — only use it on networks you trust, or reach the panel through an encrypted SSH tunnel instead.</div>
 <h3>“Too many attempts, try again in a few minutes”</h3>
 <p>You (or someone) failed login 8+ times in 15 minutes. Wait, then log in carefully. If it persists with the right password, restart the panel service — in-memory counters reset: <code>systemctl restart zefira</code>.</p>
 <h3>Password lost</h3>
