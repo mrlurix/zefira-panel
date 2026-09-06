@@ -120,7 +120,7 @@ class SslIssueIn(BaseModel):
 class TemplateCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
     protocols: List[Protocol] = Field(min_length=1, max_length=8)
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
