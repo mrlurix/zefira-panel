@@ -249,9 +249,11 @@ After=network.target
 [Service]
 WorkingDirectory=$TARGET
 EnvironmentFile=-$ENV_FILE
-ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers
+ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers --no-access-log
 Restart=always
 RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

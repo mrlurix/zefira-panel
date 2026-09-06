@@ -25,7 +25,16 @@ def _load_or_create_secret() -> str:
 
 
 SECRET_KEY = _load_or_create_secret()
-SESSION_TTL = int(os.environ.get("ZEFIRA_SESSION_TTL", "28800"))
+
+
+def _session_ttl() -> int:
+    try:
+        return max(300, min(86400 * 7, int(os.environ.get("ZEFIRA_SESSION_TTL", "28800"))))
+    except (TypeError, ValueError):
+        return 28800
+
+
+SESSION_TTL = _session_ttl()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 SUBSCRIPTION_PATH = os.environ.get("SUBSCRIPTION_PATH", "/sub").strip() or "/sub"
 if not SUBSCRIPTION_PATH.startswith("/"):

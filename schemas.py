@@ -236,7 +236,7 @@ class RestoreUserIn(BaseModel):
 class RestoreAdminIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    username: str = Field(min_length=3, max_length=64)
+    username: str = Field(pattern=USERNAME_RE)
     password_hash: str = Field(min_length=10, max_length=256)
     token_version: int = Field(default=0, ge=0, le=999999999)
     totp_enabled: bool = False

@@ -832,6 +832,10 @@ def api_tunnel_put(data: TunnelSettingsIn, request: Request, admin: Admin = Depe
             ipaddress.ip_network(part, strict=False)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid IP/CIDR in trusted proxies: {part}")
+    if data.public_url:
+        m = re.search(r":([0-9]{1,5})$", data.public_url)
+        if m and int(m.group(1)) > 65535:
+            raise HTTPException(status_code=400, detail="Port out of range in public URL")
     with db.s() as s:
         for k, v in (
             ("public_url", data.public_url),
@@ -1030,7 +1034,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             s.commit()
         raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     now = utcnow()
-    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = 0
+    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = tfa_dropped = 0
     prepared_users = []
     for ru in data.users:
         try:
@@ -1043,11 +1047,16 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         except ValueError:
             skipped += 1
             continue
+        # protocols is free-form in backups: intersect with known protocols so a
+        # crafted/hand-edited file can neither 500 later code nor smuggle junk.
+        clean_protos = [p for p in (ru.protocols or "").split(",") if p in protocols.PROTOCOLS]
+        if not clean_protos:
+            clean_protos = [ru.protocol if ru.protocol in protocols.PROTOCOLS else "vless"]
         prepared_users.append(
             VpnUser(
                 username=ru.username,
-                protocol=ru.protocol,
-                protocols=ru.protocols or ru.protocol,
+                protocol=clean_protos[0],
+                protocols=",".join(clean_protos),
                 note=ru.note or "",
                 volume_gb=ru.volume_gb,
                 device_limit=ru.device_limit,
@@ -1083,6 +1092,11 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     continue
                 sval = str(v)
                 if len(sval) > 500:
+                    continue
+                if k == "reality_priv_enc" and sval and not decrypt_text(sval):
+                    # Encrypted with another server's master key: keeping it
+                    # would silently break REALITY links. Drop + count it.
+                    skipped += 1
                     continue
                 ok = True
                 if k in ("domain", "obfuscated_host", "cdn_sni"):
@@ -1202,19 +1216,25 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     continue
         if data.admins:
             for ra in data.admins:
+                # Cross-server restores carry secrets encrypted with the OLD
+                # master key. Enabling 2FA with an undecryptable secret would
+                # lock the admin out with no recovery: fail safe to disabled.
+                keep_2fa = bool(ra.totp_enabled and ra.totp_secret and decrypt_text(ra.totp_secret))
+                if ra.totp_enabled and not keep_2fa:
+                    tfa_dropped += 1
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
                 if existing:
                     existing.password_hash = ra.password_hash
-                    existing.totp_enabled = ra.totp_enabled
-                    existing.totp_secret = ra.totp_secret
+                    existing.totp_enabled = keep_2fa
+                    existing.totp_secret = ra.totp_secret if keep_2fa else None
                     existing.token_version += 1
                 else:
                     s.add(
                         Admin(
                             username=ra.username.lower(),
                             password_hash=ra.password_hash,
-                            totp_enabled=ra.totp_enabled,
-                            totp_secret=ra.totp_secret,
+                            totp_enabled=keep_2fa,
+                            totp_secret=ra.totp_secret if keep_2fa else None,
                             token_version=1,
                         )
                     )
@@ -1225,7 +1245,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tfa_dropped={tfa_dropped} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -1239,6 +1259,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             "restored_admins": restored_admins,
             "restored_blocked": restored_blocked,
             "restored_templates": restored_templates,
+            "tfa_dropped": tfa_dropped,
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)
