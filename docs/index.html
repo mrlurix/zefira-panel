@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zefira Docs — Proxy management, done right</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<div class="hero">
+  <img src="assets/logo.png" alt="Zefira logo">
+  <h1>ZEF<span>IRA</span></h1>
+  <p>A hardened, multi-protocol VPN sales panel. FastAPI backend, red-black dashboard, 8 protocols, one-click SSL, backup &amp; restore, and a 71-check penetration-test suite.</p>
+  <div class="cta">
+    <a class="btn primary" href="installation.html">Install in 5 minutes →</a>
+    <a class="btn ghost" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">View on GitHub</a>
+  </div>
+  <div class="stats">
+    <div><b>8</b><span>Protocols</span></div>
+    <div><b>1-line</b><span>Installer</span></div>
+    <div><b>2FA</b><span>TOTP built-in</span></div>
+    <div><b>71/71</b><span>Pentest checks</span></div>
+  </div>
+</div>
+
+<div class="cards">
+  <a class="card" href="installation.html"><b>⚡ Quick start</b><span>One-line installer, 7 guided steps, Nginx + Let's Encrypt.</span></a>
+  <a class="card" href="user-guide.html"><b>👥 Daily operations</b><span>Users, plans, inbounds, tunnels, templates, blocking.</span></a>
+  <a class="card" href="subscription.html"><b>📱 Client setup</b><span>Subscription links, Clash, QR codes, config bundles.</span></a>
+  <a class="card" href="api.html"><b>🔌 API reference</b><span>Every endpoint your reseller bot or dashboard needs.</span></a>
+</div>
+
+<h2>What Zefira gives you</h2>
+<ul>
+  <li><b>Multi-protocol sales:</b> VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and OpenVPN — per user, in any mix.</li>
+  <li><b>Anti-censorship toolkit:</b> REALITY with SNI rotation, obfuscated host, per-user subdomains, CDN SNI spoofing, direct-IP blocking.</li>
+  <li><b>Business features:</b> volume + expiry plans, start-on-first-use, device limits, templates, audit log, Telegram notifications, backup &amp; restore.</li>
+  <li><b>Security first:</b> scrypt passwords, HttpOnly SameSite cookies, TOTP 2FA, rate limits, CSRF + CSP headers, session-kill logout.</li>
+  <li><b>One-click HTTPS:</b> issue and renew Let's Encrypt certificates from Settings or during install.</li>
+</ul>
+
+<h2>Install now</h2>
+<pre>bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)</pre>
+<p class="subtitle">Needs a fresh Ubuntu/Debian server with root. Full walkthrough → <a href="installation.html">Installation</a>.</p>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

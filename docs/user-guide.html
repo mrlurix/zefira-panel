@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users &amp; Plans — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1>Users <span class="z">&amp;</span> Plans</h1>
+<p class="subtitle">Everything about selling and managing accounts.</p>
+
+<h2>Creating a user</h2>
+<ol>
+  <li>Open <b>Users → New user</b>.</li>
+  <li>Pick a username (English letters, digits, <code>_</code>, 3–32 chars).</li>
+  <li>Select one or more protocols — any mix of VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN.</li>
+  <li>Set <b>volume</b> (GB) and <b>duration</b> (days).</li>
+  <li>Optional: note, device limit, start-on-first-use. Save.</li>
+</ol>
+<p>The panel generates all secrets instantly (UUIDs, X25519 keys, OpenVPN certificates from its own CA) and shows the subscription link + QR.</p>
+
+<h2>Plan mechanics</h2>
+<table>
+<tr><th>Option</th><th>What it does</th></tr>
+<tr><td>Volume (GB)</td><td>Traffic quota. At 100% the subscription stops working until you add volume or reset usage.</td></tr>
+<tr><td>Duration (days)</td><td>Expiry date counted from creation — unless start-on-first-use is on.</td></tr>
+<tr><td>Start on first use</td><td>Expiry countdown begins at the user's first subscription fetch. Ideal for pre-sold codes.</td></tr>
+<tr><td>Device limit</td><td>Informational cap shown in Clash configs (<code># zefira-device-limit</code>); enforced by compatible clients.</td></tr>
+<tr><td>Active toggle</td><td>Instantly disables every protocol without deleting the account.</td></tr>
+</table>
+
+<h2>Managing users</h2>
+<ul>
+  <li><b>Extend / top-up:</b> edit a user to add days, add volume, reset usage, change note or device limit, set an exact expiry.</li>
+  <li><b>Reset token:</b> rotates the subscription token <i>and</i> all protocol secrets — use when a link leaks.</li>
+  <li><b>Search:</b> the Users search box matches username and note (special characters are escaped safely).</li>
+  <li><b>Dashboard:</b> totals, expiring-soon (7 days), out-of-volume, disabled and pending-start counters.</li>
+</ul>
+
+<h2>Templates</h2>
+<p>Save recurring plans (<b>Templates</b>) — name, protocols, volume, days, first-use and device limit — then create users from a template in one click. Template names allow letters, digits, spaces, <code>_</code> and <code>-</code>.</p>
+
+<h2>Inbounds</h2>
+<p>Extra ports per protocol (<b>Inbounds</b>): give VLESS port 443 <i>and</i> 8443, each with its own host. Subscription links and Clash configs include every enabled inbound automatically, labeled with the inbound name.</p>
+
+<h2>Tunnels (BackPack)</h2>
+<p>Register Iran ⇄ Kharej tunnels: transport, both IPs, tunnel port, forwarded ports, UDP flag. Zefira stores an encrypted token per tunnel, generates a step-by-step setup guide for both servers, and can probe the Iran endpoint (<b>Check now</b>) with automatic online/offline status.</p>
+
+<h2>Anti-censorship settings</h2>
+<table>
+<tr><th>Setting</th><th>Effect</th></tr>
+<tr><td>REALITY keys</td><td>Generate an X25519 keypair; private key stays encrypted, reveal is audit-logged.</td></tr>
+<tr><td>REALITY SNI list</td><td>Comma-separated SNIs, rotated across the generated links.</td></tr>
+<tr><td>Obfuscated host</td><td>Replaces the real domain inside configs with a decoy host.</td></tr>
+<tr><td>Per-user subdomain</td><td>Prefixes a per-user hash (<code>a1b2c3d4.domain</code>) so links are not correlatable.</td></tr>
+<tr><td>CDN SNI spoofing</td><td>Uses a separate CDN domain for TLS SNI.</td></tr>
+<tr><td>Block direct IP</td><td>Returns 403 for panel/API access via raw IP — domain only.</td></tr>
+</table>
+
+<h2>Site blocker</h2>
+<p>Append blocked domains to every Clash config (<code>DOMAIN-SUFFIX,…,REJECT</code>), plus a one-click porn preset (15 major domains). Max 500 custom entries.</p>
+
+<h2>Backup &amp; restore</h2>
+<ul>
+  <li><b>Download Backup</b> exports users, admins (password hashes), settings, templates and blocklist as JSON.</li>
+  <li><b>Restore</b> asks for your current password, wipes users, then re-imports — bad rows are skipped, good rows kept, and every setting is re-validated.</li>
+</ul>
+<div class="callout warn">Backups contain password hashes and encrypted secrets — store them like passwords, never in a public place.</div>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

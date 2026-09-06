@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1><span class="z">S</span>ecurity</h1>
+<p class="subtitle">How Zefira defends itself — and how to keep it that way.</p>
+
+<h2>Built-in defenses</h2>
+<table>
+<tr><th>Layer</th><th>Implementation</th></tr>
+<tr><td>Passwords</td><td>scrypt hashing, 10+ chars with letters + digits enforced on change</td></tr>
+<tr><td>Sessions</td><td>JWT in HttpOnly + SameSite=Strict cookies, <code>Secure</code> behind HTTPS, versioned (logout / password change kills all sessions)</td></tr>
+<tr><td>2FA</td><td>TOTP (SHA1/6-digit/30s), secrets Fernet-encrypted at rest</td></tr>
+<tr><td>Brute force</td><td>8 tries / 15 min per IP+user, plus a loose global per-user bucket (lockout-DoS resistant); identical 401s + dummy-hash timing for unknown users</td></tr>
+<tr><td>CSRF</td><td>Mutating <code>/api</code> calls require <code>X-Requested-With: XMLHttpRequest</code></td></tr>
+<tr><td>Headers</td><td>CSP, <code>frame-ancestors 'none'</code>, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</td></tr>
+<tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore), LIKE-escape on search</td></tr>
+<tr><td>Secrets</td><td>Bot tokens, tunnel tokens, TOTP and REALITY private keys encrypted with a host-local master key</td></tr>
+<tr><td>Visibility</td><td>Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
+</table>
+
+<h2>Penetration-test suite</h2>
+<p><code>security_test.py</code> attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently <b>71/71 passing</b>:</p>
+<pre>.venv\Scripts\python security_test.py http://127.0.0.1:8000 admin YOUR_PASSWORD</pre>
+<div class="callout warn">Restore/atomicity tests wipe users. The suite refuses to run against a panel with users unless you pass <code>--allow-live</code> — back up first.</div>
+
+<h2>Operator checklist</h2>
+<ul>
+  <li>Change the password + enable 2FA right after first login.</li>
+  <li>Serve the panel over HTTPS (installer step 7 or Settings → SSL).</li>
+  <li>Keep <code>/opt/zefira/instance/secret.key</code> backed up <b>offline</b> — without it, encrypted data is unrecoverable.</li>
+  <li>Behind a proxy, set <code>trusted_proxies</code> so rate limits and audit IPs see real clients.</li>
+  <li>Never share backup JSON files — they hold password hashes and secrets.</li>
+</ul>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

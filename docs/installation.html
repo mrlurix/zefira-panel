@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Installation — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1><span class="z">Z</span>EFIRA Installation</h1>
+<p class="subtitle">From empty server to working panel in about 5 minutes.</p>
+
+<h2>Requirements</h2>
+<ul>
+  <li>Ubuntu 20.04+ / Debian 11+ server (1 vCPU, 1 GB RAM minimum)</li>
+  <li>Root access (<code>sudo</code>)</li>
+  <li>Optional: a domain pointed at the server (for HTTPS)</li>
+</ul>
+
+<h2>One-line install</h2>
+<pre>bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)</pre>
+<div class="callout info">Piped scripts run non-interactively with safe defaults and print a random admin password at the end. For the guided setup, download the script first and run <code>sudo bash install.sh</code>.</div>
+
+<h2>The 7 guided steps</h2>
+<table>
+<tr><th>Step</th><th>What you choose</th></tr>
+<tr><td>1 · Port</td><td>Panel port (default <code>8000</code>)</td></tr>
+<tr><td>2 · Domain</td><td>Domain for links &amp; SSL, or empty to use the server IP</td></tr>
+<tr><td>3 · Admin</td><td>Admin username + password (empty = strong random password)</td></tr>
+<tr><td>4 · Database</td><td>SQLite (zero setup), MySQL, MariaDB or PostgreSQL</td></tr>
+<tr><td>5 · Subscription</td><td>Subscription URL path (default <code>/sub</code>)</td></tr>
+<tr><td>6 · Telegram</td><td>Optional bot token + chat ID for notifications</td></tr>
+<tr><td>7 · Nginx + SSL</td><td>Reverse proxy + Let's Encrypt certificate (needs port 80 free)</td></tr>
+</table>
+
+<h2>What the installer does</h2>
+<ol>
+  <li>Installs Python, Nginx and Certbot</li>
+  <li>Clones Zefira to <code>/opt/zefira</code></li>
+  <li>Creates a virtualenv and installs dependencies</li>
+  <li>Writes a locked-down <code>.env</code> (mode 600)</li>
+  <li>Registers a <code>systemd</code> service (<code>zefira.service</code>)</li>
+  <li>Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
+</ol>
+
+<h2>After install</h2>
+<pre># your URL, login and paths are printed at the end, e.g.
+# URL   : https://vpn.example.com
+# Local : http://127.0.0.1:8000
+
+systemctl status zefira
+journalctl -u zefira -n 100 --no-pager   # logs</pre>
+<div class="callout warn">First login: open Settings, change the password and enable 2FA (TOTP). Do this before creating users.</div>
+
+<h2>Non-interactive install</h2>
+<pre>ZEFIRA_DOMAIN=vpn.example.com \
+ZEFIRA_SSL_EMAIL=admin@example.com \
+ZEFIRA_SETUP_NGINX=y ZEFIRA_USE_SSL=y \
+ZEFIRA_ADMIN_USERNAME=admin \
+ZEFIRA_ADMIN_PASSWORD='S3cure-Pass-99' \
+bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)</pre>
+
+<h2>Uninstall</h2>
+<pre>sudo bash install.sh --uninstall</pre>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

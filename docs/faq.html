@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ &amp; Troubleshooting — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1>FAQ <span class="z">&amp;</span> Troubleshooting</h1>
+<p class="subtitle">Fast answers to common problems.</p>
+
+<h2>Login &amp; access</h2>
+<h3>“Too many attempts, try again in a few minutes”</h3>
+<p>You (or someone) failed login 8+ times in 15 minutes. Wait, then log in carefully. If it persists with the right password, restart the panel service — in-memory counters reset: <code>systemctl restart zefira</code>.</p>
+<h3>Password lost</h3>
+<p>SSH into the server and set a new one via environment + restart, or edit <code>ZEFIRA_ADMIN_PASSWORD</code> in <code>/opt/zefira/.env</code> — note this only applies to a <i>fresh</i> database. On an existing DB, stop the service, delete <code>instance/zefira.db</code> (you lose data — restore from backup after), and restart to trigger first-run creation.</p>
+<h3>API returns 403 “forbidden” on POST</h3>
+<p>You forgot the <code>X-Requested-With: XMLHttpRequest</code> header — the CSRF guard. Browsers using the panel send it automatically.</p>
+
+<h2>Panel not responding</h2>
+<pre>systemctl status zefira
+journalctl -u zefira -n 100 --no-pager
+curl -fsS http://127.0.0.1:8000/login && echo PANEL-UP
+ss -tlnp | grep 8000</pre>
+<p>If the port is taken, another copy is already running — stop it before starting a new one.</p>
+
+<h2>Subscriptions show 404 for everyone</h2>
+<ul>
+  <li> Tokens rotate on <b>Reset token</b> — resend the new link.</li>
+  <li>Check the user is active, not expired and not out of volume.</li>
+  <li>If you renamed <code>SUBSCRIPTION_PATH</code>, old <code>/sub/…</code> links stop working.</li>
+</ul>
+
+<h2>SSL fails</h2>
+<ul>
+  <li>Port 80 must be free and the domain's DNS must point at the server.</li>
+  <li>Let's Encrypt rate-limits repeated issuance — wait an hour and retry.</li>
+  <li>Behind Nginx, make sure the HTTP vhost exists before issuing.</li>
+</ul>
+
+<h2>Clients can't connect but the sub link loads</h2>
+<ul>
+  <li>Open the VPN ports on the firewall (<code>ufw allow 443/tcp</code>, plus inbound / Hy2 / WG ports).</li>
+  <li>Verify <b>Settings → Server</b> domain/ports match reality, and the REALITY public key is generated.</li>
+  <li>WireGuard shows a warning comment until you paste the server's public key in Settings.</li>
+</ul>
+
+<h2>Do I have to pay for any of this?</h2>
+<p>No. Zefira is MIT-licensed, the docs site is plain static files in this repo, and GitHub Pages hosting is free. Let's Encrypt certificates are free too.</p>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

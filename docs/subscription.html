@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subscriptions &amp; Clients — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1>Subscriptions <span class="z">&amp;</span> Clients</h1>
+<p class="subtitle">How users connect with one link.</p>
+
+<h2>The subscription link</h2>
+<p>Every user gets a unique URL:</p>
+<pre>https://vpn.example.com/sub/9f2c…a41b</pre>
+<ul>
+  <li>Token is 32 random hex chars — unguessable, safe to share with the buyer.</li>
+  <li>Leaked? Use <b>Reset token</b> — old link dies instantly.</li>
+  <li>Expired, disabled or out-of-volume users get <code>404</code> (no info leak about <i>why</i>).</li>
+  <li>Every response carries <code>subscription-userinfo</code> (used / total / expiry) which clients show as a progress bar.</li>
+</ul>
+
+<h2>Formats</h2>
+<table>
+<tr><th>Request</th><th>Gets</th></tr>
+<tr><td><code>/sub/TOKEN</code> in v2rayNG, Streisand, FoXray…</td><td>Base64 subscription with all VLESS / VMess / Trojan / SS / Hy2 links (plus WireGuard &amp; OpenVPN sections when enabled)</td></tr>
+<tr><td><code>/sub/TOKEN?format=clash</code> or any Clash user-agent</td><td>Clash YAML: proxies, <code>Zefira</code> select group, block rules, <code>MATCH</code></td></tr>
+</table>
+
+<h2>Recommended clients</h2>
+<table>
+<tr><th>Platform</th><th>Clients</th></tr>
+<tr><td>Android</td><td>v2rayNG, NekoBox</td></tr>
+<tr><td>iOS</td><td>Streisand, FoXray, Shadowrocket</td></tr>
+<tr><td>Windows</td><td>NekoRay, Clash Verge, Hiddify</td></tr>
+<tr><td>macOS / Linux</td><td>Clash Verge, Hiddify, Nekoray</td></tr>
+</table>
+
+<h2>QR &amp; config bundles</h2>
+<ul>
+  <li><b>QR button</b> per user — scan with the phone, done. Also works for the TOTP setup code.</li>
+  <li><b>Download config</b> — single <code>.txt</code> for link-based protocols, ready <code>.conf</code> for WireGuard (with keys + endpoint), ready <code>.ovpn</code> for OpenVPN (CA + cert + key embedded), or a <code>.zip</code> bundle when several apply.</li>
+</ul>
+
+<h2>Custom subscription path</h2>
+<p>During install (or via <code>SUBSCRIPTION_PATH</code>) you can rename <code>/sub</code> to anything, e.g. <code>/s</code> — links become <code>https://domain/s/TOKEN</code>. Obscurity is not security, but it cuts scanner noise.</p>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>

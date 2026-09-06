@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Reference — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">Introduction</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+</nav>
+<main class="content">
+
+<h1><span class="z">A</span>PI Reference</h1>
+<p class="subtitle">Cookie-authenticated JSON API for bots and dashboards.</p>
+
+<div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
+
+<h2>Auth &amp; account</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password, code?}</code> — 401, or <code>totp_required</code></td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td>Invalidates the session server-side</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username, 2FA state</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td>Strong-password enforced, kills other sessions</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/2fa/status</code></td><td>—</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/2fa/setup</code> · <code>/enable</code> · <code>/disable</code></td><td>QR uri + 6-digit code flow</td></tr>
+</table>
+
+<h2>Users</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td>Counters: active, expired, expiring-soon, limited…</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users?q=…</code></td><td>Up to 500, username/note search</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td>Create (protocols, volume, days, first-use, device limit)</td></tr>
+<tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td>Extend, top-up, note, expiry, active flag</td></tr>
+<tr><td><span class="badge del">DELETE</span></td><td><code>/api/users/{id}</code></td><td>—</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td>Rotates token + all secrets</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td>Sub URL + QR / config file or ZIP</td></tr>
+</table>
+
+<h2>Server objects</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td>Domain, ports, REALITY, obfuscation…</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td>New X25519 keypair</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td>Audit-logged reveal</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/ssl/issue</code> · <code>/ssl/renew</code></td><td><code>{domain, subdomain?, email}</code></td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/templates…</code> · <code>/api/nodes…</code> · <code>/api/blocklist…</code></td><td>Plans, tunnels, blocked sites</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/nodes/{id}/check</code> · <code>/guide</code> · <code>/reveal-token</code> · <code>/regen-token</code></td><td>Tunnel ops</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/backup</code></td><td>Full JSON export (download)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/restore</code></td><td>Password-confirmed re-import</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code></td><td>Logs, CPU/RAM/disk, notifications</td></tr>
+</table>
+
+<h2>Public</h2>
+<table>
+<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Base64 sub, or Clash YAML with <code>?format=clash</code></td></tr>
+</table>
+
+<h2>Example: create a user</h2>
+<pre>curl -c jar.txt -H 'Content-Type: application/json' \
+     -H 'X-Requested-With: XMLHttpRequest' \
+     -d '{"username":"admin","password":"…"}' \
+     https://vpn.example.com/api/login
+
+curl -b jar.txt -H 'Content-Type: application/json' \
+     -H 'X-Requested-With: XMLHttpRequest' \
+     -d '{"username":"buyer1","protocols":["vless","reality"],"volume_gb":50,"days":30}' \
+     https://vpn.example.com/api/users</pre>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira">github.com/mrlurix/zefira</a></footer>
+<script src="assets/docs.js"></script>
+</body>
+</html>
