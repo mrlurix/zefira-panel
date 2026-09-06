@@ -45,7 +45,9 @@ const EVENT_EN = {
   INBOUND_PATCH: "Inbound updated",
   INBOUND_DELETE: "Inbound removed",
   TG_SAVE: "Telegram settings saved",
-  TG_TEST: "Telegram test sent"
+  TG_TEST: "Telegram test sent",
+  SSL_ISSUE: "SSL certificate issued",
+  SSL_RENEW: "SSL certificate renewed"
 };
 
 let USERS_CACHE = [];
@@ -333,7 +335,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); }
+    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "blocker") loadBlocklist();
@@ -1044,6 +1046,51 @@ $("#tg-test-btn").addEventListener("click", async () => {
   try {
     await api("/api/telegram/test", { method: "POST", body: {} });
     toast("Test message sent \u2014 check Telegram");
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+
+// ---- SSL certificate ----
+function renderSslStatus(st) {
+  const el = $("#ssl-status");
+  if (!el) return;
+  if (!st.installed) {
+    el.textContent = "\u26a0 certbot is not installed on this server (apt install certbot).";
+    return;
+  }
+  if (st.domains && st.domains.length && st.expires) {
+    el.textContent = `\u2713 ${st.domains.join(", ")} \u2014 valid until ${st.expires}`;
+  } else if (st.domains && st.domains.length) {
+    el.textContent = `\u2713 Certificate files found for ${st.domains.join(", ")}`;
+  } else {
+    el.textContent = "No certificate yet. Enter domain + email and press Issue.";
+  }
+}
+async function loadSslStatus() {
+  try {
+    renderSslStatus(await api("/api/ssl/status"));
+  } catch (_) {}
+}
+$("#ssl-issue-btn").addEventListener("click", async () => {
+  const domain = $("#ssl-domain").value.trim();
+  const subdomain = $("#ssl-subdomain").value.trim();
+  const email = $("#ssl-email").value.trim();
+  if (!domain || !email) { toast("Domain and email are required", false); return; }
+  const fqdn = subdomain ? `${subdomain}.${domain}` : domain;
+  if (!confirm(`Issue a Let's Encrypt certificate for ${fqdn}? Port 80 must be free. It can take a minute.`)) return;
+  toast("Requesting certificate\u2026 this can take a minute");
+  try {
+    const r = await api("/api/ssl/issue", { method: "POST", body: { domain, subdomain, email } });
+    renderSslStatus(r);
+    toast("Certificate issued");
+    loadAudit();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+$("#ssl-renew-btn").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/ssl/renew", { method: "POST", body: {} });
+    renderSslStatus(r);
+    toast("Certificate renewed");
+    loadAudit();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 

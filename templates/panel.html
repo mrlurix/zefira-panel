@@ -365,6 +365,21 @@
         </form>
 
         <div class="card form-card">
+          <div class="card-head"><h2>SSL Certificate (Let's Encrypt)</h2></div>
+          <p class="hint" style="margin-top:0">Enter your domain and the panel fetches a free certificate itself. Requirements: domain DNS points to this server, port 80 is free, and certbot is installed.</p>
+          <div class="field-row">
+            <label class="field"><span>Domain</span><input type="text" id="ssl-domain" placeholder="example.com" spellcheck="false"></label>
+            <label class="field"><span>Subdomain (optional)</span><input type="text" id="ssl-subdomain" placeholder="panel" spellcheck="false"></label>
+          </div>
+          <label class="field"><span>Email (for expiry notices)</span><input type="email" id="ssl-email" placeholder="you@example.com" spellcheck="false"></label>
+          <div class="reality-actions">
+            <button type="button" id="ssl-issue-btn" class="btn btn-primary">Issue Certificate</button>
+            <button type="button" id="ssl-renew-btn" class="btn btn-ghost">Renew</button>
+          </div>
+          <p class="hint" id="ssl-status"></p>
+        </div>
+
+        <div class="card form-card">
           <div class="card-head"><h2>Telegram Notifications</h2></div>
           <p class="hint" style="margin-top:0">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
           <label class="field"><span>Bot token (kept encrypted)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
@@ -507,6 +522,7 @@
       <article class="doc-page hidden" data-key="server">
         <h1>8 &#183; Server / Hosts Settings</h1>
 <p>Domain or IP, per-family ports (V2Ray/Trojan/SS, Hysteria2, WireGuard, OpenVPN), tunnel DNS, OpenVPN protocol, REALITY port + SNI list, WireGuard server public key. Saved values are embedded into NEW configs immediately &mdash; old links keep their original values until you reset the token.</p>
+<p><b>SSL Certificate:</b> enter Domain (+ optional Subdomain) and Email, then Issue. The panel runs certbot itself and stores the cert paths. Requires: DNS pointing here, free port 80, certbot installed. Use Renew before expiry (Let's Encrypt certs last 90 days).</p>
       </article>
       <article class="doc-page hidden" data-key="remote">
         <h1>9 &#183; Remote Access &amp; Tunneling</h1>

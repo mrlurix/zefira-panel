@@ -4,6 +4,8 @@ import logging
 import os
 import re
 import secrets
+import shutil
+import subprocess
 import threading
 import time as time_mod
 from contextlib import asynccontextmanager
@@ -41,6 +43,7 @@ from schemas import (
     LoginIn,
     RestoreIn,
     SettingsIn,
+    SslIssueIn,
     TelegramSettingsIn,
     TelegramTestIn,
     TemplateCreateIn,
@@ -87,6 +90,7 @@ sub_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
 pw_limiter = SlidingWindowLimiter(max_events=6, window_seconds=300)
 tfa_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 probe_limiter = SlidingWindowLimiter(max_events=20, window_seconds=60)
+ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
@@ -562,6 +566,143 @@ def api_reality_private(request: Request, admin: Admin = Depends(require_admin))
         audit(s, "REALITY_REVEAL", f"private key viewed by {admin.username}", client_ip(request))
         s.commit()
     return {"private_key": priv}
+
+
+SSL_SETTING_KEYS = ("ssl_domains", "ssl_cert_path", "ssl_key_path", "ssl_expires")
+
+
+def _save_settings(s, values: dict) -> None:
+    for k, v in values.items():
+        row = s.get(Setting, k)
+        if row is None:
+            s.add(Setting(key=k, value=str(v)))
+        else:
+            row.value = str(v)
+
+
+def _read_cert_expiry(cert_path: str | None) -> str | None:
+    if not cert_path:
+        return None
+    try:
+        from cryptography import x509 as _x509
+
+        with open(cert_path, "rb") as fh:
+            cert = _x509.load_pem_x509_certificate(fh.read())
+        try:
+            exp = cert.not_valid_after_utc
+        except AttributeError:
+            exp = cert.not_valid_after.replace(tzinfo=timezone.utc)
+        return exp.isoformat(timespec="seconds")
+    except Exception:
+        return None
+
+
+def _ssl_state() -> dict:
+    with db.s() as s:
+        rows = s.scalars(select(Setting).where(Setting.key.in_(SSL_SETTING_KEYS))).all()
+        vals = {r.key: r.value for r in rows}
+    domains = [d for d in (vals.get("ssl_domains") or "").split(",") if d]
+    cert_path = vals.get("ssl_cert_path") or None
+    key_path = vals.get("ssl_key_path") or None
+    expires = _read_cert_expiry(cert_path)
+    return {
+        "installed": shutil.which("certbot") is not None,
+        "domains": domains,
+        "expires": expires,
+        "cert_path": cert_path,
+        "key_path": key_path,
+    }
+
+
+def _run_certbot(fqdn: str, email: str | None, keep_until_expiring: bool) -> tuple[bool, str]:
+    certbot = shutil.which("certbot")
+    if not certbot:
+        return False, "certbot is not installed on this server (apt install certbot)"
+    cmd = [
+        certbot, "certonly", "--standalone", "--non-interactive", "--agree-tos",
+        "--http-01-port", "80", "-d", fqdn,
+    ]
+    if email:
+        cmd += ["--email", email]
+    if keep_until_expiring:
+        cmd.append("--keep-until-expiring")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        return False, "certbot timed out after 180s"
+    except OSError as exc:
+        return False, f"could not launch certbot: {exc}"
+    out = (proc.stderr + "\n" + proc.stdout).strip()
+    tail = "\n".join(out.splitlines()[-8:])
+    if proc.returncode != 0:
+        low = out.lower()
+        if "could not bind" in low or "address already in use" in low or "port 80" in low:
+            return False, "port 80 is busy (stop nginx or whatever listens on :80) and retry"
+        if "dns" in low and ("no valid ip" in low or "nxdomain" in low or "dns problem" in low):
+            return False, "domain DNS does not point to this server"
+        if "too many" in low and "rate" in low:
+            return False, "Let's Encrypt rate limit hit — try again later"
+        return False, f"certbot failed: {tail[:500]}" or "certbot failed"
+    return True, tail[:500]
+
+
+@app.get("/api/ssl/status")
+def api_ssl_status(admin: Admin = Depends(require_admin)):
+    return _ssl_state()
+
+
+@app.post("/api/ssl/issue")
+def api_ssl_issue(data: SslIssueIn, request: Request, admin: Admin = Depends(require_admin)):
+    if not ssl_limiter.hit(f"ssl|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    fqdn = f"{data.subdomain}.{data.domain}" if data.subdomain else data.domain
+    ok, msg = _run_certbot(fqdn, data.email, keep_until_expiring=False)
+    with db.s() as s:
+        if ok:
+            cert_path = f"/etc/letsencrypt/live/{fqdn}/fullchain.pem"
+            key_path = f"/etc/letsencrypt/live/{fqdn}/privkey.pem"
+            if os.path.exists(cert_path) and os.path.exists(key_path):
+                _save_settings(s, {
+                    "ssl_domains": fqdn,
+                    "ssl_cert_path": cert_path,
+                    "ssl_key_path": key_path,
+                    "ssl_expires": _read_cert_expiry(cert_path) or "",
+                })
+                for k in SSL_SETTING_KEYS:
+                    _settings_cache.pop(k, None)
+            else:
+                ok, msg = False, "certbot reported success but certificate files were not found"
+        audit(s, "SSL_ISSUE", f"{fqdn} by {admin.username} -> {'ok' if ok else msg[:120]}", client_ip(request), ok=ok)
+        s.commit()
+    log.info("SSL issue %s by %s ok=%s", fqdn, admin.username, ok)
+    if not ok:
+        raise HTTPException(status_code=502, detail=msg)
+    return {"ok": True, **_ssl_state()}
+
+
+@app.post("/api/ssl/renew")
+def api_ssl_renew(request: Request, admin: Admin = Depends(require_admin)):
+    if not ssl_limiter.hit(f"ssl|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    state = _ssl_state()
+    if not state["domains"]:
+        raise HTTPException(status_code=400, detail="No certificate yet — issue one first")
+    fqdn = state["domains"][0]
+    with db.s() as s:
+        audit(s, "SSL_RENEW", f"{fqdn} by {admin.username}", client_ip(request))
+        s.commit()
+    ok, msg = _run_certbot(fqdn, None, keep_until_expiring=True)
+    with db.s() as s:
+        if ok:
+            cert_path = f"/etc/letsencrypt/live/{fqdn}/fullchain.pem"
+            _save_settings(s, {"ssl_expires": _read_cert_expiry(cert_path) or ""})
+            for k in SSL_SETTING_KEYS:
+                _settings_cache.pop(k, None)
+        s.commit()
+    log.info("SSL renew %s by %s ok=%s", fqdn, admin.username, ok)
+    if not ok:
+        raise HTTPException(status_code=502, detail=msg)
+    return {"ok": True, **_ssl_state()}
 
 
 @app.get("/api/templates")
