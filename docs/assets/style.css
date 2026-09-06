@@ -409,3 +409,29 @@ footer a { color: var(--red); text-decoration: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- responsive ---------- */
+body { overflow-x: clip; }
+table { display: block; width: 100%; overflow-x: auto; }
+.sp-foot { flex-wrap: wrap; gap: 8px 16px; }
+
+@media (max-width: 560px) {
+  .topbar { gap: 8px; padding: 6px 12px; border-radius: 14px; }
+  .brand img { width: 24px; height: 24px; }
+  .brand b { font-size: 14px; letter-spacing: 1px; }
+  .ver { display: none; }
+  .topbar a.gh { font-size: 12px; padding: 3px 8px; }
+  .sp-trigger { padding: 4px 8px; }
+  .sp-trigger span, .sp-trigger kbd { display: none; }
+  .content h1 { font-size: 25px; }
+  .content h2 { font-size: 19px; }
+  table { font-size: 13px; }
+  th, td { padding: 8px 10px; }
+  .hero-xl { padding: 44px 8px 24px; }
+  .hero-xl h1 { letter-spacing: 5px; }
+  .hero-xl .tagline { font-size: 15.5px; }
+  .hero-xl .tagline br { display: none; }
+  .btn { padding: 10px 20px; font-size: 14px; }
+  .sp-modal { max-height: 78vh; }
+  .sp-overlay { padding: 8vh 12px 12px; }
+}
