@@ -6,6 +6,11 @@ Works with VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and OpenVPN. 
 
 Built with FastAPI + SQLite. No Docker required, just Python.
 
+### Screenshots
+
+![Login](screenshots/screenshot-login.png)
+![Dashboard](screenshots/screenshot-dashboard.png)
+
 ### Install on a server (one line)
 
 ```bash

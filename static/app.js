@@ -424,6 +424,7 @@ $("#tpl-select").addEventListener("change", () => {
   f.days.value = t.days;
   $("#sofu-check").checked = !!t.start_on_first_use;
   f.device_limit.value = t.device_limit || "";
+});
 $("#tpl-save-btn").addEventListener("click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
