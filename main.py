@@ -91,6 +91,7 @@ pw_limiter = SlidingWindowLimiter(max_events=6, window_seconds=300)
 tfa_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 probe_limiter = SlidingWindowLimiter(max_events=20, window_seconds=60)
 ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
+lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
@@ -122,11 +123,34 @@ def trusted_networks() -> list:
     return nets
 
 
+def request_scheme(request: Request) -> str:
+    """Real client-facing scheme, even behind a TLS-terminating proxy.
+
+    uvicorn runs with proxy_headers=False, so request.url.scheme is always
+    http. X-Forwarded-Proto is only honored when the direct peer cannot be
+    spoofed by a remote attacker (loopback or an explicitly trusted proxy).
+    """
+    if request.url.scheme == "https":
+        return "https"
+    try:
+        peer = ipaddress.ip_address(request.client.host) if request.client else None
+    except ValueError:
+        peer = None
+    if peer is not None and (peer.is_loopback or any(peer in n for n in trusted_networks())):
+        xfp = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        if xfp == "https":
+            return "https"
+    return "http"
+
+
 def public_base_url(request: Request) -> str:
     pub = cached_setting("public_url")
     if pub:
         return pub.rstrip("/")
-    return str(request.base_url).rstrip("/")
+    base = str(request.base_url).rstrip("/")
+    if request_scheme(request) == "https" and base.startswith("http://"):
+        base = "https://" + base[len("http://"):]
+    return base
 
 
 def audit(s, event: str, detail: str = "", ip: str = "", ok: bool = True) -> None:
@@ -194,7 +218,12 @@ async def lifespan(_: FastAPI):
     psutil.cpu_percent(interval=None)
     with db.s() as s:
         if not s.scalar(select(Admin).limit(1)):
-            username = os.environ.get("ZEFIRA_ADMIN_USERNAME", "admin")
+            username = (os.environ.get("ZEFIRA_ADMIN_USERNAME", "admin") or "admin").strip().lower()
+            # Login always lowercases the username, so a mixed-case value here
+            # would lock the operator out permanently. Normalize or fall back.
+            if not USERNAME_RE.match(username):
+                log.warning("Invalid ZEFIRA_ADMIN_USERNAME, falling back to 'admin'")
+                username = "admin"
             password = os.environ.get("ZEFIRA_ADMIN_PASSWORD") or secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
             s.commit()
@@ -235,7 +264,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Content-Security-Policy"] = CSP
     if request.url.path.startswith("/api") or request.url.path.startswith("/sub"):
         response.headers.setdefault("Cache-Control", "no-store")
-    if request.url.scheme == "https":
+    if request_scheme(request) == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
@@ -243,7 +272,14 @@ async def security_headers_middleware(request: Request, call_next):
 @app.middleware("http")
 async def block_direct_ip_middleware(request: Request, call_next):
     if cached_setting("block_direct_ip") == "1":
-        host = request.headers.get("host", "").split(":")[0].strip()
+        raw_host = request.headers.get("host", "").strip()
+        if raw_host.startswith("["):
+            host = raw_host[1:].split("]", 1)[0]
+        elif raw_host.count(":") == 1:
+            host = raw_host.rsplit(":", 1)[0]
+        else:
+            host = raw_host
+        host = host.strip()
         if host:
             try:
                 ip = ipaddress.ip_address(host)
@@ -261,7 +297,12 @@ async def csrf_and_size_middleware(request: Request, call_next):
     content_length = request.headers.get("content-length")
     if content_length:
         try:
-            if int(content_length) > 1048576:
+            # Backup restores are legitimately large (up to 10k users);
+            # everything else stays under a strict 1 MiB cap.
+            limit = 64 * 1048576 if (
+                request.url.path == "/api/restore" and request.method == "POST"
+            ) else 1048576
+            if int(content_length) > limit:
                 return JSONResponse({"detail": "payload too large"}, status_code=413)
         except ValueError:
             return JSONResponse({"detail": "bad request"}, status_code=400)
@@ -316,7 +357,7 @@ def set_session_cookie(response: Response, request: Request, admin_id: int, vers
         value=token,
         max_age=SESSION_TTL,
         httponly=True,
-        secure=request.url.scheme == "https",
+        secure=request_scheme(request) == "https",
         samesite="strict",
         path="/",
     )
@@ -340,12 +381,15 @@ def panel_page(request: Request):
 @app.post("/api/login")
 def api_login(data: LoginIn, request: Request, response: Response):
     ip = client_ip(request)
-    safe_user = re.sub(r"[\r\n]", "", data.username)[:64]
+    safe_user = re.sub(r"[\x00-\x1f\x7f]", "", data.username)[:64]
     ukey = f"u|{data.username.lower()}"
     key = f"{ip}|{data.username.lower()}"
     if not login_user_limiter.hit(ukey) or not login_limiter.hit(key):
         log.warning("Rate-limited login attempt ip=%s user=%s", ip, safe_user)
-        notify_async(f"\u26a0 Zefira: brute-force lockout triggered from IP {ip} (user: {safe_user})")
+        # Throttled: without this, an attacker rotating IPs/usernames could
+        # flood the admin's Telegram bot with lockout alerts (spam amplifier).
+        if lockout_notify_limiter.hit(f"lockout|{ip}"):
+            notify_async(f"\u26a0 Zefira: brute-force lockout triggered from IP {ip} (user: {safe_user})")
         raise HTTPException(status_code=429, detail="Too many attempts, try again in a few minutes")
     fail_msg = "Invalid username or password"
     with db.s() as s:
@@ -383,7 +427,24 @@ def api_login(data: LoginIn, request: Request, response: Response):
 
 
 @app.post("/api/logout")
-def api_logout(response: Response):
+def api_logout(request: Request, response: Response):
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        payload = decode_session(token)
+        if payload:
+            try:
+                admin_pk = int(payload.get("sub", 0))
+            except (TypeError, ValueError):
+                admin_pk = 0
+            if admin_pk:
+                with db.s() as s:
+                    row = s.get(Admin, admin_pk)
+                    # Only bump when this session is the current one, so a stale
+                    # cookie cannot kick out a newer valid session.
+                    if row is not None and payload.get("ver") == row.token_version:
+                        row.token_version += 1
+                        audit(s, "LOGOUT", f"user={row.username}", client_ip(request))
+                        s.commit()
     response.delete_cookie(COOKIE_NAME, path="/")
     return {"ok": True}
 

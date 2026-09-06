@@ -109,7 +109,10 @@ class SlidingWindowLimiter:
 
 
 login_limiter = SlidingWindowLimiter(max_events=8, window_seconds=900)
-login_user_limiter = SlidingWindowLimiter(max_events=25, window_seconds=900)
+# Global per-username bucket: intentionally loose. The tight per-IP bucket above
+# stops single-source brute force; this one only slows distributed sprays.
+# Too low a value lets anyone lock the real admin out (account-lockout DoS).
+login_user_limiter = SlidingWindowLimiter(max_events=100, window_seconds=900)
 
 _HKDF = HKDF(algorithm=hashes.SHA256(), length=32, salt=b"zefira-static-salt", info=b"totp-encryption")
 _FERNET = Fernet(base64.urlsafe_b64encode(_HKDF.derive(SECRET_KEY.encode())))

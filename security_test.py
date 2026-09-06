@@ -5,6 +5,7 @@ Only use against your own instance.
 """
 import base64
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -12,6 +13,8 @@ import urllib.request
 import uuid
 
 import jwt
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
@@ -444,7 +447,7 @@ for i in range(500):
     lim.hit('k' + str(i))
 print(len(lim._events))
 """],
-    capture_output=True, text=True,
+    capture_output=True, text=True, cwd=HERE,
 )
 evicted = unit.stdout.strip()
 check("limiter evicts stale keys (memory-safe)", evicted.isdigit() and int(evicted) <= 50, f"keys={evicted}")
@@ -503,6 +506,23 @@ if stcsv == 200:
     lst2 = json.loads(req("GET", "/api/users?q=csvtest1", headers=AUTH2)[2])
     for u2 in lst2["items"]:
         req("DELETE", f"/api/users/{u2['id']}", headers=AUTH2)
+
+# ---- 31. HSTS is emitted when behind a TLS-terminating proxy ----
+sth, hdrh, _ = req("GET", "/panel", headers={"X-Forwarded-Proto": "https"})
+check("HSTS honored via X-Forwarded-Proto (loopback peer)", "max-age=31536000" in hget(hdrh, "Strict-Transport-Security"), f"got {hget(hdrh,'Strict-Transport-Security')!r}")
+sthp, hdrhp, _ = req("GET", "/panel")
+check("no HSTS on plain http", hget(hdrhp, "Strict-Transport-Security") == "")
+
+# ---- 32. Restore endpoint accepts large (legit backup) bodies ----
+big_body = json.dumps({"password_confirm": "wrong-password", "zefira_backup": True, "users": [], "pad": "x" * 1200000})
+stbig, _, _ = req("POST", "/api/restore", big_body, AUTH2)
+check("restore size gate allows >1MB backups", stbig != 413, f"got {stbig}")
+
+# ---- 33. Logout invalidates the session server-side ----
+stme, _, _ = req("GET", "/api/me", headers=AUTH2)
+stlo, _, _ = req("POST", "/api/logout", None, AUTH2)
+stdead, _, _ = req("GET", "/api/me", headers=AUTH2)
+check("logout kills session (old cookie 401)", stme == 200 and stlo == 200 and stdead == 401, f"me={stme} logout={stlo} after={stdead}")
 
 print("\n=== SUMMARY ===")
 
