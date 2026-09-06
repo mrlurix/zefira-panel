@@ -1,5 +1,7 @@
 ﻿# Zefira
 
+> 📚 **Documentation: [mrlurix.github.io/zefira](https://mrlurix.github.io/zefira/)** — install guide, user manual, API reference, FAQ.
+
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
 
 Works with VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and OpenVPN. You can also enable VLESS-REALITY for anti-filter setups. One user can have multiple protocols at once and gets a single subscription link.
