@@ -38,7 +38,7 @@
 <h1><span class="z">C</span>onfiguration</h1>
 <p class="subtitle">Environment variables and panel settings.</p>
 
-<h2>Environment variables</h2>
+<h2 id="environment-variables">Environment variables</h2>
 <p>Set in <code>/opt/zefira/.env</code> (installer-managed, mode 600) or exported before start:</p>
 <table>
 <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
@@ -58,17 +58,17 @@
 <tr><td><code>TG_BOT_TOKEN</code> / <code>TG_CHAT_ID</code></td><td>empty</td><td>Telegram notifications</td></tr>
 </table>
 
-<h2>Panel settings</h2>
+<h2 id="panel-settings">Panel settings</h2>
 <p><b>Settings → Server / Hosts</b> edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart). <b>Settings → Tunnel</b> sets the public URL and trusted proxies — the latter decides whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs.</p>
 
-<h2>HTTPS / SSL</h2>
+<h2 id="https-ssl">HTTPS / SSL</h2>
 <ul>
   <li><b>During install</b> (step 7): Nginx reverse proxy + Let's Encrypt with auto-renew cron.</li>
   <li><b>From the panel</b> (Settings → SSL): issue or renew a certificate for <code>domain</code> or <code>sub.domain</code> — standalone HTTP-01 on port 80, expiry shown in the panel.</li>
 </ul>
 <div class="callout info">Behind Nginx the panel honors <code>X-Forwarded-Proto</code> from localhost/trusted proxies, so cookies get the <code>Secure</code> flag and HSTS is emitted.</div>
 
-<h2>Data locations</h2>
+<h2 id="data-locations">Data locations</h2>
 <table>
 <tr><th>Path</th><th>Content</th></tr>
 <tr><td><code>/opt/zefira/.env</code></td><td>Secrets (600)</td></tr>

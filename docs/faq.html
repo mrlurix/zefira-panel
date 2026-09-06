@@ -38,44 +38,44 @@
 <h1>FAQ <span class="z">&amp;</span> Troubleshooting</h1>
 <p class="subtitle">Fast answers to common problems.</p>
 
-<h2>Login &amp; access</h2>
+<h2 id="login-access">Login &amp; access</h2>
 <div class="callout warn">LAN / tunnel mode (<code>start-lan.bat</code>) serves the panel over plain HTTP. Anyone on that network can sniff your session — only use it on networks you trust, or reach the panel through an encrypted SSH tunnel instead.</div>
-<h3>“Too many attempts, try again in a few minutes”</h3>
+<h3 id="too-many-attempts-try-again-in-a-few-minutes">“Too many attempts, try again in a few minutes”</h3>
 <p>You (or someone) failed login 8+ times in 15 minutes. Wait, then log in carefully. If it persists with the right password, restart the panel service — in-memory counters reset: <code>systemctl restart zefira</code>.</p>
-<h3>Password lost</h3>
+<h3 id="password-lost">Password lost</h3>
 <p>SSH into the server and set a new one via environment + restart, or edit <code>ZEFIRA_ADMIN_PASSWORD</code> in <code>/opt/zefira/.env</code> — note this only applies to a <i>fresh</i> database. On an existing DB, stop the service, delete <code>instance/zefira.db</code> (you lose data — restore from backup after), and restart to trigger first-run creation.</p>
-<h3>API returns 403 “forbidden” on POST</h3>
+<h3 id="api-returns-403-forbidden-on-post">API returns 403 “forbidden” on POST</h3>
 <p>You forgot the <code>X-Requested-With: XMLHttpRequest</code> header — the CSRF guard. Browsers using the panel send it automatically.</p>
 
-<h2>Panel not responding</h2>
+<h2 id="panel-not-responding">Panel not responding</h2>
 <pre>systemctl status zefira
 journalctl -u zefira -n 100 --no-pager
 curl -fsS http://127.0.0.1:8000/login && echo PANEL-UP
 ss -tlnp | grep 8000</pre>
 <p>If the port is taken, another copy is already running — stop it before starting a new one.</p>
 
-<h2>Subscriptions show 404 for everyone</h2>
+<h2 id="subscriptions-show-404-for-everyone">Subscriptions show 404 for everyone</h2>
 <ul>
   <li> Tokens rotate on <b>Reset token</b> — resend the new link.</li>
   <li>Check the user is active, not expired and not out of volume.</li>
   <li>If you renamed <code>SUBSCRIPTION_PATH</code>, old <code>/sub/…</code> links stop working.</li>
 </ul>
 
-<h2>SSL fails</h2>
+<h2 id="ssl-fails">SSL fails</h2>
 <ul>
   <li>Port 80 must be free and the domain's DNS must point at the server.</li>
   <li>Let's Encrypt rate-limits repeated issuance — wait an hour and retry.</li>
   <li>Behind Nginx, make sure the HTTP vhost exists before issuing.</li>
 </ul>
 
-<h2>Clients can't connect but the sub link loads</h2>
+<h2 id="clients-can-t-connect-but-the-sub-link-loads">Clients can't connect but the sub link loads</h2>
 <ul>
   <li>Open the VPN ports on the firewall (<code>ufw allow 443/tcp</code>, plus inbound / Hy2 / WG ports).</li>
   <li>Verify <b>Settings → Server</b> domain/ports match reality, and the REALITY public key is generated.</li>
   <li>WireGuard shows a warning comment until you paste the server's public key in Settings.</li>
 </ul>
 
-<h2>Do I have to pay for any of this?</h2>
+<h2 id="do-i-have-to-pay-for-any-of-this">Do I have to pay for any of this?</h2>
 <p>No. Zefira is MIT-licensed, the docs site is plain static files in this repo, and GitHub Pages hosting is free. Let's Encrypt certificates are free too.</p>
 
 </main>

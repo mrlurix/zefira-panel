@@ -38,7 +38,7 @@
 <h1>Subscriptions <span class="z">&amp;</span> Clients</h1>
 <p class="subtitle">How users connect with one link.</p>
 
-<h2>The subscription link</h2>
+<h2 id="the-subscription-link">The subscription link</h2>
 <p>Every user gets a unique URL:</p>
 <pre>https://vpn.example.com/sub/9f2c…a41b</pre>
 <ul>
@@ -48,14 +48,14 @@
   <li>Every response carries <code>subscription-userinfo</code> (used / total / expiry) which clients show as a progress bar.</li>
 </ul>
 
-<h2>Formats</h2>
+<h2 id="formats">Formats</h2>
 <table>
 <tr><th>Request</th><th>Gets</th></tr>
 <tr><td><code>/sub/TOKEN</code> in v2rayNG, Streisand, FoXray…</td><td>Base64 subscription with all VLESS / VMess / Trojan / SS / Hy2 links (plus WireGuard &amp; OpenVPN sections when enabled)</td></tr>
 <tr><td><code>/sub/TOKEN?format=clash</code> or any Clash user-agent</td><td>Clash YAML: proxies, <code>Zefira</code> select group, block rules, <code>MATCH</code></td></tr>
 </table>
 
-<h2>Recommended clients</h2>
+<h2 id="recommended-clients">Recommended clients</h2>
 <table>
 <tr><th>Platform</th><th>Clients</th></tr>
 <tr><td>Android</td><td>v2rayNG, NekoBox</td></tr>
@@ -64,13 +64,13 @@
 <tr><td>macOS / Linux</td><td>Clash Verge, Hiddify, Nekoray</td></tr>
 </table>
 
-<h2>QR &amp; config bundles</h2>
+<h2 id="qr-config-bundles">QR &amp; config bundles</h2>
 <ul>
   <li><b>QR button</b> per user — scan with the phone, done. Also works for the TOTP setup code.</li>
   <li><b>Download config</b> — single <code>.txt</code> for link-based protocols, ready <code>.conf</code> for WireGuard (with keys + endpoint), ready <code>.ovpn</code> for OpenVPN (CA + cert + key embedded), or a <code>.zip</code> bundle when several apply.</li>
 </ul>
 
-<h2>Custom subscription path</h2>
+<h2 id="custom-subscription-path">Custom subscription path</h2>
 <p>During install (or via <code>SUBSCRIPTION_PATH</code>) you can rename <code>/sub</code> to anything, e.g. <code>/s</code> — links become <code>https://domain/s/TOKEN</code>. Obscurity is not security, but it cuts scanner noise.</p>
 
 </main>

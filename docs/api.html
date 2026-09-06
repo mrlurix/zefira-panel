@@ -40,7 +40,7 @@
 
 <div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
 
-<h2>Auth &amp; account</h2>
+<h2 id="auth-account">Auth &amp; account</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password, code?}</code> — 401, or <code>totp_required</code></td></tr>
@@ -51,7 +51,7 @@
 <tr><td><span class="badge post">POST</span></td><td><code>/api/2fa/setup</code> · <code>/enable</code> · <code>/disable</code></td><td>QR uri + 6-digit code flow</td></tr>
 </table>
 
-<h2>Users</h2>
+<h2 id="users">Users</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td>Counters: active, expired, expiring-soon, limited…</td></tr>
@@ -63,7 +63,7 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td>Sub URL + QR / config file or ZIP</td></tr>
 </table>
 
-<h2>Server objects</h2>
+<h2 id="server-objects">Server objects</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td>Domain, ports, REALITY, obfuscation…</td></tr>
@@ -79,13 +79,13 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code></td><td>Logs, CPU/RAM/disk, notifications</td></tr>
 </table>
 
-<h2>Public</h2>
+<h2 id="public">Public</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Base64 sub, or Clash YAML with <code>?format=clash</code></td></tr>
 </table>
 
-<h2>Example: create a user</h2>
+<h2 id="example-create-a-user">Example: create a user</h2>
 <pre>curl -c jar.txt -H 'Content-Type: application/json' \
      -H 'X-Requested-With: XMLHttpRequest' \
      -d '{"username":"admin","password":"…"}' \

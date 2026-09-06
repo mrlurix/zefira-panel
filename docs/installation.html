@@ -38,18 +38,18 @@
 <h1><span class="z">Z</span>EFIRA Installation</h1>
 <p class="subtitle">From empty server to working panel in about 5 minutes.</p>
 
-<h2>Requirements</h2>
+<h2 id="requirements">Requirements</h2>
 <ul>
   <li>Ubuntu 20.04+ / Debian 11+ server (1 vCPU, 1 GB RAM minimum)</li>
   <li>Root access (<code>sudo</code>)</li>
   <li>Optional: a domain pointed at the server (for HTTPS)</li>
 </ul>
 
-<h2>One-line install</h2>
+<h2 id="one-line-install">One-line install</h2>
 <pre>bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)</pre>
 <div class="callout info">Piped scripts run non-interactively with safe defaults and print a random admin password at the end. For the guided setup, download the script first and run <code>sudo bash install.sh</code>.</div>
 
-<h2>The 7 guided steps</h2>
+<h2 id="the-7-guided-steps">The 7 guided steps</h2>
 <table>
 <tr><th>Step</th><th>What you choose</th></tr>
 <tr><td>1 · Port</td><td>Panel port (default <code>8000</code>)</td></tr>
@@ -61,7 +61,7 @@
 <tr><td>7 · Nginx + SSL</td><td>Reverse proxy + Let's Encrypt certificate (needs port 80 free)</td></tr>
 </table>
 
-<h2>What the installer does</h2>
+<h2 id="what-the-installer-does">What the installer does</h2>
 <ol>
   <li>Installs Python, Nginx and Certbot</li>
   <li>Clones Zefira to <code>/opt/zefira</code></li>
@@ -71,7 +71,7 @@
   <li>Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
 </ol>
 
-<h2>After install</h2>
+<h2 id="after-install">After install</h2>
 <pre># your URL, login and paths are printed at the end, e.g.
 # URL   : https://vpn.example.com
 # Local : http://127.0.0.1:8000
@@ -80,7 +80,7 @@ systemctl status zefira
 journalctl -u zefira -n 100 --no-pager   # logs</pre>
 <div class="callout warn">First login: open Settings, change the password and enable 2FA (TOTP). Do this before creating users.</div>
 
-<h2>Non-interactive install</h2>
+<h2 id="non-interactive-install">Non-interactive install</h2>
 <pre>ZEFIRA_DOMAIN=vpn.example.com \
 ZEFIRA_SSL_EMAIL=admin@example.com \
 ZEFIRA_SETUP_NGINX=y ZEFIRA_USE_SSL=y \
@@ -88,7 +88,7 @@ ZEFIRA_ADMIN_USERNAME=admin \
 ZEFIRA_ADMIN_PASSWORD='S3cure-Pass-99' \
 bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)</pre>
 
-<h2>Uninstall</h2>
+<h2 id="uninstall">Uninstall</h2>
 <pre>sudo bash install.sh --uninstall</pre>
 
 </main>

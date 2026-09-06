@@ -38,7 +38,7 @@
 <h1><span class="z">S</span>ecurity</h1>
 <p class="subtitle">How Zefira defends itself — and how to keep it that way.</p>
 
-<h2>Built-in defenses</h2>
+<h2 id="built-in-defenses">Built-in defenses</h2>
 <table>
 <tr><th>Layer</th><th>Implementation</th></tr>
 <tr><td>Passwords</td><td>scrypt hashing, 10+ chars with letters + digits enforced on change</td></tr>
@@ -52,12 +52,12 @@
 <tr><td>Visibility</td><td>Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
 </table>
 
-<h2>Penetration-test suite</h2>
+<h2 id="penetration-test-suite">Penetration-test suite</h2>
 <p><code>security_test.py</code> attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently <b>71/71 passing</b>:</p>
 <pre>.venv\Scripts\python security_test.py http://127.0.0.1:8000 admin YOUR_PASSWORD</pre>
 <div class="callout warn">Restore/atomicity tests wipe users. The suite refuses to run against a panel with users unless you pass <code>--allow-live</code> — back up first.</div>
 
-<h2>Operator checklist</h2>
+<h2 id="operator-checklist">Operator checklist</h2>
 <ul>
   <li>Change the password + enable 2FA right after first login.</li>
   <li>Serve the panel over HTTPS (installer step 7 or Settings → SSL).</li>
