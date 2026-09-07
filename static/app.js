@@ -621,11 +621,14 @@ $("#tfa-status-line").addEventListener("click", (e) => {
 
 $("#tfa-enable-btn").addEventListener("click", async () => {
   const code = $("#tfa-code").value.trim();
+  const pw = $("#tfa-password").value;
   if (!/^[0-9]{6}$/.test(code)) { toast("Enter the 6-digit code", false); return; }
+  if (!pw) { toast("Enter your current password", false); return; }
   try {
-    await api("/api/2fa/enable", { method: "POST", body: { code } });
+    await api("/api/2fa/enable", { method: "POST", body: { code, current_password: pw } });
     $("#tfa-setup-area").classList.add("hidden");
     $("#tfa-code").value = "";
+    $("#tfa-password").value = "";
     toast("Two-factor auth enabled");
     loadTfa();
   } catch (err) {
@@ -634,10 +637,12 @@ $("#tfa-enable-btn").addEventListener("click", async () => {
 });
 
 $("#tfa-disable-btn").addEventListener("click", async () => {
+  const pw = prompt("Enter your current password to allow disabling 2FA:");
+  if (!pw) return;
   const code = prompt("Enter the current 6-digit code to disable 2FA:");
   if (!code) return;
   try {
-    await api("/api/2fa/disable", { method: "POST", body: { code } });
+    await api("/api/2fa/disable", { method: "POST", body: { code, current_password: pw } });
     toast("Two-factor auth disabled");
     loadTfa();
   } catch (err) {
@@ -1114,9 +1119,29 @@ $("#doc-search").addEventListener("input", () => {
   });
 });
 
-$("#backup-btn").addEventListener("click", () => {
-  window.open("/api/backup", "_blank");
-  toast("Backup download started");
+$("#backup-btn").addEventListener("click", async () => {
+  const pw = prompt("Enter your admin password to download the backup:");
+  if (!pw) return;
+  try {
+    const res = await fetch("/api/backup", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      body: JSON.stringify({ password_confirm: pw })
+    });
+    if (res.status === 401) { location.href = "/login"; return; }
+    if (!res.ok) { toast("Backup failed — wrong password?", false); return; }
+    const blob = await res.blob();
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `zefira-backup-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("Backup download started");
+  } catch (_) {
+    toast("Backup failed", false);
+  }
 });
 
 const restoreFile = $("#restore-file");

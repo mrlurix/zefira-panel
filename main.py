@@ -41,6 +41,7 @@ from schemas import (
     InboundIn,
     InboundPatchIn,
     LoginIn,
+    RestoreConfirmIn,
     RestoreIn,
     SettingsIn,
     SslIssueIn,
@@ -48,6 +49,7 @@ from schemas import (
     TelegramTestIn,
     TemplateCreateIn,
     TotpCodeIn,
+    TotpManageIn,
     TunnelNodeIn,
     TunnelSettingsIn,
     UserCreateIn,
@@ -521,9 +523,14 @@ def api_2fa_setup(request: Request, admin: Admin = Depends(require_admin)):
 
 
 @app.post("/api/2fa/enable")
-def api_2fa_enable(data: TotpCodeIn, request: Request, admin: Admin = Depends(require_admin)):
+def api_2fa_enable(data: TotpManageIn, request: Request, admin: Admin = Depends(require_admin)):
     if not tfa_limiter.hit(f"tfa|{admin.id}"):
         raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    if not verify_password(data.current_password, admin.password_hash):
+        with db.s() as s:
+            audit(s, "TFA_FAIL", f"wrong password on 2fa/enable by {admin.username}", client_ip(request), ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
     pending = decrypt_text(admin.totp_pending)
     if not pending:
         raise HTTPException(status_code=400, detail="Start the setup first")
@@ -541,9 +548,14 @@ def api_2fa_enable(data: TotpCodeIn, request: Request, admin: Admin = Depends(re
 
 
 @app.post("/api/2fa/disable")
-def api_2fa_disable(data: TotpCodeIn, request: Request, admin: Admin = Depends(require_admin)):
+def api_2fa_disable(data: TotpManageIn, request: Request, admin: Admin = Depends(require_admin)):
     if not tfa_limiter.hit(f"tfa|{admin.id}"):
         raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    if not verify_password(data.current_password, admin.password_hash):
+        with db.s() as s:
+            audit(s, "TFA_FAIL", f"wrong password on 2fa/disable by {admin.username}", client_ip(request), ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
     active = decrypt_text(admin.totp_secret)
     if not admin.totp_enabled or not verify_totp(active, data.code):
         raise HTTPException(status_code=400, detail="The code is not valid")
@@ -994,8 +1006,13 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
     return out
 
 
-@app.get("/api/backup")
-def api_backup(request: Request, admin: Admin = Depends(require_admin)):
+@app.post("/api/backup")
+def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
+    if not verify_password(data.password_confirm, admin.password_hash):
+        with db.s() as s:
+            audit(s, "BACKUP_FAIL", f"wrong confirm password by {admin.username}", client_ip(request), ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     with db.s() as s:
         users = [u.to_backup_dict() for u in s.scalars(select(VpnUser)).all()]
         admins = [a.to_backup_dict() for a in s.scalars(select(Admin)).all()]

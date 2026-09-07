@@ -53,7 +53,7 @@
 </table>
 
 <h2 id="penetration-test-suite">Penetration-test suite</h2>
-<p><code>security_test.py</code> attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently <b>71/71 passing</b>:</p>
+<p><code>security_test.py</code> attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently <b>76/76 passing</b>:</p>
 <pre>.venv\Scripts\python security_test.py http://127.0.0.1:8000 admin YOUR_PASSWORD</pre>
 <div class="callout warn">Restore/atomicity tests wipe users. The suite refuses to run against a panel with users unless you pass <code>--allow-live</code> — back up first.</div>
 

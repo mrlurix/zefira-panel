@@ -67,7 +67,7 @@ There is a test suite with 60+ checks that hits the running panel from the outsi
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `62/62 checks passed` or similar - if not, open an issue.
+It should print `76/76 checks passed` or similar - if not, open an issue.
 
 ### API
 

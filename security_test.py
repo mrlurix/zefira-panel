@@ -106,9 +106,14 @@ check("cookie SameSite=strict", "samesite=strict" in rawcookie.lower())
 
 AUTH = {"Cookie": f"zefira_session={token}", "X-Requested-With": "XMLHttpRequest"}
 
-for ep in ["/api/stats", "/api/users", "/api/settings", "/api/backup", "/api/audit", "/api/system", "/api/me"]:
+for ep in ["/api/stats", "/api/users", "/api/settings", "/api/audit", "/api/system", "/api/me"]:
     st, _, _ = req("GET", ep)
     check(f"unauth GET {ep} -> 401", st == 401, f"got {st}")
+
+stb, _, _ = req("GET", "/api/backup")
+check("backup is not a GET (no CSRF-able download)", stb == 405, f"got {stb}")
+stb2, _, _ = req("POST", "/api/backup", json.dumps({"password_confirm": "WrongPass12345"}), {"X-Requested-With": "XMLHttpRequest"})
+check("unauth POST /api/backup blocked", stb2 in (401, 403), f"got {stb2}")
 
 st, _, _ = req("POST", "/api/users", '{"username":"hacker","protocols":["vless"],"volume_gb":1,"days":1}')
 check("unauth POST /api/users blocked", st in (401, 403), f"got {st}")
@@ -269,7 +274,7 @@ check("clash fmt on bad token still 404", stclash == 404, f"got {stclash}")
 
 # ---- 14. Backup secrecy ----
 stb, _, _ = req("GET", "/api/backup")
-check("backup requires auth", stb == 401, f"got {stb}")
+check("backup requires auth (GET not even routed)", stb == 405, f"got {stb}")
 
 stn1, _, _ = req("GET", "/api/nodes")
 check("tunnel nodes require auth", stn1 == 401, f"got {stn1}")
@@ -281,12 +286,13 @@ check("node create blocked w/o session", stn2 in (401, 403), f"got {stn2}")
 stn3, _, _ = req("GET", "/api/nodes/1/guide")
 check("node guide requires auth", stn3 in (401, 404), f"got {stn3}")
 
-# ---- 15. 2FA brute force (with session) ----
+# ---- 15. 2FA brute force (wrong password: limiter must engage before any
+# code check, and no state may change) ----
 codes2 = []
 for i in range(15):
     stt3, _, _ = req(
         "POST", "/api/2fa/disable",
-        json.dumps({"code": f"{i:06d}"}),
+        json.dumps({"code": f"{i:06d}", "current_password": "WrongPass12345"}),
         AUTH,
     )
     codes2.append(stt3)
@@ -518,7 +524,23 @@ big_body = json.dumps({"password_confirm": "wrong-password", "zefira_backup": Tr
 stbig, _, _ = req("POST", "/api/restore", big_body, AUTH2)
 check("restore size gate allows >1MB backups", stbig != 413, f"got {stbig}")
 
-# ---- 33. Logout invalidates the session server-side ----
+# ---- 33. Password-gated backup + 2FA management ----
+stb3, _, _ = req("POST", "/api/backup", json.dumps({"password_confirm": "WrongPass12345"}), AUTH2)
+check("backup with wrong password -> 400", stb3 == 400, f"got {stb3}")
+stb4, _, bbb4 = req("POST", "/api/backup", json.dumps({"password_confirm": PASSWORD}), AUTH2)
+bok = stb4 == 200
+try:
+    bj = json.loads(bbb4)
+    bok = bok and bj.get("zefira_backup") is True
+except Exception:
+    bok = False
+check("backup with correct password downloads", bok, f"got {stb4}")
+stfa, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456"}), AUTH2)
+check("2fa/enable without password -> 422", stfa == 422, f"got {stfa}")
+stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
+check("2fa/enable with wrong password rejected", stfa2 in (400, 429), f"got {stfa2}")
+
+# ---- 34. Logout invalidates the session server-side ----
 stme, _, _ = req("GET", "/api/me", headers=AUTH2)
 stlo, _, _ = req("POST", "/api/logout", None, AUTH2)
 stdead, _, _ = req("GET", "/api/me", headers=AUTH2)

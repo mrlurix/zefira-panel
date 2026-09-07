@@ -85,6 +85,12 @@ class TotpCodeIn(BaseModel):
     code: str = Field(pattern=r"^[0-9]{6}$")
 
 
+class TotpManageIn(TotpCodeIn):
+    # Password gate: with a stolen session alone, nobody may enroll their own
+    # second factor (persistence) or remove yours (lockout).
+    current_password: str = Field(min_length=8, max_length=128)
+
+
 class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

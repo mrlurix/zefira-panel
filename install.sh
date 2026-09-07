@@ -98,19 +98,39 @@ if [[ -n "$DOMAIN" ]] && ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid ZEF
 
 # ---------- Step 3/7 · Admin ----------
 step 3 "Admin account"
+gen_pass() { head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16; }
+# The panel strips surrounding whitespace at login, so normalize here too —
+# otherwise a trailing space locks the operator out with no error message.
+trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
+# Same bar as the panel itself: 10+ chars with letters AND digits.
+strong_enough() { local p="$1"; (( ${#p} >= 10 )) && [[ "$p" =~ [A-Za-z] ]] && [[ "$p" =~ [0-9] ]]; }
 if [[ $INTERACTIVE -eq 1 ]]; then
     ADMIN_USER=$(ask "Admin username" "admin")
     if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username (a-z, 0-9, _ , 3-32 chars)"; exit 1; fi
-    ADMIN_PASS=$(ask_secret "Admin password")
-    if [[ -z "$ADMIN_PASS" ]]; then
-        ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16)
-        echo "[*] Generated password: $ADMIN_PASS"
-    fi
-    read -rsp "Confirm password: " CONFIRM; echo
-    if [[ "$ADMIN_PASS" != "$CONFIRM" ]]; then echo "[!] Passwords do not match"; exit 1; fi
+    ADMIN_PASS=""
+    for _try in 1 2 3; do
+        ADMIN_PASS=$(trim "$(ask_secret "Admin password (empty=random, min 10 chars + letters & digits)")")
+        if [[ -z "$ADMIN_PASS" ]]; then
+            ADMIN_PASS=$(gen_pass)
+            echo "[*] Generated password: $ADMIN_PASS"
+            break
+        fi
+        if ! strong_enough "$ADMIN_PASS"; then
+            echo "[!] Too weak (need 10+ chars with letters AND digits) — try again"
+            ADMIN_PASS=""
+            continue
+        fi
+        read -rsp "Confirm password: " CONFIRM; echo
+        CONFIRM=$(trim "$CONFIRM")
+        if [[ "$ADMIN_PASS" != "$CONFIRM" ]]; then echo "[!] Passwords do not match — try again"; ADMIN_PASS=""; continue; fi
+        break
+    done
+    if [[ -z "$ADMIN_PASS" ]]; then echo "[!] No valid password given"; exit 1; fi
 else
     ADMIN_USER="${ZEFIRA_ADMIN_USERNAME:-admin}"
-    ADMIN_PASS="${ZEFIRA_ADMIN_PASSWORD:-}"
+    ADMIN_PASS=$(trim "${ZEFIRA_ADMIN_PASSWORD:-}")
+    if [[ -z "$ADMIN_PASS" ]]; then ADMIN_PASS=$(gen_pass); fi
+    if ! strong_enough "$ADMIN_PASS"; then echo "[!] ZEFIRA_ADMIN_PASSWORD must be 10+ chars with letters AND digits"; exit 1; fi
 fi
 
 # ---------- Step 4/7 · Database ----------
