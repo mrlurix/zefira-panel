@@ -161,7 +161,9 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     host = _effective_host(secret, srv)
     cdn = _cdn_sni(srv)
     sni = cdn or host
-    name = f"Zefira-{username}-{index}"
+    # Remark is exactly the username (plus inbound label when present) so
+    # client apps show a clean, familiar name instead of a generated one.
+    name = username
     if protocol == "vless":
         return (
             f"vless://{secret}@{host}:{srv['sub_port']}?encryption=none&security=tls"
@@ -191,11 +193,11 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
         )
     if protocol == "ss":
         userinfo = _b64(f"aes-256-gcm:{secret}")
-        return f"ss://{userinfo}@{host}:{srv['sub_port']}#Zefira-{username}-{index}"
+        return f"ss://{userinfo}@{host}:{srv['sub_port']}#{username}"
     if protocol == "hysteria2":
         return (
             f"hysteria2://{secret}@{host}:{srv['hy2_port']}"
-            f"?sni={sni}&insecure=0#Zefira-{username}-{index}"
+            f"?sni={sni}&insecure=0#{username}"
         )
     return None
 
@@ -206,7 +208,7 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
     sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
     sni = sni_list[(index - 1) % len(sni_list)] if sni_list else host
     sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
-    name = f"Zefira-{username}-REALITY-{index}"
+    name = username
     return (
         f"vless://{secret}@{host}:{srv['reality_port']}?"
         f"encryption=none&security=reality&pbk={pub}&sid={sid}"

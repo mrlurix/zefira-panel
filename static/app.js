@@ -212,6 +212,9 @@ function userRow(u) {
 
   const act = document.createElement("td");
   const subUrl = `${location.origin}/sub/${u.token}`;
+  const editBtn = iconBtn("Edit user", ICONS.edit, "");
+  editBtn.dataset.act = "edit";
+  editBtn.dataset.id = u.id;
   const qrBtn = iconBtn("Show QR code", ICONS.qr, "accent");
   qrBtn.dataset.act = "qr";
   qrBtn.dataset.id = u.id;
@@ -235,7 +238,7 @@ function userRow(u) {
   delBtn.dataset.act = "del";
   delBtn.dataset.id = u.id;
   delBtn.dataset.name = u.username;
-  act.append(qrBtn, copyBtn, dlBtn, toggleBtn, resetBtn, delBtn);
+  act.append(editBtn, qrBtn, copyBtn, dlBtn, toggleBtn, resetBtn, delBtn);
 
   tr.append(st, unTd, note, vol, exp, act);
   return tr;
