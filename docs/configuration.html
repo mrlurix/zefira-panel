@@ -53,7 +53,7 @@
 <tr><td><code>ZEFIRA_OVPN_PORT</code> / <code>ZEFIRA_OVPN_PROTO</code></td><td><code>1194</code> / <code>udp</code></td><td>OpenVPN endpoint</td></tr>
 <tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> or <code>postgresql+psycopg2://…</code></td></tr>
 <tr><td><code>SUBSCRIPTION_PATH</code></td><td><code>/sub</code></td><td>Subscription URL prefix</td></tr>
-<tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td>Login session lifetime (seconds, 8h)</td></tr>
+<tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td>Login session lifetime, seconds (clamped to 5 min – 7 days, default 8h)</td></tr>
 <tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td>empty</td><td>CIDRs allowed to send <code>X-Forwarded-For</code></td></tr>
 <tr><td><code>TG_BOT_TOKEN</code> / <code>TG_CHAT_ID</code></td><td>empty</td><td>Telegram notifications</td></tr>
 </table>

@@ -43,12 +43,13 @@
 <tr><th>Layer</th><th>Implementation</th></tr>
 <tr><td>Passwords</td><td>scrypt hashing, 10+ chars with letters + digits enforced on change</td></tr>
 <tr><td>Sessions</td><td>JWT in HttpOnly + SameSite=Strict cookies, <code>Secure</code> behind HTTPS, versioned (logout / password change kills all sessions)</td></tr>
-<tr><td>2FA</td><td>TOTP (SHA1/6-digit/30s), secrets Fernet-encrypted at rest</td></tr>
+<tr><td>2FA</td><td>TOTP (SHA1/6-digit/30s), secrets Fernet-encrypted at rest; enable/disable needs the current password</td></tr>
 <tr><td>Brute force</td><td>8 tries / 15 min per IP+user, plus a loose global per-user bucket (lockout-DoS resistant); identical 401s + dummy-hash timing for unknown users</td></tr>
 <tr><td>CSRF</td><td>Mutating <code>/api</code> calls require <code>X-Requested-With: XMLHttpRequest</code></td></tr>
 <tr><td>Headers</td><td>CSP, <code>frame-ancestors 'none'</code>, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</td></tr>
 <tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore), LIKE-escape on search</td></tr>
 <tr><td>Secrets</td><td>Bot tokens, tunnel tokens, TOTP and REALITY private keys encrypted with a host-local master key</td></tr>
+<tr><td>Sensitive exports</td><td>Backup download is POST-only with password confirm (no GET, so no CSRF-able download); access logs omit subscription tokens</td></tr>
 <tr><td>Visibility</td><td>Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
 </table>
 

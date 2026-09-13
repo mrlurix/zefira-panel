@@ -1,6 +1,6 @@
 ﻿# Zefira
 
-> 📚 **Documentation: [mrlurix.github.io/zefira](https://mrlurix.github.io/zefira-panel)** — install guide, user manual, API reference, FAQ.
+> 📚 **Documentation: [mrlurix.github.io/zefira-panel](https://mrlurix.github.io/zefira-panel/)** — install guide, user manual, API reference, FAQ.
 
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
 
@@ -27,7 +27,7 @@ To remove later: `sudo bash install.sh --uninstall`
 
 ```bash
 git clone https://github.com/mrlurix/zefira-panel.git
-cd zefira
+cd zefira-panel
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -40,14 +40,15 @@ Default login: `http://YOUR_SERVER_IP:8000`
 
 ### What you get
 
-- Users with traffic limit, expiry date, and notes. Start-on-first-use is supported if you want the timer to start only after the first connection.
-- Multiple protocols per user, all in one subscription. Supports normal base64 subs and Clash YAML (`?format=clash`).
+- Users with traffic limit, expiry date, and notes. Start-on-first-use is supported if you want the timer to start only after the first connection. Pencil button per row edits note, volume, expiry, device limit.
+- Multiple protocols per user, all in one subscription. Supports normal base64 subs and Clash YAML (`?format=clash`). Link remarks show the plain username.
+- Browser dashboard: opening a subscription link in a browser shows usage, links, QR and apps; VPN clients always get raw bytes.
 - Inbounds: define extra ports/hosts per protocol and every user gets links for all of them.
 - Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
 - BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable.
 - QR codes for every subscription, ZIP download for configs.
-- 2FA with any authenticator app, full audit log, system stats, Telegram notifications if you want.
-- JSON backup / restore (password confirmed). Also imports/exports all settings.
+- 2FA with any authenticator app (enable/disable needs your password), full audit log, system stats, Telegram notifications if you want.
+- JSON backup / restore (both password confirmed). Also imports/exports all settings.
 
 All docs are also inside the panel under **Docs** (left menu).
 
@@ -61,7 +62,7 @@ If you prefer env files, copy `.env.example` to `.env`. Env vars are only used a
 
 I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login, CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, encrypted secrets at rest, and audit logging. 
 
-There is a test suite with 60+ checks that hits the running panel from the outside:
+There is a test suite with 81 checks that hits the running panel from the outside:
 
 ```bash
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
