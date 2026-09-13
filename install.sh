@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
 #  ZEFIRA PANEL - Interactive Installer
-#  One-line:  bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)
+#  One-line:  bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)
 #  Local:     sudo bash install.sh
 #  Non-interactive (pipe): uses defaults, no prompts
 #  Uninstall: sudo bash install.sh --uninstall
 # ============================================================
 set -euo pipefail
 
-REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira.git}"
+REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira-panel.git}"
 TARGET="/opt/zefira"
 SERVICE="zefira"
 TOTAL_STEPS=7
