@@ -1761,9 +1761,13 @@ def _sub_info(u: dict) -> str:
 # tokens (e.g. a client built on a webview that sends Mozilla + Clash).
 CLIENT_UA_TOKENS = (
     "clash", "mihomo", "v2ray", "sing-box", "singbox", "xray", "hiddify",
-    "nekobox", "nekoray", "streisand", "foxray", "shadowrocket", "v2box",
-    "stash", "karing", "husi", "leaf", "pharos", "okhttp", "curl", "wget",
+    "nekobox", "nekoray", "sagernet", "flclash", "streisand", "foxray",
+    "shadowrocket", "v2box", "stash", "karing", "husi", "leaf", "pharos",
+    "loon", "surge", "quantumult", "okhttp", "curl", "wget",
     "python", "go-http", "axios", "dart",
+    # link-preview bots (no rendering): give them raw bytes, not HTML
+    "telegram", "telegrambot", "twitterbot", "discordbot", "whatsapp",
+    "slackbot", "googlebot", "bingbot",
 )
 BROWSER_UA_TOKENS = (
     "mozilla/", "applewebkit", "chrome/", "safari/", "firefox/",
