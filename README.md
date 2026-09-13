@@ -1,6 +1,6 @@
 ﻿# Zefira
 
-> 📚 **Documentation: [mrlurix.github.io/zefira](https://mrlurix.github.io/zefira/)** — install guide, user manual, API reference, FAQ.
+> 📚 **Documentation: [mrlurix.github.io/zefira](https://mrlurix.github.io/zefira-panel)** — install guide, user manual, API reference, FAQ.
 
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
 
