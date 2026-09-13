@@ -271,6 +271,31 @@ stfake, _, _ = req("GET", "/sub/" + "0" * 32)
 check("unknown sub token -> 404", stfake == 404, f"got {stfake}")
 stclash, _, clash_body = req("GET", "/sub/" + "0" * 32 + "?format=clash")
 check("clash fmt on bad token still 404", stclash == 404, f"got {stclash}")
+CHROME_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
+V2RAY_UA = {"User-Agent": "v2rayNG/1.9.4"}
+stbadu, _, _ = req("GET", "/sub/" + "0" * 32, headers=CHROME_UA)
+check("bad token via browser UA still 404 (no dashboard leak)", stbadu == 404, f"got {stbadu}")
+straw, _, _ = req("GET", "/sub/" + "0" * 32, headers=V2RAY_UA)
+check("bad token via client UA still 404", straw == 404, f"got {straw}")
+stmk, _, mkb = req("POST", "/api/users", json.dumps({
+    "username": "dashtest1", "protocols": ["vless"], "volume_gb": 1, "days": 1,
+    "note": '"><script>alert(1)</script>'
+}), AUTH)
+dash_ok = dash_esc = dash_client = False
+if stmk == 200:
+    tok = json.loads(mkb)["token"]
+    sth, hdrh, htmlb = req("GET", f"/sub/{tok}", headers=CHROME_UA)
+    html = htmlb.decode("utf-8", "replace") if isinstance(htmlb, bytes) else htmlb
+    dash_ok = sth == 200 and "dashtest1" in html and "text/html" in hget(hdrh, "Content-Type")
+    dash_esc = "&lt;script&gt;" in html and "<script>alert" not in html
+    stc, hdrc, _ = req("GET", f"/sub/{tok}", headers=V2RAY_UA)
+    dash_client = stc == 200 and "text/html" not in hget(hdrc, "Content-Type")
+    lst = json.loads(req("GET", "/api/users?q=dashtest1", headers=AUTH)[2])
+    for u2 in lst["items"]:
+        req("DELETE", f"/api/users/{u2['id']}", headers=AUTH)
+check("browser UA gets HTML dashboard", dash_ok, f"created={stmk}")
+check("dashboard escapes user note (XSS)", dash_esc)
+check("client UA still gets raw bytes", dash_client)
 
 # ---- 14. Backup secrecy ----
 stb, _, _ = req("GET", "/api/backup")

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ username }} | Zefira</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="sub-body">
+  <main class="sub-wrap">
+    <div class="sub-head">
+      <img src="/static/logo.png" alt="Zefira" width="52" height="52" class="logo-round">
+      <div>
+        <h1>{{ username }}</h1>
+        {% if note %}<p class="muted">{{ note }}</p>{% endif %}
+        <span class="badge {{ status_cls }}">{{ status_label }}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Usage</h2></div>
+      <p class="sub-vol">{{ volume_label }}</p>
+      <div class="bar"><div class="fill{% if volume_pct >= 90 %} danger{% endif %}" data-w="{{ volume_pct }}"></div></div>
+      <p class="hint">{{ expires_label }}{% if days_label %} · {{ days_label }}{% endif %}</p>
+      <div class="proto-wrap">
+        {% for p in proto_labels %}<span class="badge proto">{{ p }}</span>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Subscription link</h2></div>
+      <p class="mono sub-url">{{ sub_url }}</p>
+      <div class="reality-actions">
+        <button type="button" class="btn btn-sm btn-primary" data-copy="{{ sub_url }}" data-label="Copy link">Copy link</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ clash_url }}" data-label="Copy Clash link">Copy Clash link</button>
+      </div>
+      <p class="hint">Paste it into your app, scan the QR, or use one-tap import:</p>
+      <div class="reality-actions">
+        <a class="btn btn-sm btn-ghost" href="{{ import_v2rayng }}">v2RayNG</a>
+        <a class="btn btn-sm btn-ghost" href="{{ import_clash }}">Clash</a>
+        <a class="btn btn-sm btn-ghost" href="{{ import_singbox }}">sing-box</a>
+      </div>
+      <div class="qr-box"><img src="data:image/svg+xml;base64,{{ qr_b64 }}" alt="Subscription QR"></div>
+    </div>
+
+    {% for g in groups %}
+    <div class="card">
+      <div class="card-head"><h2>{{ g.label }}</h2></div>
+      {% for link in g.links %}
+      <div class="sub-link-row">
+        <p class="mono sub-url">{{ link }}</p>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ link }}" data-label="Copy">Copy</button>
+      </div>
+      {% endfor %}
+      {% if g.config %}
+      <textarea class="sub-config" id="cfg-{{ loop.index }}" readonly rows="8">{{ g.config }}</textarea>
+      <div class="reality-actions">
+        <button type="button" class="btn btn-sm btn-ghost" data-copy-target="#cfg-{{ loop.index }}" data-label="Copy config">Copy config</button>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="card">
+      <div class="card-head"><h2>Apps</h2></div>
+      <p class="hint">Official downloads — pick your platform:</p>
+      <ul class="sec-list">
+        <li><b>Android:</b> <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" rel="noopener">v2rayNG</a> · <a href="https://github.com/MatsuriDayo/NekoBoxForAndroid/releases" target="_blank" rel="noopener">NekoBox</a></li>
+        <li><b>iOS:</b> <a href="https://apps.apple.com/app/id1490021179" target="_blank" rel="noopener">Streisand</a> · <a href="https://apps.apple.com/app/id6448898396" target="_blank" rel="noopener">FoXray</a> · <a href="https://apps.apple.com/app/id932747118" target="_blank" rel="noopener">Shadowrocket</a></li>
+        <li><b>Windows:</b> <a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" rel="noopener">NekoRay</a> · <a href="https://github.com/clash-verge-rev/clash-verge-rev/releases" target="_blank" rel="noopener">Clash Verge</a> · <a href="https://github.com/hiddify/hiddify-app/releases" target="_blank" rel="noopener">Hiddify</a></li>
+        <li><b>macOS / Linux:</b> <a href="https://github.com/clash-verge-rev/clash-verge-rev/releases" target="_blank" rel="noopener">Clash Verge</a> · <a href="https://github.com/hiddify/hiddify-app/releases" target="_blank" rel="noopener">Hiddify</a></li>
+      </ul>
+      <p class="hint">Keep this page private — anyone with your link uses your volume.</p>
+    </div>
+  </main>
+  <script src="/static/sub.js" defer></script>
+</body>
+</html>
