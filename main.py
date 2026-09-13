@@ -1,6 +1,7 @@
 ﻿import ipaddress
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -10,6 +11,7 @@ import threading
 import time as time_mod
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote as urlquote
 from urllib.parse import urlparse
 
 import psutil
@@ -17,6 +19,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jinja2 import Environment as _JinjaEnv
+from jinja2 import FileSystemLoader as _JinjaLoader
+from jinja2 import select_autoescape as _autoescape
 from sqlalchemy import select, text as sqltext
 from sqlalchemy.exc import IntegrityError
 
@@ -76,7 +81,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 log = logging.getLogger("zefira")
 
 db = Database(BASE_DIR / "instance" / "zefira.db")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Autoescape ON: every {{ }} in templates is HTML-escaped. Login/panel only
+# interpolate server constants, so their output is unchanged; user-facing
+# pages (subscription dashboard) are XSS-safe by default.
+templates = Jinja2Templates(
+    env=_JinjaEnv(
+        loader=_JinjaLoader(str(BASE_DIR / "templates")),
+        autoescape=_autoescape(["html", "htm", "xml"]),
+    )
+)
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
 TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
@@ -1734,13 +1747,94 @@ def api_user_config(user_id: int, admin: Admin = Depends(require_admin)):
         },
     )
 
-
 def _sub_info(u: dict) -> str:
     used = int(float(u.get("used_gb", 0)) * 1073741824)
     total = int(float(u.get("volume_gb", 0)) * 1073741824)
     expires = u.get("expires_at")
     exp_ts = int(datetime.fromisoformat(expires.replace("Z", "+00:00")).timestamp()) if expires else 0
     return f"upload=0; download={used}; total={total}; expire={exp_ts}"
+
+
+# Browsers get a human dashboard, VPN clients get raw subscription bytes.
+# Unknown UAs default to RAW: a misclassified client still works, while a
+# misclassified browser only sees text. Client tokens win over browser
+# tokens (e.g. a client built on a webview that sends Mozilla + Clash).
+CLIENT_UA_TOKENS = (
+    "clash", "mihomo", "v2ray", "sing-box", "singbox", "xray", "hiddify",
+    "nekobox", "nekoray", "streisand", "foxray", "shadowrocket", "v2box",
+    "stash", "karing", "husi", "leaf", "pharos", "okhttp", "curl", "wget",
+    "python", "go-http", "axios", "dart",
+)
+BROWSER_UA_TOKENS = (
+    "mozilla/", "applewebkit", "chrome/", "safari/", "firefox/",
+    "edg/", "opr/", "msie", "trident",
+)
+
+
+def wants_dashboard(request: Request) -> bool:
+    ua = (request.headers.get("user-agent") or "").lower()
+    if any(t in ua for t in CLIENT_UA_TOKENS):
+        return False
+    return any(t in ua for t in BROWSER_UA_TOKENS)
+
+
+def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> dict:
+    from config import SUBSCRIPTION_PATH as _SUB_PATH
+
+    base = public_base_url(request)
+    sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
+    sub_url = f"{base}{sub_path}/{udict['token']}"
+    groups_raw = protocols.user_links(udict, srv, inbounds)
+    vol = float(udict.get("volume_gb") or 0)
+    used = float(udict.get("used_gb") or 0)
+    pct = int(min(100, used / vol * 100)) if vol > 0 else 0
+    now = utcnow()
+    try:
+        exp = (
+            datetime.fromisoformat(udict["expires_at"].replace("Z", "+00:00")).replace(tzinfo=None)
+            if udict.get("expires_at")
+            else None
+        )
+    except (ValueError, AttributeError):
+        exp = None
+    if udict.get("pending_start"):
+        status_label, status_cls, days_label = "Not started", "pending", "Starts on first use"
+        expires_label = "No expiry yet"
+    elif exp is not None and exp <= now:
+        status_label, status_cls, days_label = "Expired", "expired", "Expired"
+        expires_label = exp.strftime("%b %d, %Y")
+    elif used >= vol:
+        left = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp else 0
+        status_label, status_cls = "Out of volume", "limited"
+        days_label = f"{left} days left" if exp else ""
+        expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
+    else:
+        left = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp else 0
+        status_label, status_cls = "Active", "ok"
+        days_label = f"{left} days left" if exp else ""
+        expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
+    enc = urlquote(sub_url, safe="")
+    return {
+        "username": udict.get("username", ""),
+        "note": udict.get("note") or "",
+        "status_label": status_label,
+        "status_cls": status_cls,
+        "volume_label": f"{used:g} / {vol:g} GB",
+        "volume_pct": pct,
+        "expires_label": expires_label,
+        "days_label": days_label,
+        "proto_labels": list(groups_raw.keys()),
+        "sub_url": sub_url,
+        "clash_url": sub_url + "?format=clash",
+        "qr_b64": protocols.qr_svg_b64(sub_url),
+        "groups": [
+            {"label": label, "links": v["links"], "config": v["config"]}
+            for label, v in groups_raw.items()
+        ],
+        "import_v2rayng": f"v2rayng://install-config?url={enc}",
+        "import_clash": f"clash://install-config?url={enc}",
+        "import_singbox": f"sing-box://import-remote-profile?url={enc}",
+    }
 
 
 @app.get("/sub/{token}")
@@ -1766,6 +1860,11 @@ def subscription(token: str, request: Request):
             raise HTTPException(status_code=404, detail="Not Found")
         udict = user.to_full_dict()
     srv = load_srv()
+    inbounds = load_inbounds()
+    if not want_clash and wants_dashboard(request):
+        return templates.TemplateResponse(
+            request, "sub.html", _dashboard_ctx(udict, srv, inbounds, request)
+        )
     blocked = load_blocked_for_clash()
     info = _sub_info(udict)
     if want_clash:

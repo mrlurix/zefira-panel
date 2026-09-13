@@ -558,6 +558,70 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
     return files
 
 
+PROTO_LABELS = {
+    "vless": "VLESS", "reality": "REALITY", "vmess": "VMess",
+    "trojan": "Trojan", "ss": "Shadowsocks", "hysteria2": "Hysteria2",
+    "wireguard": "WireGuard", "openvpn": "OpenVPN",
+}
+
+
+def user_links(u: dict, srv: dict, inbounds: list = None) -> dict:
+    """Per-protocol shareables for the user dashboard.
+
+    Returns {label: {"links": [...], "config": str | None}} using the exact
+    same builders as subscription files, so dashboard and sub never drift.
+    """
+    protos = u.get("protocols") or ["vless"]
+    secrets_map = u.get("secret_map") or {}
+    out = {}
+    for p in protos:
+        sec = secrets_map.get(p)
+        if not sec:
+            continue
+        label = PROTO_LABELS.get(p, p)
+        if p in V2RAY_FAMILY:
+            links = []
+            count = 3 if p != "ss" else 1
+            for vsrv, ilabel in _srvs_for(p, srv, inbounds):
+                suffix = f"-{ilabel}" if ilabel else ""
+                for i in range(1, count + 1):
+                    link = _v2ray_link(p, sec, u["username"] + suffix, i, vsrv)
+                    if link:
+                        links.append(link)
+            if links:
+                out[label] = {"links": links, "config": None}
+        elif p == "reality":
+            links = []
+            for vsrv, ilabel in _srvs_for(p, srv, inbounds):
+                suffix = f"-{ilabel}" if ilabel else ""
+                for i in range(1, 4):
+                    link = _reality_link(sec, u["username"] + suffix, i, vsrv)
+                    if link:
+                        links.append(link)
+            if links:
+                out[label] = {"links": links, "config": None}
+        elif p == "hysteria2":
+            links = []
+            for vsrv, ilabel in _srvs_for(p, srv, inbounds):
+                suffix = f"-{ilabel}" if ilabel else ""
+                link = _v2ray_link("hysteria2", sec, u["username"] + suffix, 1, vsrv)
+                if link:
+                    links.append(link)
+            if links:
+                out[label] = {"links": links, "config": None}
+        elif p == "wireguard":
+            try:
+                out[label] = {"links": [], "config": _wg_config(u, srv, sec)}
+            except ValueError:
+                continue
+        elif p == "openvpn":
+            try:
+                out[label] = {"links": [], "config": _ovpn_config(u, srv, sec)}
+            except ValueError:
+                continue
+    return out
+
+
 def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, str]:
     protos = u.get("protocols") or ["vless"]
     secrets_map = u.get("secret_map") or {}

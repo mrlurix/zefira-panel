@@ -48,6 +48,10 @@
   <li>Every response carries <code>subscription-userinfo</code> (used / total / expiry) which clients show as a progress bar.</li>
 </ul>
 
+<h2 id="user-dashboard-page">User dashboard page</h2>
+<p>When the subscription link is opened in a <b>browser</b>, the user gets a personal dashboard instead of raw text: username and status, volume bar with used/total, days left and expiry, one-tap import buttons (v2RayNG, Clash, sing-box), copyable per-protocol links, WireGuard/OpenVPN configs, QR code and recommended apps per platform.</p>
+<p>VPN clients (v2rayNG, Clash, Streisand…) always receive raw subscription bytes — detection is by User-Agent, and anything unknown defaults to raw so no client ever breaks. Expired, disabled or out-of-volume users get <code>404</code> in both modes.</p>
+
 <h2 id="formats">Formats</h2>
 <table>
 <tr><th>Request</th><th>Gets</th></tr>
