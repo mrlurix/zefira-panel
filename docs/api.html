@@ -48,7 +48,7 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username, 2FA state</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td>Strong-password enforced, kills other sessions</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/2fa/status</code></td><td>—</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/2fa/setup</code> · <code>/enable</code> · <code>/disable</code></td><td>QR uri + 6-digit code flow</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/2fa/setup</code> · <code>/enable</code> · <code>/disable</code></td><td>QR uri + 6-digit code flow; enable/disable also needs <code>current_password</code></td></tr>
 </table>
 
 <h2 id="users">Users</h2>
@@ -82,7 +82,7 @@
 <h2 id="public">Public</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Base64 sub, or Clash YAML with <code>?format=clash</code></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Browsers get the user dashboard; clients get Base64 sub, or Clash YAML with <code>?format=clash</code></td></tr>
 </table>
 
 <h2 id="example-create-a-user">Example: create a user</h2>
