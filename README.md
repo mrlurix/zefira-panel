@@ -16,7 +16,7 @@ Built with FastAPI + SQLite. No Docker required, just Python.
 ### Install on a server (one line)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)
 ```
 
 The script installs Python deps, creates a systemd service and prints your login URL + password. Works on Ubuntu / Debian / Alma / Rocky.
@@ -26,7 +26,7 @@ To remove later: `sudo bash install.sh --uninstall`
 ### Manual install
 
 ```bash
-git clone https://github.com/mrlurix/zefira.git
+git clone https://github.com/mrlurix/zefira-panel.git
 cd zefira
 python3 -m venv .venv
 source .venv/bin/activate
