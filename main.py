@@ -126,6 +126,16 @@ def load_appearance() -> dict:
     out = {}
     for k in APPEARANCE_KEYS:
         v = (cached_setting(k) or "").strip()
+        if k in ("theme_accent", "theme_bg", "theme_card"):
+            # Fail safe to defaults: a hand-edited DB value must never 500
+            # /theme.css or inject CSS (only #rrggbb ever reaches the stylesheet).
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
+                v = ""
+        elif k == "brand_name":
+            if not re.fullmatch(r"[a-zA-Z0-9 _-]{1,24}", v):
+                v = ""
+        elif k == "dash_note":
+            v = "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")[:300]
         out[k] = v or APPEARANCE_DEFAULTS[k]
     return out
 
@@ -1788,7 +1798,13 @@ def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(requi
         user = _get_user_or_404(s, user_id)
         user.token = secrets.token_hex(16)
         proto_list = user.protocols_list()
-        user.secret_data = protocols.serialize_secrets(protocols.provision_map(proto_list, user.username))
+        try:
+            user.secret_data = protocols.serialize_secrets(protocols.provision_map(proto_list, user.username))
+        except ValueError:
+            # Legacy/hand-edited rows may list unknown protocols: refuse loudly
+            # instead of an unhandled 500.
+            log.warning("Token reset refused (bad protocols=%s) id=%s", proto_list, user_id)
+            raise HTTPException(status_code=422, detail="User has unknown protocols; delete and recreate it")
         s.commit()
         out = user.to_dict()
         audit(s, "TOKEN_RESET", f"{user.username} by {admin.username}", client_ip(request))
