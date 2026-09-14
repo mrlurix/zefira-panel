@@ -60,6 +60,8 @@ class VpnUser(Base):
     start_on_first_use = Column(Boolean, nullable=False, default=False)
     duration_days = Column(Integer, nullable=True)
     device_limit = Column(Integer, nullable=True)
+    last_fetch_at = Column(DateTime, nullable=True)
+    last_fetch_ip = Column(String(64), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     expires_at = Column(DateTime, nullable=False)
 
@@ -79,6 +81,10 @@ class VpnUser(Base):
             "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
             "pending_start": self.is_pending_start(),
+            "last_fetch_at": (
+                self.last_fetch_at.isoformat(timespec="seconds") + "Z" if self.last_fetch_at else None
+            ),
+            "last_fetch_ip": self.last_fetch_ip or None,
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
             "expires_at": (
                 self.expires_at.isoformat(timespec="seconds") + "Z" if self.expires_at else None
@@ -300,6 +306,8 @@ class Database:
             self._add_column(conn, "vpn_users", "start_on_first_use", "start_on_first_use BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "vpn_users", "duration_days", "duration_days INTEGER")
             self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
+            self._add_column(conn, "vpn_users", "last_fetch_at", "last_fetch_at DATETIME")
+            self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
 

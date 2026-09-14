@@ -10,7 +10,7 @@
 <body class="sub-body">
   <main class="sub-wrap">
     <div class="sub-head">
-      <img src="/static/logo.png" alt="Zefira" width="52" height="52" class="logo-round">
+      <img src="/static/logo.png" alt="Zefira" width="40" height="40" class="logo-round">
       <div>
         <h1>{{ username }}</h1>
         {% if note %}<p class="muted">{{ note }}</p>{% endif %}
@@ -20,17 +20,22 @@
 
     <div class="card">
       <div class="card-head"><h2>Usage</h2></div>
-      <div class="ring-wrap">
-        <svg class="ring" viewBox="0 0 120 120" width="150" height="150" role="img" aria-label="Usage {{ volume_pct }} percent">
-          <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
-          <circle class="ring-fg{% if volume_pct >= 90 %} danger{% endif %}" cx="60" cy="60" r="54" transform="rotate(-90 60 60)" stroke-dasharray="339.3" stroke-dashoffset="{{ ring_offset }}"></circle>
-        </svg>
-        <div class="ring-center"><b>{{ volume_pct }}%</b><span>used</span></div>
-      </div>
-      <p class="sub-vol">{{ volume_label }}</p>
-      <p class="hint">{{ expires_label }}{% if days_label %} · {{ days_label }}{% endif %}</p>
-      <div class="proto-wrap">
-        {% for p in proto_labels %}<span class="badge proto">{{ p }}</span>{% endfor %}
+      <div class="sub-usage">
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 120 120" width="110" height="110" role="img" aria-label="Usage {{ volume_pct }} percent">
+            <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
+            <circle class="ring-fg{% if volume_pct >= 90 %} danger{% endif %}" cx="60" cy="60" r="54" transform="rotate(-90 60 60)" stroke-dasharray="339.3" stroke-dashoffset="{{ ring_offset }}"></circle>
+          </svg>
+          <div class="ring-center"><b>{{ volume_pct }}%</b><span>used</span></div>
+        </div>
+        <div class="sub-usage-info">
+          <p class="sub-vol">{{ volume_label }}</p>
+          <p class="hint">{{ expires_label }}{% if days_label %} · {{ days_label }}{% endif %}</p>
+          <p class="hint">Last active: {{ last_seen_label }}{% if last_seen_ip %} · <span dir="ltr">{{ last_seen_ip }}</span>{% endif %}</p>
+          <div class="proto-wrap">
+            {% for p in proto_labels %}<span class="badge proto">{{ p }}</span>{% endfor %}
+          </div>
+        </div>
       </div>
     </div>
 

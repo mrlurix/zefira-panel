@@ -1818,6 +1818,27 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         days_label = f"{left} days left" if exp else ""
         expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
     enc = urlquote(sub_url, safe="")
+    last_at_raw = udict.get("last_fetch_at")
+    try:
+        last_at = (
+            datetime.fromisoformat(last_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
+            if last_at_raw
+            else None
+        )
+    except (ValueError, AttributeError):
+        last_at = None
+    if last_at is None:
+        last_seen_label = "Never yet"
+    else:
+        secs = max(0, int((utcnow() - last_at).total_seconds()))
+        if secs < 90:
+            last_seen_label = "Just now"
+        elif secs < 3600:
+            last_seen_label = f"{secs // 60} min ago"
+        elif secs < 86400:
+            last_seen_label = f"{secs // 3600} h ago"
+        else:
+            last_seen_label = f"{secs // 86400} d ago"
     return {
         "username": udict.get("username", ""),
         "note": udict.get("note") or "",
@@ -1828,6 +1849,8 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         "ring_offset": round(339.3 * (1 - pct / 100), 1),
         "expires_label": expires_label,
         "days_label": days_label,
+        "last_seen_label": last_seen_label,
+        "last_seen_ip": udict.get("last_fetch_ip") or "",
         "proto_labels": list(groups_raw.keys()),
         "sub_url": sub_url,
         "clash_url": sub_url + "?format=clash",
@@ -1863,6 +1886,14 @@ def subscription(token: str, request: Request):
             s.commit()
         if user.expires_at <= utcnow():
             raise HTTPException(status_code=404, detail="Not Found")
+        # Presence signal: every client poll refreshes "last seen" (throttled
+        # to one write per minute). This is how the dashboard shows whether
+        # the config is actually in use — and from which IP.
+        now = utcnow()
+        if not user.last_fetch_at or (now - user.last_fetch_at).total_seconds() > 60:
+            user.last_fetch_at = now
+            user.last_fetch_ip = ip[:64]
+            s.commit()
         udict = user.to_full_dict()
     srv = load_srv()
     inbounds = load_inbounds()
