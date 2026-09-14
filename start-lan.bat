@@ -22,5 +22,5 @@ echo.
 start "" cmd /c "timeout /t 3 >nul & start http://127.0.0.1:8000"
 REM NOTE: proxy headers stay OFF on purpose - the panel only honors
 REM X-Forwarded-For/Proto from localhost or explicitly trusted proxies.
-".venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-server-header --no-proxy-headers
+".venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-server-header --no-proxy-headers --no-access-log
 pause

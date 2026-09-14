@@ -2,3 +2,10 @@
 instance/
 __pycache__/
 *.pyc
+# Secrets must never be committed: local env files, databases, keys, certs
+.env
+*.db
+*.db-wal
+*.db-shm
+*.key
+*.pem
