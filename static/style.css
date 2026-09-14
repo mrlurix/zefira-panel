@@ -717,19 +717,27 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 
 /* Public subscription dashboard */
 .sub-body { min-height: 100vh; }
-.sub-wrap { max-width: 1040px; margin: 0 auto; padding: 34px 18px 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.sub-wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 50px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.sub-wrap .card { padding: 16px 18px; }
+.sub-wrap .card-head { margin-bottom: 10px; }
+.sub-wrap .hint { margin-top: 6px; }
+.sub-head h1 { font-size: 22px; }
 .sub-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
 .sub-span { grid-column: 1 / -1; }
 .sub-head h1 { margin: 0; font-size: 26px; overflow-wrap: anywhere; }
 .sub-head .muted { margin: 2px 0 8px; }
-.sub-vol { font-size: 20px; font-weight: 700; margin: 4px 0 10px; }
-.sub-link-row { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; }
+.sub-vol { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.sub-usage { display: flex; gap: 16px; align-items: center; }
+.sub-usage-info { flex: 1; min-width: 0; }
+.sub-usage-info .hint { margin-top: 4px; }
+.sub-link-row { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
 .sub-link-row .sub-url { flex: 1; }
 .sub-url { overflow-wrap: anywhere; }
 .sub-config { width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: Consolas, monospace; font-size: 12.5px; padding: 12px; direction: ltr; }
-.sub-wrap .qr-box img { width: 100%; max-width: 280px; height: auto; }
+.sub-wrap .qr-box img { width: 100%; max-width: 210px; height: auto; }
+@media (max-width: 560px) { .app-grid { grid-template-columns: repeat(2, 1fr); } }
 /* Circular usage ring (offset precomputed server-side, CSP-safe) */
-.ring-wrap { position: relative; width: 150px; margin: 6px auto 4px; }
+.ring-wrap { position: relative; width: 110px; margin: 0; flex-shrink: 0; }
 .ring { display: block; width: 100%; height: auto; }
 .ring-bg { fill: none; stroke: var(--border); stroke-width: 12; }
 .ring-fg { fill: none; stroke: var(--red); stroke-width: 12; stroke-linecap: round; filter: drop-shadow(0 0 6px var(--red-glow)); }
@@ -738,7 +746,7 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .ring-center b { font-size: 26px; line-height: 1; }
 .ring-center span { font-size: 12px; color: var(--muted); }
 /* Square app tiles */
-.app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 4px 0 6px; }
+.app-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 640px; margin: 2px auto 4px; }
 .app-tile { aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; }
 .app-tile:hover { border-color: var(--red); }
 .app-tile b { font-size: 15px; }
