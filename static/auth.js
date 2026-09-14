@@ -1,7 +1,6 @@
 "use strict";
 
-const form = document.getElementById("login-form");
-const errBox = document.getElementById("login-error");
+const form = document.getElementById("login-form");const errBox = document.getElementById("login-error");
 const codeField = document.getElementById("code-field");
 
 function showError(msg) {
@@ -57,3 +56,10 @@ form.addEventListener("submit", async (e) => {
     btn.disabled = false;
   }
 });
+
+// Public brand for the login page (no session needed).
+fetch("/api/appearance").then((r) => r.json()).then((a) => {
+  const b = ((a && a.brand_name) || "").trim() || "ZEFIRA";
+  document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = b; });
+  document.title = "Sign in | " + b;
+}).catch(() => {});

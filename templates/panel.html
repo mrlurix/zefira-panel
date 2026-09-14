@@ -6,6 +6,7 @@
   <title>{{ title }}</title>
   <link rel="icon" href="/static/logo.png" type="image/png">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div class="layout">
@@ -13,7 +14,7 @@
   <aside class="sidebar">
     <div class="brand">
       <img src="/static/logo.png" alt="" width="40" height="40" class="logo-round">
-      <div class="brand-text"><strong>ZEFIRA</strong><small>Admin Panel</small></div>
+      <div class="brand-text"><strong data-brand>ZEFIRA</strong><small>Admin Panel</small></div>
     </div>
 
     <nav class="nav">
@@ -302,6 +303,22 @@
 
     <section id="section-settings" class="section">
       <div class="settings-grid">
+
+        <div class="card form-card">
+          <div class="card-head"><h2>Appearance &amp; Branding</h2></div>
+          <p class="hint mt-0">Recolor the panel and every user dashboard, rename the brand, and pin a message on all subscription pages. Empty color = default red-black.</p>
+          <div class="field-row">
+            <label class="field"><span>Accent</span><input type="color" id="ap-accent" value="#ff2740"></label>
+            <label class="field"><span>Background</span><input type="color" id="ap-bg" value="#06060a"></label>
+            <label class="field"><span>Cards</span><input type="color" id="ap-card" value="#10101a"></label>
+          </div>
+          <label class="field"><span>Brand name (empty = ZEFIRA)</span><input type="text" id="ap-brand" maxlength="24" placeholder="ZEFIRA" spellcheck="false"></label>
+          <label class="field"><span>Dashboard message (shown on every user page)</span><input type="text" id="ap-note" maxlength="300" placeholder="Support: @you"></label>
+          <div class="reality-actions">
+            <button type="button" id="ap-save-btn" class="btn btn-primary">Save Appearance</button>
+            <button type="button" id="ap-reset-btn" class="btn btn-ghost">Reset to defaults</button>
+          </div>
+        </div>
 
         <form id="pw-form" class="card form-card">
           <div class="card-head"><h2>Change Admin Password</h2></div>

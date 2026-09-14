@@ -338,7 +338,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); }
+    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "blocker") loadBlocklist();
@@ -579,6 +579,52 @@ $("#pw-form").addEventListener("submit", async (e) => {
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
+});
+
+function applyBrand(name) {
+  const b = (name || "").trim() || "ZEFIRA";
+  document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = b; });
+  document.title = b + " Panel";
+}
+
+async function loadAppearance() {
+  try {
+    const a = await api("/api/appearance");
+    $("#ap-accent").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_accent || "") ? a.theme_accent : "#ff2740";
+    $("#ap-bg").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_bg || "") ? a.theme_bg : "#06060a";
+    $("#ap-card").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_card || "") ? a.theme_card : "#10101a";
+    $("#ap-brand").value = a.brand_name === "ZEFIRA" ? "" : (a.brand_name || "");
+    $("#ap-note").value = a.dash_note || "";
+    applyBrand(a.brand_name);
+  } catch (_) {}
+}
+$("#ap-save-btn").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/appearance", {
+      method: "PUT",
+      body: {
+        theme_accent: $("#ap-accent").value,
+        theme_bg: $("#ap-bg").value,
+        theme_card: $("#ap-card").value,
+        brand_name: $("#ap-brand").value.trim(),
+        dash_note: $("#ap-note").value.trim()
+      }
+    });
+    applyBrand(r.brand_name);
+    toast("Appearance saved");
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+$("#ap-reset-btn").addEventListener("click", async () => {
+  if (!confirm("Reset colors, brand and dashboard message to defaults?")) return;
+  try {
+    const r = await api("/api/appearance", {
+      method: "PUT",
+      body: { theme_accent: "", theme_bg: "", theme_card: "", brand_name: "", dash_note: "" }
+    });
+    applyBrand(r.brand_name);
+    loadAppearance();
+    toast("Appearance reset");
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
 async function loadTfa() {
@@ -1193,6 +1239,7 @@ $("#audit-refresh").addEventListener("click", loadAudit);
     $("#admin-name").textContent = me.username;
     $("#tfa-chip").classList.toggle("hidden", !me.totp_enabled);
   } catch (_) { return; }
+  loadAppearance();
   loadStats();
   loadSystem();
   loadUsers();

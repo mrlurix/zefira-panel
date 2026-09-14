@@ -565,7 +565,29 @@ check("2fa/enable without password -> 422", stfa == 422, f"got {stfa}")
 stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
 check("2fa/enable with wrong password rejected", stfa2 in (400, 429), f"got {stfa2}")
 
-# ---- 34. Logout invalidates the session server-side ----
+# ---- 34. Appearance: public display values only, writes gated + validated ----
+stap, _, apb = req("GET", "/api/appearance")
+apok = stap == 200
+try:
+    apj = json.loads(apb)
+    apok = apok and apj.get("theme_accent") == "#ff2740" and apj.get("brand_name") == "ZEFIRA"
+    blob = json.dumps(apj).lower()
+    apok = apok and not any(s in blob for s in ("password", "token", "secret", "begin"))
+except Exception:
+    apok = False
+check("appearance public shows only display values", apok, f"got {stap}")
+stauw, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "#00c853"}), {"X-Requested-With": "XMLHttpRequest"})
+check("appearance PUT requires auth", stauw in (401, 403), f"got {stauw}")
+stabad, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "red", "brand_name": "<script>"}), AUTH2)
+check("appearance rejects non-hex color / html brand", stabad == 422, f"got {stabad}")
+stcss, hdrcss, cssb = req("GET", "/theme.css")
+cssb = cssb.decode("utf-8", "replace") if isinstance(cssb, bytes) else cssb
+check("theme.css served as css with defaults", stcss == 200 and "text/css" in hget(hdrcss, "Content-Type") and ":root" in cssb and "#ff2740" in cssb, f"got {stcss}")
+stcss2, _, cssb2 = req("GET", "/theme.css")
+cssb2 = cssb2.decode("utf-8", "replace") if isinstance(cssb2, bytes) else cssb2
+check("theme.css has no secrets", "password" not in cssb2.lower())
+
+# ---- 35. Logout invalidates the session server-side ----
 stme, _, _ = req("GET", "/api/me", headers=AUTH2)
 stlo, _, _ = req("POST", "/api/logout", None, AUTH2)
 stdead, _, _ = req("GET", "/api/me", headers=AUTH2)
