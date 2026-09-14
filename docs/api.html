@@ -69,6 +69,8 @@
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td>Domain, ports, REALITY, obfuscation…</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td>New X25519 keypair</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td>Audit-logged reveal</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td>Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td>Generated theme overrides, text/css</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/ssl/issue</code> · <code>/ssl/renew</code></td><td><code>{domain, subdomain?, email}</code></td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol</td></tr>

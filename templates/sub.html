@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ username }} | Zefira</title>
+  <title>{{ username }} | {{ brand_name }}</title>
   <link rel="icon" href="/static/logo.png" type="image/png">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body class="sub-body">
   <main class="sub-wrap">
@@ -17,6 +18,9 @@
         <span class="badge {{ status_cls }}">{{ status_label }}</span>
       </div>
     </div>
+    {% if dash_note %}
+    <div class="card sub-span sub-note">{{ dash_note }}</div>
+    {% endif %}
 
     <div class="card">
       <div class="card-head"><h2>Usage</h2></div>

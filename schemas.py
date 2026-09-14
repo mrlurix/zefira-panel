@@ -79,6 +79,27 @@ class ChangePasswordIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+HEX_COLOR_RE = r"^$|^#[0-9a-fA-F]{6}$"
+BRAND_RE = r"^$|^[a-zA-Z0-9 _-]{1,24}$"
+
+
+class AppearanceIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    theme_accent: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
+    theme_bg: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
+    theme_card: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
+    brand_name: str = Field(default="", max_length=24, pattern=BRAND_RE)
+    dash_note: str = Field(default="", max_length=300)
+
+    @field_validator("dash_note", mode="before")
+    @classmethod
+    def _strip_dash_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
+
+
 class TotpCodeIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

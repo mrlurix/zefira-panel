@@ -40,6 +40,7 @@ from database import (
     utcnow,
 )
 from schemas import (
+    AppearanceIn,
     BlockedSiteIn,
     BlockToggleIn,
     ChangePasswordIn,
@@ -110,6 +111,51 @@ lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
+
+APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "brand_name", "dash_note"}
+APPEARANCE_DEFAULTS = {
+    "theme_accent": "#ff2740",
+    "theme_bg": "#06060a",
+    "theme_card": "#10101a",
+    "brand_name": "ZEFIRA",
+    "dash_note": "",
+}
+
+
+def load_appearance() -> dict:
+    out = {}
+    for k in APPEARANCE_KEYS:
+        v = (cached_setting(k) or "").strip()
+        out[k] = v or APPEARANCE_DEFAULTS[k]
+    return out
+
+
+def _hex_to_rgb(h: str) -> tuple:
+    h = h.lstrip("#")
+    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _darken(h: str, f: float) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*[max(0, min(255, round(c * f))) for c in _hex_to_rgb(h)])
+
+
+def _lighten(h: str, amt: float) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*[max(0, min(255, round(c + (255 - c) * amt))) for c in _hex_to_rgb(h)])
+
+
+def build_theme_css(vals: dict) -> str:
+    a = vals.get("theme_accent") or APPEARANCE_DEFAULTS["theme_accent"]
+    bg = vals.get("theme_bg") or APPEARANCE_DEFAULTS["theme_bg"]
+    card = vals.get("theme_card") or APPEARANCE_DEFAULTS["theme_card"]
+    r, g, b = _hex_to_rgb(a)
+    return (
+        ":root{"
+        f"--red:{a};--red-2:{_darken(a, 0.8)};--red-dark:{_darken(a, 0.45)};"
+        f"--border-red:rgba({r},{g},{b},.28);--red-glow:rgba({r},{g},{b},.35);"
+        f"--bg:{bg};--bg-2:{_lighten(bg, 0.07)};"
+        f"--card:{card};--card-2:{_lighten(card, 0.09)};"
+        "}\n"
+    )
 
 
 def cached_setting(key: str, ttl: float = 15.0):
@@ -890,6 +936,40 @@ def api_tunnel_put(data: TunnelSettingsIn, request: Request, admin: Admin = Depe
     return {"ok": True}
 
 
+@app.get("/api/appearance")
+def api_appearance_get():
+    # Public by design: only display values (colors, brand, notice).
+    # Nothing secret ever lives under these keys.
+    return load_appearance()
+
+
+@app.put("/api/appearance")
+def api_appearance_put(data: AppearanceIn, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        _save_settings(s, {
+            "theme_accent": data.theme_accent,
+            "theme_bg": data.theme_bg,
+            "theme_card": data.theme_card,
+            "brand_name": data.brand_name,
+            "dash_note": data.dash_note,
+        })
+        audit(s, "APPEARANCE", f"theme/brand updated by {admin.username}", client_ip(request))
+        s.commit()
+    for k in APPEARANCE_KEYS:
+        _settings_cache.pop(k, None)
+    log.info("Appearance updated by %s", admin.username)
+    return {"ok": True, **load_appearance()}
+
+
+@app.get("/theme.css")
+def theme_css():
+    return PlainTextResponse(
+        build_theme_css(load_appearance()),
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
 @app.get("/api/nodes")
 def api_nodes_list(admin: Admin = Depends(require_admin)):
     with db.s() as s:
@@ -1031,7 +1111,7 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
         admins = [a.to_backup_dict() for a in s.scalars(select(Admin)).all()]
         settings = {
             r.key: r.value
-            for r in s.scalars(select(Setting).where(Setting.key.in_(SRV_KEYS | TUNNEL_KEYS | {"reality_priv_enc"}))).all()
+            for r in s.scalars(select(Setting).where(Setting.key.in_(SRV_KEYS | TUNNEL_KEYS | APPEARANCE_KEYS | {"reality_priv_enc"}))).all()
         }
         tpl_rows = s.scalars(select(UserTemplate)).all()
         templates_out = [
@@ -1129,7 +1209,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             added_users += 1
         if data.settings:
             for k, v in data.settings.items():
-                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc"}:
+                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc"}:
                     continue
                 sval = str(v)
                 if len(sval) > 500:
@@ -1157,6 +1237,16 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     ok = sval.lower() in ("0", "1", "true", "false", "yes", "no", "on", "off", "")
                     if ok:
                         sval = "1" if sval.lower() in ("1", "true", "yes", "on") else "0"
+                elif k in ("theme_accent", "theme_bg", "theme_card"):
+                    if sval and not re.fullmatch(r"#[0-9a-fA-F]{6}", sval):
+                        ok = False
+                elif k == "brand_name":
+                    if sval and not re.fullmatch(r"[a-zA-Z0-9 _-]{1,24}", sval):
+                        ok = False
+                elif k == "dash_note":
+                    sval = "".join(ch for ch in sval if ord(ch) >= 32 or ch in "\n\r\t")
+                    if len(sval) > 300:
+                        ok = False
                 elif k == "reality_sni":
                     if not re.fullmatch(r"[a-zA-Z0-9.,\- ]{0,300}", sval):
                         ok = False
@@ -1818,6 +1908,7 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         days_label = f"{left} days left" if exp else ""
         expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
     enc = urlquote(sub_url, safe="")
+    app = load_appearance()
     last_at_raw = udict.get("last_fetch_at")
     try:
         last_at = (
@@ -1842,6 +1933,8 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     return {
         "username": udict.get("username", ""),
         "note": udict.get("note") or "",
+        "brand_name": app.get("brand_name") or "ZEFIRA",
+        "dash_note": app.get("dash_note") or "",
         "status_label": status_label,
         "status_cls": status_cls,
         "volume_label": f"{used:g} / {vol:g} GB",
