@@ -276,14 +276,15 @@ class Database:
             )
             self._external_db = False
 
-        from sqlalchemy import event
+        if not self._external_db:
+            from sqlalchemy import event
 
-        @event.listens_for(self.engine, "connect")
-        def _set_sqlite_pragma(dbapi_connection, _):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.close()
+            @event.listens_for(self.engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, _):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.close()
 
     def init(self) -> None:
         Base.metadata.create_all(self.engine)
@@ -294,8 +295,6 @@ class Database:
                 os.chmod(self.engine.url.database, 0o600)
             except (OSError, AttributeError):
                 pass
-        if getattr(self, "_external_db", False):
-            return
         with self.engine.begin() as conn:
             self._add_column(conn, "admins", "totp_enabled", "totp_enabled BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "admins", "totp_secret", "totp_secret TEXT")
@@ -306,20 +305,21 @@ class Database:
             self._add_column(conn, "vpn_users", "start_on_first_use", "start_on_first_use BOOLEAN NOT NULL DEFAULT 0")
             self._add_column(conn, "vpn_users", "duration_days", "duration_days INTEGER")
             self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
-            self._add_column(conn, "vpn_users", "last_fetch_at", "last_fetch_at DATETIME")
+            self._add_column(conn, "vpn_users", "last_fetch_at", "last_fetch_at TIMESTAMP")
             self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
 
     @staticmethod
     def _add_column(conn, table: str, name: str, ddl: str) -> None:
-        tables = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-            {"t": table},
-        ).fetchall()
-        if not tables:
+        # Dialect-agnostic introspection (works on SQLite, MySQL, PostgreSQL).
+        # Table/column identifiers below are always internal literals.
+        from sqlalchemy import inspect as sa_inspect
+
+        insp = sa_inspect(conn)
+        if not insp.has_table(table):
             return
-        cols = [row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))]
+        cols = {c["name"] for c in insp.get_columns(table)}
         if name not in cols:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
 
