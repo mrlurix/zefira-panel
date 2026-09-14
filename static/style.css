@@ -818,8 +818,9 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 
 /* Public subscription dashboard */
 .sub-body { min-height: 100vh; }
-.sub-wrap { max-width: 720px; margin: 0 auto; padding: 34px 18px 70px; display: flex; flex-direction: column; gap: 16px; }
-.sub-head { display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
+.sub-wrap { max-width: 1040px; margin: 0 auto; padding: 34px 18px 70px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.sub-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
+.sub-span { grid-column: 1 / -1; }
 .sub-head h1 { margin: 0; font-size: 26px; overflow-wrap: anywhere; }
 .sub-head .muted { margin: 2px 0 8px; }
 .sub-vol { font-size: 20px; font-weight: 700; margin: 4px 0 10px; }
@@ -828,7 +829,8 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .sub-url { overflow-wrap: anywhere; }
 .sub-config { width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: Consolas, monospace; font-size: 12.5px; padding: 12px; direction: ltr; }
 .sub-wrap .qr-box img { width: 100%; max-width: 280px; height: auto; }
-@media (max-width: 560px) {
+@media (max-width: 860px) {
+  .sub-wrap { grid-template-columns: 1fr; }
   .sub-link-row { flex-direction: column; }
   .sub-link-row .btn { align-self: flex-end; }
 }
