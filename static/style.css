@@ -717,13 +717,14 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 
 /* Public subscription dashboard */
 .sub-body { min-height: 100vh; }
-.sub-wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 50px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.sub-wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 50px; columns: 2; column-gap: 12px; }
+.sub-wrap > * { break-inside: avoid; margin-bottom: 12px; }
 .sub-wrap .card { padding: 16px 18px; }
 .sub-wrap .card-head { margin-bottom: 10px; }
 .sub-wrap .hint { margin-top: 6px; }
 .sub-head h1 { font-size: 22px; }
-.sub-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
-.sub-span { grid-column: 1 / -1; }
+.sub-head { column-span: all; display: flex; align-items: center; gap: 16px; padding: 6px 4px; }
+.sub-span { column-span: all; }
 .sub-head h1 { margin: 0; font-size: 26px; overflow-wrap: anywhere; }
 .sub-head .muted { margin: 2px 0 8px; }
 .sub-vol { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
@@ -735,6 +736,10 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .sub-url { overflow-wrap: anywhere; }
 .sub-config { width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: Consolas, monospace; font-size: 12.5px; padding: 12px; direction: ltr; }
 .sub-wrap .qr-box img { width: 100%; max-width: 210px; height: auto; }
+.sub-qr-row { display: flex; gap: 14px; align-items: center; margin-top: 10px; }
+.sub-qr-row .qr-box { width: 150px; flex-shrink: 0; }
+.sub-qr-row .qr-box img { max-width: 100%; }
+.btn-col { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 @media (max-width: 560px) { .app-grid { grid-template-columns: repeat(2, 1fr); } }
 /* Circular usage ring (offset precomputed server-side, CSP-safe) */
 .ring-wrap { position: relative; width: 110px; margin: 0; flex-shrink: 0; }
@@ -752,7 +757,7 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .app-tile b { font-size: 15px; }
 .app-tile span { font-size: 12.5px; line-height: 1.9; }
 @media (max-width: 860px) {
-  .sub-wrap { grid-template-columns: 1fr; }
+  .sub-wrap { columns: 1; }
   .sub-link-row { flex-direction: column; }
   .sub-link-row .btn { align-self: flex-end; }
 }
