@@ -1098,27 +1098,6 @@ $("#ssl-renew-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
-// ---- Docs two-column reader ----
-function openDocPage(key) {
-  document.querySelectorAll("#section-docs .doc-page").forEach((a) => {
-    a.classList.toggle("hidden", a.dataset.key !== key);
-  });
-  document.querySelectorAll(".doc-link").forEach((b) => {
-    b.classList.toggle("active", b.dataset.key === key);
-  });
-}
-
-document.querySelectorAll(".doc-link").forEach((btn) => {
-  btn.addEventListener("click", () => openDocPage(btn.dataset.key));
-});
-
-$("#doc-search").addEventListener("input", () => {
-  const q = $("#doc-search").value.trim().toLowerCase();
-  document.querySelectorAll(".doc-link").forEach((btn) => {
-    btn.style.display = !q || btn.textContent.toLowerCase().includes(q) ? "" : "none";
-  });
-});
-
 $("#backup-btn").addEventListener("click", async () => {
   const pw = prompt("Enter your admin password to download the backup:");
   if (!pw) return;
@@ -1217,5 +1196,4 @@ $("#audit-refresh").addEventListener("click", loadAudit);
   loadStats();
   loadSystem();
   loadUsers();
-  openDocPage("start");
 })();

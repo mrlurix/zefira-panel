@@ -50,7 +50,7 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - 2FA with any authenticator app (enable/disable needs your password), full audit log, system stats, Telegram notifications if you want.
 - JSON backup / restore (both password confirmed). Also imports/exports all settings.
 
-All docs are also inside the panel under **Docs** (left menu).
+Full guides live on the docs site (link at the top).
 
 ### Settings you might want to change
 
