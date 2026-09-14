@@ -25,7 +25,7 @@ echo  ============================================
 echo.
 
 start "" cmd /c "timeout /t 3 >nul & start http://127.0.0.1:8000"
-".venv\Scripts\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-proxy-headers
+".venv\Scripts\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-proxy-headers --no-access-log
 pause
 goto :eof
 
