@@ -47,12 +47,14 @@
         <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ clash_url }}" data-label="Copy Clash link">Copy Clash link</button>
       </div>
       <p class="hint">Paste it into your app, scan the QR, or use one-tap import:</p>
-      <div class="reality-actions">
-        <a class="btn btn-sm btn-ghost" href="{{ import_v2rayng }}">v2RayNG</a>
-        <a class="btn btn-sm btn-ghost" href="{{ import_clash }}">Clash</a>
-        <a class="btn btn-sm btn-ghost" href="{{ import_singbox }}">sing-box</a>
+      <div class="sub-qr-row">
+        <div class="qr-box"><img src="data:image/svg+xml;base64,{{ qr_b64 }}" alt="Subscription QR"></div>
+        <div class="btn-col">
+          <a class="btn btn-sm btn-ghost" href="{{ import_v2rayng }}">v2RayNG import</a>
+          <a class="btn btn-sm btn-ghost" href="{{ import_clash }}">Clash import</a>
+          <a class="btn btn-sm btn-ghost" href="{{ import_singbox }}">sing-box import</a>
+        </div>
       </div>
-      <div class="qr-box"><img src="data:image/svg+xml;base64,{{ qr_b64 }}" alt="Subscription QR"></div>
     </div>
 
     {% for g in groups %}
