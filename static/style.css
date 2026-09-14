@@ -829,6 +829,15 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .sub-url { overflow-wrap: anywhere; }
 .sub-config { width: 100%; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: Consolas, monospace; font-size: 12.5px; padding: 12px; direction: ltr; }
 .sub-wrap .qr-box img { width: 100%; max-width: 280px; height: auto; }
+/* Circular usage ring (offset precomputed server-side, CSP-safe) */
+.ring-wrap { position: relative; width: 150px; margin: 6px auto 4px; }
+.ring { display: block; width: 100%; height: auto; }
+.ring-bg { fill: none; stroke: var(--border); stroke-width: 12; }
+.ring-fg { fill: none; stroke: var(--red); stroke-width: 12; stroke-linecap: round; filter: drop-shadow(0 0 6px var(--red-glow)); }
+.ring-fg.danger { stroke: var(--orange); filter: drop-shadow(0 0 6px rgba(245, 166, 35, .5)); }
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-center b { font-size: 26px; line-height: 1; }
+.ring-center span { font-size: 12px; color: var(--muted); }
 @media (max-width: 860px) {
   .sub-wrap { grid-template-columns: 1fr; }
   .sub-link-row { flex-direction: column; }

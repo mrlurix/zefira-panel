@@ -1825,6 +1825,7 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         "status_cls": status_cls,
         "volume_label": f"{used:g} / {vol:g} GB",
         "volume_pct": pct,
+        "ring_offset": round(339.3 * (1 - pct / 100), 1),
         "expires_label": expires_label,
         "days_label": days_label,
         "proto_labels": list(groups_raw.keys()),
