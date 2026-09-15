@@ -12,6 +12,8 @@ Built with FastAPI + SQLite. No Docker required, just Python.
 
 ![Login](screenshots/screenshot-login.png)
 ![Dashboard](screenshots/screenshot-dashboard.png)
+![User dashboard](screenshots/screenshot-user-dashboard.png)
+![Appearance settings](screenshots/screenshot-appearance.png)
 
 ### Install on a server (one line)
 
