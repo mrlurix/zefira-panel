@@ -54,10 +54,13 @@ ask() {
     if [[ $INTERACTIVE -eq 0 ]]; then echo "$def"; return; fi
     read -rp "$prompt [$def]: " var; echo "${var:-$def}"
 }
+# NOTE: every read below uses -r so backslashes survive verbatim. Without it,
+# a password like My\Pass1 would silently lose the backslash and the operator
+# could never log in with what they typed.
 ask_secret() {
     local prompt="$1" var
     if [[ $INTERACTIVE -eq 0 ]]; then echo ""; return; fi
-    read -rsp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
+    read -r -sp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
 }
 urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$1"; }
 is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; }
