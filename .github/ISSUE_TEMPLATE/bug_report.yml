@@ -1,0 +1,19 @@
+name: Bug report
+description: Something broken in the panel
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Panel version
+      description: From the Update section (commit hash)
+      placeholder: e.g. a68fcc6
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, what you expected, logs (REDACT secrets, tokens, passwords)
+    validations:
+      required: true

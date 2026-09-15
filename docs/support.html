@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Support — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="changelog.html">Changelog</a>
+  <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">← Home</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html">Changelog</a>
+  <a href="support.html">Support</a>
+</nav>
+<main class="content">
+
+<h1><span class="z">S</span>upport</h1>
+<p class="subtitle">Stuck somewhere? Pick the fastest channel.</p>
+
+<div class="cards">
+  <a class="card" href="https://github.com/mrlurix/zefira-panel/discussions" target="_blank" rel="noopener"><b>Community Q&amp;A</b><span>Ask usage questions, share setups, get answers from other operators.</span></a>
+  <a class="card" href="https://github.com/mrlurix/zefira-panel/issues" target="_blank" rel="noopener"><b>Bug reports</b><span>Something broken? Open an issue with steps to reproduce.</span></a>
+  <a class="card" href="faq.html"><b>FAQ first</b><span>Login lockouts, 404 subs, SSL fails — most answers are already here.</span></a>
+</div>
+
+<h2 id="before-you-ask">Before you ask</h2>
+<ul>
+  <li>Read the <a href="faq.html">FAQ</a> — 9 out of 10 problems end there.</li>
+  <li>Collect: panel version (<b>Update</b> section), relevant lines from <code>journalctl -u zefira -n 100 --no-pager</code>, and what you already tried.</li>
+  <li><b>Never post</b> subscription tokens, passwords, backup files, or your <code>secret.key</code> — rotate anything that leaks.</li>
+</ul>
+
+<h2 id="security-issues">Security issues</h2>
+<div class="callout warn">Found a vulnerability? Do NOT open a public issue — report it privately via <a href="https://github.com/mrlurix/zefira-panel/security/advisories/new">GitHub Security Advisories</a> so it can be fixed before disclosure.</div>
+
+<h2 id="commercial-support">Direct contact</h2>
+<p>For private/commercial support, reach the maintainer on Telegram: <b>@YourHandle</b> (replace with your ID). Include your panel version and logs (with secrets redacted).</p>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
+<script src="assets/docs.js?v=3"></script>
+</body>
+</html>
