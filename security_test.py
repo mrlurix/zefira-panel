@@ -549,6 +549,11 @@ check("no HSTS on plain http", hget(hdrhp, "Strict-Transport-Security") == "")
 big_body = json.dumps({"password_confirm": "wrong-password", "zefira_backup": True, "users": [], "pad": "x" * 1200000})
 stbig, _, _ = req("POST", "/api/restore", big_body, AUTH2)
 check("restore size gate allows >1MB backups", stbig != 413, f"got {stbig}")
+stcap, _, _ = req("POST", "/api/restore", json.dumps({
+    "zefira_backup": True, "users": [], "password_confirm": "WrongPass12345",
+    "blocked_sites": [{"domain": f"d{i}.example.com"} for i in range(601)],
+}), AUTH2)
+check("restore caps blocked_sites list", stcap == 422, f"got {stcap}")
 
 # ---- 33. Password-gated backup + 2FA management ----
 stb3, _, _ = req("POST", "/api/backup", json.dumps({"password_confirm": "WrongPass12345"}), AUTH2)
