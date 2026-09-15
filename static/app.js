@@ -1137,6 +1137,7 @@ $("#update-now-btn").addEventListener("click", async () => {
   const pw = prompt("Confirm your admin password to allow the update:");
   if (!pw) return;
   try {
+    const before = await api("/api/update/status");
     await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
     toast("Update started — panel will restart in about a minute");
     loadUpdate();
@@ -1145,7 +1146,18 @@ $("#update-now-btn").addEventListener("click", async () => {
     updatePoll = setInterval(async () => {
       n += 1;
       try { await loadUpdate(); } catch (_) {}
-      if (n >= 20 && updatePoll) { clearInterval(updatePoll); updatePoll = null; }
+      if (n >= 20 && updatePoll) {
+        clearInterval(updatePoll);
+        updatePoll = null;
+        try {
+          const after = await api("/api/update/status");
+          if ((after.latest || "") === (before.latest || "") && !after.updating) {
+            toast("Version unchanged — no systemd found? Restart the panel manually", false);
+          } else {
+            toast("Update finished ✓");
+          }
+        } catch (_) {}
+      }
     }, 5000);
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);

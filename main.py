@@ -1139,6 +1139,17 @@ def _do_update(admin_name: str, ip: str) -> None:
         ok, out = _git("fetch", fetch_url, f"{branch}:refs/remotes/origin/{branch}", timeout=180)
         if not ok:
             raise RuntimeError(out)
+        ok, out = _git("rev-list", "--count", "FETCH_HEAD..HEAD", timeout=30)
+        if not ok:
+            raise RuntimeError(out)
+        try:
+            ahead = int(out.strip())
+        except ValueError:
+            ahead = 1
+        if ahead > 0:
+            # Operator committed on top (or diverged): reset would destroy
+            # their work. Refuse loudly instead of data loss.
+            raise RuntimeError(f"{ahead} local commit(s) would be destroyed — push or back them up first")
         ok, out = _git("reset", "--hard", f"origin/{branch}", timeout=120)
         if not ok:
             raise RuntimeError(out)
