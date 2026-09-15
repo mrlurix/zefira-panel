@@ -279,5 +279,5 @@ class RestoreIn(RestoreConfirmIn):
     users: List[RestoreUserIn] = Field(max_length=10000)
     admins: Optional[List[RestoreAdminIn]] = None
     settings: Optional[dict] = None
-    templates: Optional[List[dict]] = None
-    blocked_sites: Optional[List[dict]] = None
+    templates: Optional[List[dict]] = Field(default=None, max_length=500)
+    blocked_sites: Optional[List[dict]] = Field(default=None, max_length=600)

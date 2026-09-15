@@ -2216,7 +2216,7 @@ def subscription(token: str, request: Request):
         raise HTTPException(status_code=429, detail="Too many requests")
     if not TOKEN_RE.fullmatch(token or ""):
         raise HTTPException(status_code=404, detail="Not Found")
-    fmt = (request.query_params.get("format") or "").lower()
+    fmt = (request.query_params.get("format") or "").strip().lower()
     ua = (request.headers.get("user-agent") or "").lower()
     want_clash = fmt in ("clash", "clashmeta") or "clash" in ua
     with db.s() as s:
