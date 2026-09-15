@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Changelog — Zefira Docs</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="assets/style.css?v=3">
+</head>
+<body>
+<header class="topbar">
+  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span class="ver">Docs</span>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="sidebar">
+  <input id="nav-search" type="search" placeholder="Search docs…">
+  <div class="nav-group">Getting Started</div>
+  <a href="index.html">← Home</a>
+  <a href="installation.html">Installation</a>
+  <div class="nav-group">Panel Guide</div>
+  <a href="user-guide.html">Users &amp; Plans</a>
+  <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <div class="nav-group">Server</div>
+  <a href="configuration.html">Configuration</a>
+  <a href="security.html">Security</a>
+  <div class="nav-group">Reference</div>
+  <a href="api.html">API</a>
+  <a href="faq.html">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html">Changelog</a>
+</nav>
+<main class="content">
+
+<h1><span class="z">C</span>hangelog</h1>
+<p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="2026-09-15">2026-09-15 — One-click updates + safer updater</h2>
+<ul>
+  <li><b>Update section</b> in the left menu (above Settings): compares your server with GitHub, shows the exact incoming changelog, then pulls + reinstalls + restarts on password confirm.</li>
+  <li>Updater pulls from the same source it compared against, refuses on local changes, serializes runs, audits every step.</li>
+  <li>Extending an expired account now counts from today instead of leaving it expired.</li>
+  <li>Legacy admin usernames are normalized at startup (anti-lockout heal).</li>
+</ul>
+
+<h2 id="2026-09-14">2026-09-14 — Full personalization</h2>
+<ul>
+  <li><b>Appearance &amp; Branding</b> card: accent/background/card colors via a live <code>/theme.css</code>, custom brand name everywhere, and a message pinned on all user dashboards.</li>
+  <li>Appearance is validated, backed up, and covered by pentest checks (public endpoint leaks nothing).</li>
+</ul>
+
+<h2 id="2026-09-13">2026-09-13 — User dashboard</h2>
+<ul>
+  <li>Opening a subscription link in a <b>browser</b> shows a personal dashboard: status, usage ring, days left, <b>last active time + IP</b>, one-tap app imports, per-protocol links, WireGuard/OpenVPN configs, QR and app downloads.</li>
+  <li>VPN clients still get raw bytes (User-Agent detection, unknown defaults to raw); expired/disabled users get 404 in both modes.</li>
+  <li>Subscription link remarks show the plain username.</li>
+</ul>
+
+<h2 id="2026-09-07">2026-09-07 — Locks &amp; gates</h2>
+<ul>
+  <li>Missing <b>Edit user</b> button wired up (note, volume, expiry, device limit, reset usage).</li>
+  <li>2FA enable/disable and backup download now need your <b>password</b>, not just a session.</li>
+  <li>Cross-server restores safely drop undecryptable 2FA (<code>tfa_dropped</code>) instead of locking you out; junk protocols are sanitized.</li>
+  <li>Installer enforces the panel password policy (10+ chars, letters + digits).</li>
+  <li>Python 3.14 silent-annotation misroute fixed + a guard script that checks all 53 routes.</li>
+</ul>
+
+<h2 id="2026-09-06">2026-09-06 — Installer, SSL &amp; docs site</h2>
+<ul>
+  <li>Branded 7-step installer with a dedicated Nginx + Let's Encrypt step and quoted secrets.</li>
+  <li>One-click SSL issue/renew from Settings.</li>
+  <li>This documentation site: landing page, Ctrl+K search, changelog, responsive red-black theme on GitHub Pages.</li>
+</ul>
+
+<h2 id="earlier">Earlier — Security hardening waves</h2>
+<ul>
+  <li>Logout kills sessions server-side, proxy-aware Secure cookies + HSTS, 64&nbsp;MB restore allowance, lockout-DoS resistant limits, IPv6-safe IP blocking, first-run hardening.</li>
+  <li>External MySQL/PostgreSQL crash fixed, dialect-agnostic migrations, DB drivers bundled.</li>
+  <li>CSP-safe templates (dead buttons and inline styles removed), quoted <code>.env</code> secrets, DB input validation.</li>
+  <li>Pentest suite grown to <b>91/91 passing</b> checks.</li>
+</ul>
+
+</main>
+</div>
+<footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
+<script src="assets/docs.js?v=3"></script>
+</body>
+</html>

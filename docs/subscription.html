@@ -32,6 +32,7 @@
   <div class="nav-group">Reference</div>
   <a href="api.html">API</a>
   <a href="faq.html">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html">Changelog</a>
 </nav>
 <main class="content">
 
@@ -50,7 +51,7 @@
 </ul>
 
 <h2 id="user-dashboard-page">User dashboard page</h2>
-<p>When the subscription link is opened in a <b>browser</b>, the user gets a personal dashboard instead of raw text: username and status, volume bar with used/total, days left and expiry, one-tap import buttons (v2RayNG, Clash, sing-box), copyable per-protocol links, WireGuard/OpenVPN configs, QR code and recommended apps per platform.</p>
+<p>When the subscription link is opened in a <b>browser</b>, the user gets a personal dashboard instead of raw text: username and status, usage ring with used/total, days left and expiry, <b>last active time and IP</b> (every subscription fetch is recorded, so a shared link shows up as an unfamiliar IP), one-tap import buttons (v2RayNG, Clash, sing-box), copyable per-protocol links, WireGuard/OpenVPN configs, QR code and recommended apps per platform.</p>
 <p>VPN clients (v2rayNG, Clash, Streisand…) always receive raw subscription bytes — detection is by User-Agent, and anything unknown defaults to raw so no client ever breaks. Expired, disabled or out-of-volume users get <code>404</code> in both modes.</p>
 
 <h2 id="formats">Formats</h2>
