@@ -191,4 +191,70 @@ document.querySelectorAll("pre").forEach(function (pre) {
     else if (e.key === "Escape" && isOpen()) close();
     else if (isSlash && !typing && !isOpen()) { e.preventDefault(); open(); }
   });
+  window.__zefiraSearch = { open: open, close: close, isOpen: isOpen };
+})();
+
+// Floating support bubble (bottom corner) — static links only, no backend.
+(function () {
+  var fab = document.createElement("button");
+  fab.className = "sup-fab";
+  fab.type = "button";
+  fab.setAttribute("aria-label", "Get support");
+  fab.textContent = "?";
+  var panel = document.createElement("div");
+  panel.className = "sup-panel";
+  panel.hidden = true;
+  var head = document.createElement("div");
+  head.className = "sup-head";
+  head.textContent = "Need help?";
+  var sub = document.createElement("small");
+  sub.textContent = "Answers, community and bug reports.";
+  head.appendChild(sub);
+  var links = document.createElement("div");
+  links.className = "sup-links";
+  function row(label, hint, href, onclick) {
+    var el = href ? document.createElement("a") : document.createElement("button");
+    if (href) { el.href = href; if (/^https?:/.test(href)) { el.target = "_blank"; el.rel = "noopener"; } }
+    if (onclick) el.addEventListener("click", onclick);
+    var dot = document.createElement("span");
+    dot.className = "dot";
+    var t = document.createElement("span");
+    t.textContent = label;
+    el.appendChild(dot);
+    el.appendChild(t);
+    if (hint) {
+      var h = document.createElement("small");
+      h.textContent = hint;
+      el.appendChild(h);
+    }
+    return el;
+  }
+  links.appendChild(row("Search the docs", "Ctrl K", null, function () {
+    closePanel();
+    if (window.__zefiraSearch) window.__zefiraSearch.open();
+  }));
+  links.appendChild(row("Support page", null, "support.html", null));
+  links.appendChild(row("FAQ & troubleshooting", null, "faq.html", null));
+  links.appendChild(row("Ask the community", null, "https://github.com/mrlurix/zefira-panel/discussions", null));
+  links.appendChild(row("Report a bug", null, "https://github.com/mrlurix/zefira-panel/issues", null));
+  panel.appendChild(head);
+  panel.appendChild(links);
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+  function closePanel() {
+    panel.classList.remove("show");
+    setTimeout(function () { panel.hidden = true; }, 180);
+  }
+  fab.addEventListener("click", function () {
+    if (panel.hidden) {
+      panel.hidden = false;
+      requestAnimationFrame(function () { requestAnimationFrame(function () { panel.classList.add("show"); }); });
+    } else closePanel();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !panel.hidden) closePanel();
+  });
+  document.addEventListener("click", function (e) {
+    if (!panel.hidden && !panel.contains(e.target) && e.target !== fab && !fab.contains(e.target)) closePanel();
+  });
 })();
