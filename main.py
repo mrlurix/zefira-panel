@@ -307,6 +307,23 @@ async def lifespan(_: FastAPI):
             print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
             print("=" * 58)
             log.warning("First-run admin created. Password printed above.")
+        # Heal legacy rows: login lowercases+strips, so a stored " Admin "
+        # could never match and would lock the operator out mysteriously.
+        with db.s() as s:
+            dirty = False
+            for a in s.scalars(select(Admin)).all():
+                clean = (a.username or "").strip().lower()
+                if not clean or clean == a.username:
+                    continue
+                if not USERNAME_RE.match(clean):
+                    continue
+                if s.scalar(select(Admin.id).where(Admin.username == clean, Admin.id != a.id)):
+                    continue
+                log.warning("Normalizing admin username %r -> %r", a.username, clean)
+                a.username = clean
+                dirty = True
+            if dirty:
+                s.commit()
     yield
 
 
@@ -1091,24 +1108,35 @@ def _update_status() -> dict:
 
 @app.get("/api/update/status")
 def api_update_status(admin: Admin = Depends(require_admin)):
-    return _update_status()
+    # 60s micro-cache: anonymous GitHub API is 60 req/hour, and spam-clicking
+    # Check must not blind the panel for an hour.
+    now = time_mod.monotonic()
+    ent = _settings_cache.get("__update_status__")
+    if ent and now - ent[1] < 60.0:
+        return ent[0]
+    out = _update_status()
+    _settings_cache["__update_status__"] = (out, now)
+    return out
 
 
 def _do_update(admin_name: str, ip: str) -> None:
     repo, branch, service = _update_conf()
+    # Pull from the SAME source the status page compared against, never from
+    # whatever a local `origin` remote happens to point at.
+    fetch_url = f"https://github.com/{repo}.git"
     try:
         with db.s() as s:
             audit(s, "UPDATE_START", f"{repo}@{branch} by {admin_name}", ip)
             s.commit()
-        ok, remote = _git("ls-remote", "origin", f"refs/heads/{branch}", timeout=60)
+        ok, remote = _git("ls-remote", fetch_url, f"refs/heads/{branch}", timeout=60)
         if not ok:
-            raise RuntimeError(f"cannot reach origin: {remote}")
+            raise RuntimeError(f"cannot reach {repo}: {remote}")
         ok, out = _git("status", "--porcelain", timeout=30)
         if not ok:
             raise RuntimeError(out)
         if out.strip():
             raise RuntimeError("local changes present — commit or stash them first (refusing to overwrite)")
-        ok, out = _git("fetch", "origin", branch, timeout=180)
+        ok, out = _git("fetch", fetch_url, f"{branch}:refs/remotes/origin/{branch}", timeout=180)
         if not ok:
             raise RuntimeError(out)
         ok, out = _git("reset", "--hard", f"origin/{branch}", timeout=120)
@@ -1930,7 +1958,15 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
         if data.is_active is not None:
             user.is_active = data.is_active
         if data.extend_days is not None:
-            base = user.expires_at if (user.expires_at and user.expires_at.year < PENDING_YEAR) else utcnow()
+            now = utcnow()
+            if user.expires_at and user.expires_at.year >= PENDING_YEAR:
+                base = now
+            elif user.expires_at and user.expires_at > now:
+                base = user.expires_at
+            else:
+                # Expired (or missing) expiry extends from today, otherwise
+                # extending an expired account would leave it expired.
+                base = now
             user.expires_at = base + timedelta(days=data.extend_days)
             changes.append(f"+{data.extend_days}d")
         if data.add_volume_gb is not None:

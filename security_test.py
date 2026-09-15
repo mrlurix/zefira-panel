@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from datetime import datetime, timezone
 
 import jwt
 
@@ -602,7 +603,24 @@ stcss2, _, cssb2 = req("GET", "/theme.css")
 cssb2 = cssb2.decode("utf-8", "replace") if isinstance(cssb2, bytes) else cssb2
 check("theme.css has no secrets", "password" not in cssb2.lower())
 
-# ---- 35. Logout invalidates the session server-side ----
+# ---- 35. Extending an expired account counts from today ----
+stmk2, _, mkb2 = req("POST", "/api/users", json.dumps({
+    "username": "exttest1", "protocols": ["vless"], "volume_gb": 1, "days": 1}), AUTH2)
+ext_ok = False
+if stmk2 == 200:
+    uid = json.loads(mkb2)["id"]
+    req("PATCH", f"/api/users/{uid}", json.dumps({"set_expires_at": "2020-01-01T00:00"}), AUTH2)
+    ste, _, eb = req("PATCH", f"/api/users/{uid}", json.dumps({"extend_days": 30}), AUTH2)
+    try:
+        exp_dt = datetime.fromisoformat(json.loads(eb)["expires_at"].replace("Z", "+00:00"))
+        now_dt = datetime.now(timezone.utc)
+        ext_ok = ste == 200 and exp_dt > now_dt and (exp_dt - now_dt).days >= 29
+    except Exception:
+        ext_ok = False
+    req("DELETE", f"/api/users/{uid}", headers=AUTH2)
+check("extending expired account starts from today", ext_ok, f"created={stmk2}")
+
+# ---- 36. Logout invalidates the session server-side ----
 stme, _, _ = req("GET", "/api/me", headers=AUTH2)
 stlo, _, _ = req("POST", "/api/logout", None, AUTH2)
 stdead, _, _ = req("GET", "/api/me", headers=AUTH2)
