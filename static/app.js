@@ -341,6 +341,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
+    if (btn.dataset.section === "update") loadUpdate();
     if (btn.dataset.section === "blocker") loadBlocklist();
   });
 });
@@ -1069,6 +1070,86 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
     toast("User updated");
     loadUsers($("#search").value.trim());
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+
+// ---- Panel update ----
+let updatePoll = null;
+function renderChangelog(items, prefix) {
+  const ul = $("#update-changelog");
+  ul.textContent = "";
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = prefix || "Nothing to show.";
+    ul.appendChild(li);
+    return;
+  }
+  for (const c of items.slice(0, 20)) {
+    const li = document.createElement("li");
+    const b = document.createElement("strong");
+    b.textContent = c.sha;
+    const meta = document.createElement("small");
+    meta.textContent = (c.date ? c.date + " · " : "") + c.message;
+    li.appendChild(b);
+    li.appendChild(meta);
+    ul.appendChild(li);
+  }
+}
+async function loadUpdate(announce) {
+  try {
+    const st = await api("/api/update/status");
+    const badge = $("#update-badge");
+    const sum = $("#update-summary");
+    $("#update-repo").textContent = st.repo + "@" + st.branch;
+    if (st.error && !st.current) {
+      badge.textContent = "error";
+      badge.className = "badge proto off";
+      sum.textContent = "Could not determine status: " + st.error;
+      $("#update-now-btn").classList.add("hidden");
+      renderChangelog([], "No data.");
+    } else if (st.updating) {
+      badge.textContent = "updating…";
+      badge.className = "badge proto warn";
+      sum.textContent = "Update in progress — the panel will restart any moment. Keep this page open.";
+      $("#update-now-btn").classList.add("hidden");
+      renderChangelog(st.incoming || [], "Fetching changelog…");
+    } else if (st.update_available) {
+      badge.textContent = "update available";
+      badge.className = "badge proto warn";
+      sum.textContent = `Running ${st.current} · latest is ${st.latest} — review the changes, then update.`;
+      $("#update-now-btn").classList.remove("hidden");
+      renderChangelog(st.incoming || [], "No changelog returned.");
+    } else {
+      badge.textContent = "up to date";
+      badge.className = "badge proto ok";
+      sum.textContent = `Running ${st.latest || st.current}${st.version ? " (v" + st.version + ")" : ""} — nothing to do.`;
+      $("#update-now-btn").classList.add("hidden");
+      renderChangelog(st.local_log || [], "No local history.");
+    }
+    if (announce) toast("Update check finished");
+  } catch (err) {
+    if (err.message !== "auth") toast(err.message, false);
+  }
+}
+$("#update-check-btn").addEventListener("click", () => loadUpdate(true));
+$("#update-now-btn").addEventListener("click", async () => {
+  if (!confirm("Update the panel now? It pulls the latest code, reinstalls dependencies and RESTARTS. Unsaved work in other tabs may be interrupted.")) return;
+  const pw = prompt("Confirm your admin password to allow the update:");
+  if (!pw) return;
+  try {
+    await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
+    toast("Update started — panel will restart in about a minute");
+    loadUpdate();
+    let n = 0;
+    if (updatePoll) clearInterval(updatePoll);
+    updatePoll = setInterval(async () => {
+      n += 1;
+      try { await loadUpdate(); } catch (_) {}
+      if (n >= 20 && updatePoll) { clearInterval(updatePoll); updatePoll = null; }
+    }, 5000);
+  } catch (err) {
+    if (err.message !== "auth") toast(err.message, false);
+  }
 });
 
 // ---- Telegram ----

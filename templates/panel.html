@@ -42,6 +42,10 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
         <span>Site Blocker</span>
       </button>
+      <button class="nav-btn" data-section="update" data-title="Panel Update">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
+        <span>Update</span>
+      </button>
       <button class="nav-btn" data-section="settings" data-title="Settings & Security">
         <svg viewBox="0 0 24 24"><path d="M4 6h16"/><circle cx="9" cy="6" r="2.5"/><path d="M4 12h16"/><circle cx="15" cy="12" r="2.5"/><path d="M4 18h16"/><circle cx="7" cy="18" r="2.5"/></svg>
         <span>Settings</span>
@@ -295,6 +299,28 @@
           <label class="proto-check wide"><input type="checkbox" id="node-udp"><span>Forward UDP too (WireGuard, DNS, games)</span></label>
           <button type="button" id="node-create-btn" class="btn btn-primary btn-block">Create Tunnel + Get Guide</button>
           <ul class="audit-list" id="nodes-list"></ul>
+        </div>
+
+      </div>
+    </section>
+
+
+    <section id="section-update" class="section">
+      <div class="settings-grid">
+
+        <div class="card form-card">
+          <div class="card-head"><h2>Panel Update</h2><span class="badge proto" id="update-badge">unknown</span></div>
+          <p class="hint mt-0" id="update-summary">Check GitHub for new commits, review what changed, then update this server in one click.</p>
+          <div class="reality-actions">
+            <button type="button" id="update-check-btn" class="btn btn-ghost">Check for updates</button>
+            <button type="button" id="update-now-btn" class="btn btn-primary hidden">Update now</button>
+          </div>
+          <p class="hint">Update pulls <span class="mono" id="update-repo">mrlurix/zefira-panel</span>, reinstalls dependencies and restarts the panel. Refused if you have local changes.</p>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2>What's new</h2></div>
+          <ul class="audit-list" id="update-changelog"><li class="muted">Press “Check for updates”.</li></ul>
         </div>
 
       </div>

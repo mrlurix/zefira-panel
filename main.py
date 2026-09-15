@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import threading
 import time as time_mod
 from contextlib import asynccontextmanager
@@ -978,6 +979,204 @@ def theme_css():
         media_type="text/css",
         headers={"Cache-Control": "public, max-age=60"},
     )
+
+
+UPDATE_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+SERVICE_RE = re.compile(r"^[A-Za-z0-9_@.:-]{1,64}$")
+_update_lock = threading.Lock()
+
+
+def _update_conf() -> tuple:
+    repo = (os.environ.get("ZEFIRA_UPDATE_REPO", "") or "mrlurix/zefira-panel").strip()
+    if not UPDATE_REPO_RE.fullmatch(repo) or ".." in repo:
+        repo = "mrlurix/zefira-panel"
+    branch = (os.environ.get("ZEFIRA_UPDATE_BRANCH", "") or "main").strip() or "main"
+    if not re.fullmatch(r"[A-Za-z0-9_./-]{1,64}", branch) or ".." in branch or branch.startswith("-"):
+        branch = "main"
+    service = (os.environ.get("ZEFIRA_SERVICE_NAME", "") or "zefira").strip()
+    if not SERVICE_RE.fullmatch(service) or service.startswith("-"):
+        service = "zefira"
+    return repo, branch, service
+
+
+def _git(*args: str, timeout: int = 60) -> tuple:
+    git = shutil.which("git")
+    if not git:
+        return False, "git is not installed"
+    try:
+        proc = subprocess.run(
+            [git, "-C", str(BASE_DIR), *args],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "git timed out"
+    except OSError as exc:
+        return False, f"git failed: {exc}"
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "git error").strip().splitlines()
+        return False, (err[-1] if err else "git error")[:200]
+    return True, proc.stdout.strip()
+
+
+def _github_json(path: str) -> tuple:
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com{path}",
+            headers={"User-Agent": "zefira-panel", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return True, json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception as exc:
+        return False, str(exc)[:150]
+
+
+def _update_status() -> dict:
+    repo, branch, _ = _update_conf()
+    try:
+        version = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = ""
+    ok, local = _git("rev-parse", "HEAD")
+    local = local[:40] if ok else ""
+    local_log = []
+    if local:
+        oklog, out = _git("log", "--pretty=format:%H|%ad|%s", "--date=short", "-15")
+        if oklog:
+            for line in out.splitlines():
+                parts = line.split("|", 2)
+                if len(parts) == 3:
+                    local_log.append({"sha": parts[0][:7], "date": parts[1], "message": parts[2][:200]})
+    remote_sha, remote_date, incoming = "", "", []
+    error = ""
+    if local:
+        okc, cmp = _github_json(f"/repos/{repo}/compare/{local}...{branch}")
+        if okc and isinstance(cmp, dict):
+            remote_sha = (cmp.get("merge_base_commit", {}) or {}).get("sha", "") or ""
+            commits = cmp.get("commits") or []
+            if commits:
+                remote_sha = commits[-1].get("sha", "") or remote_sha
+            for c in commits[:20]:
+                info = c.get("commit", {}) or {}
+                incoming.append({
+                    "sha": (c.get("sha") or "")[:7],
+                    "date": ((info.get("author") or {}).get("date") or "")[:10],
+                    "message": (info.get("message") or "").splitlines()[0][:200] if info.get("message") else "",
+                })
+            remote_date = incoming[-1]["date"] if incoming else ""
+        else:
+            error = cmp if isinstance(cmp, str) else "GitHub compare failed"
+    else:
+        error = "not a git checkout"
+    if not remote_sha and not error:
+        okc, latest = _github_json(f"/repos/{repo}/commits/{branch}?per_page=1")
+        if okc and isinstance(latest, list) and latest:
+            remote_sha = latest[0].get("sha", "")
+        elif not okc:
+            error = latest if isinstance(latest, str) else "GitHub unreachable"
+    return {
+        "repo": repo,
+        "branch": branch,
+        "version": version,
+        "current": local[:12],
+        "latest": (remote_sha or "")[:12],
+        "update_available": bool(local and remote_sha and local != remote_sha),
+        "updating": _update_lock.locked(),
+        "local_log": local_log,
+        "incoming": incoming,
+        "error": error,
+    }
+
+
+@app.get("/api/update/status")
+def api_update_status(admin: Admin = Depends(require_admin)):
+    return _update_status()
+
+
+def _do_update(admin_name: str, ip: str) -> None:
+    repo, branch, service = _update_conf()
+    try:
+        with db.s() as s:
+            audit(s, "UPDATE_START", f"{repo}@{branch} by {admin_name}", ip)
+            s.commit()
+        ok, remote = _git("ls-remote", "origin", f"refs/heads/{branch}", timeout=60)
+        if not ok:
+            raise RuntimeError(f"cannot reach origin: {remote}")
+        ok, out = _git("status", "--porcelain", timeout=30)
+        if not ok:
+            raise RuntimeError(out)
+        if out.strip():
+            raise RuntimeError("local changes present — commit or stash them first (refusing to overwrite)")
+        ok, out = _git("fetch", "origin", branch, timeout=180)
+        if not ok:
+            raise RuntimeError(out)
+        ok, out = _git("reset", "--hard", f"origin/{branch}", timeout=120)
+        if not ok:
+            raise RuntimeError(out)
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
+                capture_output=True, text=True, timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("pip install timed out")
+        except OSError as exc:
+            raise RuntimeError(f"pip failed: {exc}")
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+            raise RuntimeError(f"pip failed: {(tail[-1] if tail else 'unknown error')[:200]}")
+        with db.s() as s:
+            audit(s, "UPDATE_DONE", f"{repo}@{branch} by {admin_name}, restarting", ip)
+            s.commit()
+        log.warning("Panel updated, restarting service %s", service)
+        if shutil.which("systemctl"):
+            subprocess.run(["systemctl", "restart", service], capture_output=True, timeout=60)
+        else:
+            log.warning("No systemctl found — restart the panel manually")
+    except Exception as exc:
+        log.error("Panel update failed: %s", exc)
+        try:
+            with db.s() as s:
+                audit(s, "UPDATE_FAIL", f"{str(exc)[:200]}", ip, ok=False)
+                s.commit()
+        except Exception:
+            pass
+    finally:
+        if _update_lock.locked():
+            _update_lock.release()
+
+
+@app.post("/api/update/apply")
+def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
+    ip = client_ip(request)
+    if not verify_password(data.password_confirm, admin.password_hash):
+        with db.s() as s:
+            audit(s, "UPDATE_FAIL", f"wrong confirm password by {admin.username}", ip, ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
+    if not shutil.which("git"):
+        raise HTTPException(status_code=400, detail="git is not installed on this server")
+    ok, out = _git("rev-parse", "--git-dir")
+    if not ok:
+        raise HTTPException(status_code=400, detail="Panel directory is not a git checkout")
+    if not _update_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="An update is already running")
+    try:
+        ok, out = _git("status", "--porcelain", timeout=30)
+        if not ok:
+            raise HTTPException(status_code=502, detail=out)
+        if out.strip():
+            raise HTTPException(status_code=409, detail="Local changes present — update refused to avoid overwriting them")
+    except HTTPException:
+        _update_lock.release()
+        raise
+    try:
+        threading.Thread(target=_do_update, args=(admin.username, ip), daemon=True).start()
+    except Exception:
+        _update_lock.release()
+        raise HTTPException(status_code=500, detail="Could not start update worker")
+    return {"ok": True, "started": True}
 
 
 @app.get("/api/nodes")
