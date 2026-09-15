@@ -175,6 +175,10 @@ input { font-family: inherit; }
   font-size: 19px;
   font-weight: 900;
   letter-spacing: 3px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: linear-gradient(120deg, #fff, var(--red));
   -webkit-background-clip: text;
   background-clip: text;
