@@ -1,0 +1,11 @@
+name: Question
+description: Usage question (or use Discussions for longer threads)
+labels: [question]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do? Never paste tokens, passwords or backup files.
+    validations:
+      required: true
