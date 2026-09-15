@@ -416,8 +416,7 @@ table { display: block; width: 100%; overflow-x: auto; }
 .sp-foot { flex-wrap: wrap; gap: 8px 16px; }
 
 @media (max-width: 560px) {
-  .topbar { gap: 8px; padding: 6px 12px; border-radius: 14px; }
-  .brand img { width: 24px; height: 24px; }
+  .topbar { gap: 8px; padding: 6px 12px; border-radius: 14px; }  .brand img { width: 24px; height: 24px; }
   .brand b { font-size: 14px; letter-spacing: 1px; }
   .ver { display: none; }
   .topbar a.gh { font-size: 12px; padding: 3px 8px; }
@@ -434,4 +433,75 @@ table { display: block; width: 100%; overflow-x: auto; }
   .btn { padding: 10px 20px; font-size: 14px; }
   .sp-modal { max-height: 78vh; }
   .sp-overlay { padding: 8vh 12px 12px; }
+}
+
+/* ---------- floating support bubble ---------- */
+.sup-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 90;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--border-red);
+  background: var(--red);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 28px var(--red-glow);
+  transition: transform .2s ease;
+  font-family: inherit;
+  animation: sup-in .5s .8s ease both;
+}
+.sup-fab:hover { transform: scale(1.1); }
+@keyframes sup-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.sup-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 88px;
+  z-index: 90;
+  width: 284px;
+  background: var(--card);
+  border: 1px solid var(--border-red);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .65), 0 0 26px var(--red-glow);
+  overflow: hidden;
+  transform-origin: bottom right;
+  transform: scale(.92) translateY(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .22s cubic-bezier(.2, .9, .3, 1.2), opacity .18s ease;
+}
+.sup-panel.show { transform: none; opacity: 1; pointer-events: auto; }
+.sup-panel[hidden] { display: none; }
+.sup-head { padding: 13px 16px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 15px; }
+.sup-head small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.sup-links { padding: 8px; }
+.sup-links a, .sup-links button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.sup-links a:hover, .sup-links button:hover { background: rgba(255, 39, 64, .1); }
+.sup-links .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.sup-links small { margin-left: auto; color: var(--muted); font-size: 11px; }
+@media (max-width: 560px) {
+  .sup-fab { right: 14px; bottom: 14px; width: 50px; height: 50px; font-size: 22px; }
+  .sup-panel { right: 14px; left: 14px; bottom: 74px; width: auto; }
 }
