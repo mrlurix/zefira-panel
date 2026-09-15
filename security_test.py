@@ -574,7 +574,7 @@ stup, _, upb = req("GET", "/api/update/status", headers=AUTH2)
 upok = stup == 200
 try:
     upj = json.loads(upb)
-    upok = upok and all(k in upj for k in ("repo", "current", "latest", "update_available", "incoming", "local_log"))
+    upok = upok and all(k in upj for k in ("repo", "current", "latest", "update_available", "updating", "incoming", "local_log"))
     upok = upok and isinstance(upj["incoming"], list) and isinstance(upj["local_log"], list)
 except Exception:
     upok = False
