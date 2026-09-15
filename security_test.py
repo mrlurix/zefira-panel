@@ -564,6 +564,17 @@ stfa, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456"}), AUTH
 check("2fa/enable without password -> 422", stfa == 422, f"got {stfa}")
 stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
 check("2fa/enable with wrong password rejected", stfa2 in (400, 429), f"got {stfa2}")
+stup, _, upb = req("GET", "/api/update/status", headers=AUTH2)
+upok = stup == 200
+try:
+    upj = json.loads(upb)
+    upok = upok and all(k in upj for k in ("repo", "current", "latest", "update_available", "incoming", "local_log"))
+    upok = upok and isinstance(upj["incoming"], list) and isinstance(upj["local_log"], list)
+except Exception:
+    upok = False
+check("update status shape (authed)", upok, f"got {stup}")
+stupw, _, _ = req("POST", "/api/update/apply", json.dumps({"password_confirm": "WrongPass12345"}), AUTH2)
+check("update apply with wrong password -> 400 (no-op)", stupw == 400, f"got {stupw}")
 
 # ---- 34. Appearance: public display values only, writes gated + validated ----
 stap, _, apb = req("GET", "/api/appearance")
@@ -578,6 +589,10 @@ except Exception:
 check("appearance public shows only display values", apok, f"got {stap}")
 stauw, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "#00c853"}), {"X-Requested-With": "XMLHttpRequest"})
 check("appearance PUT requires auth", stauw in (401, 403), f"got {stauw}")
+stupd, _, _ = req("GET", "/api/update/status")
+check("update status requires auth", stupd == 401, f"got {stupd}")
+stupa, _, _ = req("POST", "/api/update/apply", json.dumps({"password_confirm": "x"}), {"X-Requested-With": "XMLHttpRequest"})
+check("update apply requires auth", stupa in (401, 403), f"got {stupa}")
 stabad, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "red", "brand_name": "<script>"}), AUTH2)
 check("appearance rejects non-hex color / html brand", stabad == 422, f"got {stabad}")
 stcss, hdrcss, cssb = req("GET", "/theme.css")
