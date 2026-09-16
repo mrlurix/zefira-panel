@@ -15,16 +15,12 @@ const PROTO_LABEL = {
 const EVENT_EN = {
   LOGIN_OK: "Successful login",
   LOGIN_FAIL: "Failed login",
-  LOGIN_2FA_FAIL: "Wrong 2FA code",
   RATE_LIMIT: "Rate limited",
   USER_CREATE: "User created",
   USER_PATCH: "User updated",
   USER_DELETE: "User deleted",
   TOKEN_RESET: "Token reset",
   PW_CHANGE: "Password changed",
-  TFA_ENABLE: "2FA enabled",
-  TFA_DISABLE: "2FA disabled",
-  TFA_SETUP: "2FA setup started",
   SETTINGS_UPDATE: "Server settings updated",
   BACKUP_DL: "Backup downloaded",
   RESTORE: "Backup restored",
@@ -338,7 +334,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); }
+    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "update") loadUpdate();
@@ -626,75 +622,6 @@ $("#ap-reset-btn").addEventListener("click", async () => {
     loadAppearance();
     toast("Appearance reset");
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
-});
-
-async function loadTfa() {
-  try {
-    const me = await api("/api/me");
-    $("#tfa-chip").classList.toggle("hidden", !me.totp_enabled);
-    const line = $("#tfa-status-line");
-    line.textContent = "";
-    if (me.totp_enabled) {
-      const ok = document.createElement("p");
-      ok.className = "tfa-on";
-      ok.textContent = "\u2713 Two-factor auth is ENABLED";
-      line.appendChild(ok);
-      $("#tfa-setup-area").classList.add("hidden");
-      $("#tfa-disable-btn").classList.remove("hidden");
-    } else {
-      const off = document.createElement("p");
-      off.className = "tfa-off";
-      off.textContent = "\u26a0 Two-factor auth is OFF \u2014 strongly recommended to enable it.";
-      off.addEventListener("click", startSetup);
-      line.appendChild(off);
-      $("#tfa-disable-btn").classList.add("hidden");
-    }
-  } catch (_) {}
-}
-
-async function startSetup() {
-  try {
-    const d = await api("/api/2fa/setup", { method: "POST" });
-    $("#tfa-qr").src = "data:image/svg+xml;base64," + d.qr_b64;
-    $("#tfa-uri").textContent = d.uri;
-    $("#tfa-setup-area").classList.remove("hidden");
-  } catch (err) {
-    if (err.message !== "auth") toast(err.message, false);
-  }
-}
-$("#tfa-status-line").addEventListener("click", (e) => {
-  if (e.target.classList.contains("tfa-off")) startSetup();
-});
-
-$("#tfa-enable-btn").addEventListener("click", async () => {
-  const code = $("#tfa-code").value.trim();
-  const pw = $("#tfa-password").value;
-  if (!/^[0-9]{6}$/.test(code)) { toast("Enter the 6-digit code", false); return; }
-  if (!pw) { toast("Enter your current password", false); return; }
-  try {
-    await api("/api/2fa/enable", { method: "POST", body: { code, current_password: pw } });
-    $("#tfa-setup-area").classList.add("hidden");
-    $("#tfa-code").value = "";
-    $("#tfa-password").value = "";
-    toast("Two-factor auth enabled");
-    loadTfa();
-  } catch (err) {
-    if (err.message !== "auth") toast(err.message, false);
-  }
-});
-
-$("#tfa-disable-btn").addEventListener("click", async () => {
-  const pw = prompt("Enter your current password to allow disabling 2FA:");
-  if (!pw) return;
-  const code = prompt("Enter the current 6-digit code to disable 2FA:");
-  if (!code) return;
-  try {
-    await api("/api/2fa/disable", { method: "POST", body: { code, current_password: pw } });
-    toast("Two-factor auth disabled");
-    loadTfa();
-  } catch (err) {
-    if (err.message !== "auth") toast(err.message, false);
-  }
 });
 
 async function loadSrvSettings() {
@@ -1408,7 +1335,6 @@ $("#audit-refresh").addEventListener("click", loadAudit);
   try {
     const me = await api("/api/me");
     $("#admin-name").textContent = me.username;
-    $("#tfa-chip").classList.toggle("hidden", !me.totp_enabled);
   } catch (_) { return; }
   loadAppearance();
   loadStats();

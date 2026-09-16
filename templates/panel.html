@@ -68,7 +68,6 @@
       <div class="admin-chip">
         <span class="pulse-dot"></span>
         <span id="admin-name">&hellip;</span>
-        <span id="tfa-chip" class="tfa-chip hidden" title="Two-factor auth is enabled">2FA</span>
       </div>
     </header>
 
@@ -379,20 +378,6 @@
           <p class="hint">Changing the password invalidates all other active sessions.</p>
         </form>
 
-        <div class="card form-card">
-          <div class="card-head"><h2>Two-Factor Auth (TOTP)</h2></div>
-          <p class="hint mt-0">Use Google Authenticator or Authy. Even if your password leaks, nobody can sign in without your phone.</p>
-          <div id="tfa-status-line" class="tfa-status"></div>
-          <div id="tfa-setup-area" class="hidden">
-            <div class="qr-box"><img id="tfa-qr" alt="QR Code"></div>
-            <p class="hint mono" id="tfa-uri"></p>
-            <label class="field"><span>Enter the 6-digit code from the app</span><input type="text" id="tfa-code" inputmode="numeric" maxlength="6" placeholder="------" dir="ltr"></label>
-            <label class="field"><span>Current password (confirms it's really you)</span><input type="password" id="tfa-password" maxlength="128" autocomplete="off"></label>
-            <button type="button" id="tfa-enable-btn" class="btn btn-primary btn-block">Enable Two-Factor Auth</button>
-          </div>
-          <button type="button" id="tfa-disable-btn" class="btn btn-danger hidden">Disable 2FA</button>
-        </div>
-
         <form id="srv-form" class="card form-card">
           <div class="card-head"><h2>Server / Hosts Settings</h2></div>
           <p class="hint mt-0">These values are embedded into generated configs and subscription links.</p>
@@ -458,22 +443,6 @@
         <div class="card form-card">
           <div class="card-head"><h2>Security Events</h2><button type="button" class="icon-btn" id="audit-refresh">&#8635;</button></div>
           <ul class="audit-list" id="audit-list"></ul>
-        </div>
-
-        <div class="card form-card">
-          <div class="card-head"><h2>Active Security Layers</h2></div>
-          <ul class="sec-list">
-            <li>TOTP two-factor login with locally-generated QR</li>
-            <li>scrypt password hashing + timing-safe comparison</li>
-            <li>JWT session in HttpOnly SameSite=Strict cookie</li>
-            <li>Login rate-limit: 8 attempts per 15 min per IP/user</li>
-            <li>CSRF guard on all mutating methods + 1 MB body cap</li>
-            <li>Strict CSP, X-Frame-Options DENY, nosniff, noindex</li>
-            <li>Parameterized SQL queries + Pydantic input validation</li>
-            <li>Safe DOM rendering without innerHTML for user data</li>
-            <li>Real X25519 WireGuard keys + signed OpenVPN certificates</li>
-            <li>Secrets encrypted at rest with Fernet</li>
-          </ul>
         </div>
 
       </div>

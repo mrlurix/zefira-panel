@@ -41,6 +41,13 @@
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
 
+<h2 id="unreleased">Latest — AI assistant, 2FA removed</h2>
+<ul>
+  <li><b>AI assistant</b> bubble: a panel-only helper (OpenAI-compatible, Anthropic, Gemini) with an encrypted API key, scoped knowledge file and hourly quota.</li>
+  <li><b>Two-factor auth removed entirely</b> — endpoints, login flow, database columns (auto-migrated away), UI and docs. Single strong password is the gate now; password confirmation still guards backup, restore and updates.</li>
+  <li><b>Active Security Layers</b> info card removed from Settings.</li>
+</ul>
+
 <h2 id="2026-09-15">2026-09-15 — One-click updates + safer updater</h2>
 <ul>
   <li><b>Update section</b> in the left menu (above Settings): compares your server with GitHub, shows the exact incoming changelog, then pulls + reinstalls + restarts on password confirm.</li>

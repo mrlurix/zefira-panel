@@ -57,8 +57,6 @@ from schemas import (
     TelegramSettingsIn,
     TelegramTestIn,
     TemplateCreateIn,
-    TotpCodeIn,
-    TotpManageIn,
     TunnelNodeIn,
     TunnelSettingsIn,
     UserCreateIn,
@@ -72,13 +70,10 @@ from security import (
     decrypt_text,
     dummy_verify,
     encrypt_text,
-    gen_totp_secret,
     hash_password,
     login_limiter,
     login_user_limiter,
-    otpauth_uri,
     verify_password,
-    verify_totp,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -107,7 +102,6 @@ PENDING_YEAR = 2098
 
 sub_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
 pw_limiter = SlidingWindowLimiter(max_events=6, window_seconds=300)
-tfa_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 probe_limiter = SlidingWindowLimiter(max_events=20, window_seconds=60)
 ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
 lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
@@ -507,18 +501,6 @@ def api_login(data: LoginIn, request: Request, response: Response):
             s.commit()
             log.warning("Failed login ip=%s user=%s", ip, admin.username)
             raise HTTPException(status_code=401, detail=fail_msg)
-        if admin.totp_enabled:
-            totp_secret = decrypt_text(admin.totp_secret)
-            if not data.code or not verify_totp(totp_secret, data.code):
-                audit(s, "LOGIN_2FA_FAIL", f"user={admin.username}", ip, ok=False)
-                s.commit()
-                log.warning("2FA failed ip=%s user=%s", ip, admin.username)
-                if not data.code:
-                    raise HTTPException(
-                        status_code=401,
-                        detail={"message": "Two-factor code required", "code": "totp_required"},
-                    )
-                raise HTTPException(status_code=401, detail="Invalid two-factor code")
         login_limiter.reset(key)
         login_user_limiter.reset(ukey)
         set_session_cookie(response, request, admin.id, admin.token_version)
@@ -556,7 +538,6 @@ def api_me(admin: Admin = Depends(require_admin)):
     return {
         "username": admin.username,
         "created_at": admin.created_at.isoformat(timespec="seconds") + "Z",
-        "totp_enabled": admin.totp_enabled,
     }
 
 
@@ -591,74 +572,6 @@ def api_change_password(
     set_session_cookie(response, request, admin.id, version)
     log.info("Password changed user=%s ip=%s", admin.username, client_ip(request))
     return {"ok": True}
-
-
-@app.get("/api/2fa/status")
-def api_2fa_status(admin: Admin = Depends(require_admin)):
-    return {"enabled": admin.totp_enabled}
-
-
-@app.post("/api/2fa/setup")
-def api_2fa_setup(request: Request, admin: Admin = Depends(require_admin)):
-    if admin.totp_enabled:
-        raise HTTPException(status_code=400, detail="Two-factor auth is already enabled")
-    secret_plain = gen_totp_secret()
-    with db.s() as s:
-        row = s.get(Admin, admin.id)
-        row.totp_pending = encrypt_text(secret_plain)
-        audit(s, "TFA_SETUP", f"user={admin.username}", client_ip(request))
-        s.commit()
-    uri = otpauth_uri(admin.username, secret_plain)
-    return {"uri": uri, "qr_b64": protocols.qr_svg_b64(uri)}
-
-
-@app.post("/api/2fa/enable")
-def api_2fa_enable(data: TotpManageIn, request: Request, admin: Admin = Depends(require_admin)):
-    if not tfa_limiter.hit(f"tfa|{admin.id}"):
-        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
-    if not verify_password(data.current_password, admin.password_hash):
-        with db.s() as s:
-            audit(s, "TFA_FAIL", f"wrong password on 2fa/enable by {admin.username}", client_ip(request), ok=False)
-            s.commit()
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    pending = decrypt_text(admin.totp_pending)
-    if not pending:
-        raise HTTPException(status_code=400, detail="Start the setup first")
-    if not verify_totp(pending, data.code):
-        raise HTTPException(status_code=400, detail="The code is not valid")
-    with db.s() as s:
-        row = s.get(Admin, admin.id)
-        row.totp_secret = row.totp_pending
-        row.totp_pending = None
-        row.totp_enabled = True
-        audit(s, "TFA_ENABLE", f"user={row.username}", client_ip(request))
-        s.commit()
-    log.info("2FA enabled user=%s", admin.username)
-    return {"ok": True, "enabled": True}
-
-
-@app.post("/api/2fa/disable")
-def api_2fa_disable(data: TotpManageIn, request: Request, admin: Admin = Depends(require_admin)):
-    if not tfa_limiter.hit(f"tfa|{admin.id}"):
-        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
-    if not verify_password(data.current_password, admin.password_hash):
-        with db.s() as s:
-            audit(s, "TFA_FAIL", f"wrong password on 2fa/disable by {admin.username}", client_ip(request), ok=False)
-            s.commit()
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    active = decrypt_text(admin.totp_secret)
-    if not admin.totp_enabled or not verify_totp(active, data.code):
-        raise HTTPException(status_code=400, detail="The code is not valid")
-    tfa_limiter.reset(f"tfa|{admin.id}")
-    with db.s() as s:
-        row = s.get(Admin, admin.id)
-        row.totp_enabled = False
-        row.totp_secret = None
-        row.totp_pending = None
-        audit(s, "TFA_DISABLE", f"user={row.username}", client_ip(request))
-        s.commit()
-    log.info("2FA disabled user=%s", admin.username)
-    return {"ok": True, "enabled": False}
 
 
 @app.get("/api/audit")
@@ -1552,7 +1465,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             s.commit()
         raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     now = utcnow()
-    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = tfa_dropped = 0
+    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = 0
     prepared_users = []
     for ru in data.users:
         try:
@@ -1760,31 +1673,15 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     continue
         if data.admins:
             for ra in data.admins:
-                # Cross-server restores carry secrets encrypted with the OLD
-                # master key, and hand-edited files may carry garbage.
-                # Enabling 2FA with an undecryptable/malformed secret would
-                # lock the admin out with no recovery: fail safe to disabled.
-                dec = decrypt_text(ra.totp_secret) if ra.totp_secret else ""
-                keep_2fa = bool(
-                    ra.totp_enabled
-                    and dec
-                    and re.fullmatch(r"[A-Z2-7]{16,64}", dec)
-                )
-                if ra.totp_enabled and not keep_2fa:
-                    tfa_dropped += 1
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
                 if existing:
                     existing.password_hash = ra.password_hash
-                    existing.totp_enabled = keep_2fa
-                    existing.totp_secret = ra.totp_secret if keep_2fa else None
                     existing.token_version += 1
                 else:
                     s.add(
                         Admin(
                             username=ra.username.lower(),
                             password_hash=ra.password_hash,
-                            totp_enabled=keep_2fa,
-                            totp_secret=ra.totp_secret if keep_2fa else None,
                             token_version=1,
                         )
                     )
@@ -1795,7 +1692,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tfa_dropped={tfa_dropped} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -1809,7 +1706,6 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             "restored_admins": restored_admins,
             "restored_blocked": restored_blocked,
             "restored_templates": restored_templates,
-            "tfa_dropped": tfa_dropped,
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)

@@ -46,12 +46,10 @@
 <h2 id="auth-account">Auth &amp; account</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password, code?}</code> — 401, or <code>totp_required</code></td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password}</code></td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td>Invalidates the session server-side</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username, 2FA state</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td>Strong-password enforced, kills other sessions</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/2fa/status</code></td><td>—</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/2fa/setup</code> · <code>/enable</code> · <code>/disable</code></td><td>QR uri + 6-digit code flow; enable/disable also needs <code>current_password</code></td></tr>
 </table>
 
 <h2 id="users">Users</h2>
