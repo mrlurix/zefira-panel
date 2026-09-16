@@ -1,5 +1,9 @@
 ﻿# Zefira
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mrlurix.github.io/zefira-panel/)
+[![Pentest](https://img.shields.io/badge/pentest-95%2F95-success)](https://github.com/mrlurix/zefira-panel/blob/main/security_test.py)
+
 > 📚 **Documentation: [mrlurix.github.io/zefira-panel](https://mrlurix.github.io/zefira-panel/)** — install guide, user manual, API reference, FAQ.
 
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
@@ -73,7 +77,7 @@ There is a test suite with 81 checks that hits the running panel from the outsid
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `95/95 checks passed` or similar - if not, open an issue.
+It should print `97/97 checks passed` or similar - if not, open an issue.
 
 ### API
 

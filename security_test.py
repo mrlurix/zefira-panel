@@ -554,6 +554,11 @@ except Exception:
     bok = False
 check("backup with correct password downloads", bok, f"got {stb4}")
 
+stfa, _, _ = req("GET", "/api/2fa/status", headers=AUTH2)
+check("2fa endpoints are gone (404 even authed)", stfa == 404, f"got {stfa}")
+stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
+check("2fa enable is gone (404 even authed)", stfa2 == 404, f"got {stfa2}")
+
 # ---- 34b. AI assistant: auth, validation, no key leak, needs config ----
 stai, _, _ = req("GET", "/api/ai/settings")
 check("ai settings requires auth", stai == 401, f"got {stai}")
