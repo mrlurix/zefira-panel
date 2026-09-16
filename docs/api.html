@@ -74,6 +74,8 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td>Audit-logged reveal</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td>Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td>Generated theme overrides, text/css</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td>Provider, model, key state (key never returned)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> → scoped assistant reply (30/hr)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/update/status</code></td><td>Current vs latest commit + incoming changelog</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td>Password-confirmed pull + pip + restart</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>

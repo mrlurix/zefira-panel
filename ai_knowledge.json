@@ -1,0 +1,55 @@
+{
+  "panel": {
+    "name": "Zefira",
+    "what": "A self-hosted VPN sales panel (FastAPI + SQLite). The admin creates users with traffic and time limits; each user gets one subscription link that works in all common VPN client apps.",
+    "protocols": ["VLESS", "VLESS-REALITY", "VMess", "Trojan", "Shadowsocks", "Hysteria2", "WireGuard", "OpenVPN"],
+    "notes": "One user can mix several protocols. Subscription link remarks show the plain username."
+  },
+  "navigation": {
+    "Dashboard": "Totals (users, active, expired, disabled, expiring within 7 days, out of volume, pending start), sold/used volume, system CPU/RAM/disk/uptime, latest users.",
+    "Users": "Search, sort, export CSV. Per user: QR, copy link, download configs, pause/enable, reset token+keys, edit, delete.",
+    "Inbounds": "Extra ports/hosts per protocol. Every enabled inbound adds links for all users, labeled with the inbound name.",
+    "BackPack Tunnels": "Iran/Kharej reverse tunnels: create node (transport, IPs, ports), copy token, download step-by-step setup guide, Check-now reachability probe.",
+    "Anti-Censorship": "REALITY X25519 keypair generator (private key encrypted, reveal is audit-logged), SNI rotation list, obfuscated host, per-user subdomains, CDN SNI spoofing, block-direct-IP.",
+    "Site Blocker": "Custom blocked domains + 15-domain porn preset, appended to every Clash config as DOMAIN-SUFFIX REJECT rules (500 max).",
+    "Update": "Compares server with GitHub, shows incoming changelog, one-click pull + pip + restart on password confirm.",
+    "Settings": "Password change, 2FA, appearance, server/hosts, SSL, Telegram, backup/restore, audit log."
+  },
+  "users": {
+    "create": "Users section: username (English letters/digits/underscore, 3-32), protocols, volume GB, days. Optional: note, device limit, start-on-first-use.",
+    "plans": "Volume quota stops service at 100% until topped up or reset. Duration counts from creation unless start-on-first-use is on (countdown starts at first subscription fetch). Device limit is shown to clients as informational cap.",
+    "manage": "Pencil edits note/volume/expiry/device-limit/usage. Extend adds days (expired accounts extend from today). Reset token rotates token AND all secrets. Deleting is permanent.",
+    "states": "Active, Expired, Disabled (paused), Limited (out of volume), Pending (not started yet)."
+  },
+  "subscription": {
+    "link": "http://SERVER:PORT/sub/TOKEN (or custom path). 32-hex unguessable token.",
+    "browser": "Opened in a browser shows a personal dashboard: status, usage ring, days left, last-active time+IP, import buttons, per-protocol links, WireGuard/OpenVPN configs, QR, app downloads.",
+    "clients": "VPN apps get raw bytes (base64 links) or Clash YAML (?format=clash). Expired/disabled/limited users get 404 without revealing why. subscription-userinfo header carries quota for client progress bars.",
+    "leak": "If a link leaks, Reset token kills it instantly and issues a new one."
+  },
+  "settings": {
+    "server_hosts": "Domain/IP, VLESS/VMess/Trojan/SS port, Hysteria2 port, WireGuard port, OpenVPN port+proto, DNS, WireGuard server public key, obfuscated host, per-user subdomains, block-direct-IP. Baked into newly generated links.",
+    "tunnel": "Public base URL (fixes links/QR behind proxy/tunnel) + trusted proxies (only these may send X-Forwarded-For).",
+    "ssl": "One-click Let's Encrypt issue/renew for domain or sub.domain. Needs DNS->server, free port 80, certbot installed.",
+    "telegram": "Bot token (encrypted) + chat id. Notifies on user create/delete and brute-force lockouts. Send the bot a message once before testing.",
+    "backup_restore": "Download needs password. Restore needs password, wipes users, skips bad rows, re-validates settings. Cross-server restores safely drop undecryptable 2FA (tfa_dropped).",
+    "appearance": "Accent/background/card colors (live theme.css), brand name replacing ZEFIRA, message pinned on all user dashboards. Included in backups.",
+    "account": "Password change kills other sessions. 2FA TOTP needs code + current password to enable/disable."
+  },
+  "security_model": "scrypt passwords, JWT in HttpOnly SameSite=Strict cookies (Secure behind HTTPS), TOTP 2FA, 8 logins/15min per IP+user, CSRF header on mutations, strict CSP, encrypted secrets at rest (Fernet, host-local key in instance/secret.key), audit log of last 2000 events. Backups hold password hashes: guard them like passwords.",
+  "limits": {
+    "username": "3-32 chars a-z 0-9 _",
+    "volume": "up to 100000 GB",
+    "duration": "1-3650 days",
+    "blocklist": "500 custom domains",
+    "restore_body": "64 MB max"
+  },
+  "troubleshooting": {
+    "too_many_attempts": "8+ failed logins in 15 min. Wait, or restart the panel (in-memory counters reset).",
+    "password_lost": "Only works on fresh DB via env/.env; otherwise stop service, delete instance/zefira.db (lose data!), restore from backup, restart.",
+    "sub_404": "User expired/disabled/out-of-volume, token was reset, or SUBSCRIPTION_PATH was renamed.",
+    "clients_cannot_connect": "Open VPN ports on firewall; check Settings domain/ports; generate REALITY keys; paste WireGuard server public key.",
+    "ssl_fails": "Port 80 must be free, DNS must point here, certbot installed, mind Let's Encrypt rate limits.",
+    "panel_down": "systemctl status zefira; journalctl -u zefira -n 100; check port 8000 is free."
+  }
+}
