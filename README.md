@@ -49,7 +49,10 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
 - BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable.
 - QR codes for every subscription, ZIP download for configs.
-- 2FA with any authenticator app (enable/disable needs your password), full audit log, system stats, Telegram notifications if you want.
+- AI assistant bubble: panel-only helper (OpenAI/Anthropic/Gemini/Ollama) for beginners.
+- One-click updates from GitHub with changelog preview, right inside the panel.
+- Full personalization: theme colors, brand name, dashboard message.
+- Strong password gate on sensitive actions, full audit log, system stats, Telegram notifications if you want.
 - JSON backup / restore (both password confirmed). Also imports/exports all settings.
 
 Full guides live on the docs site (link at the top).
@@ -70,7 +73,7 @@ There is a test suite with 81 checks that hits the running panel from the outsid
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `98/98 checks passed` or similar - if not, open an issue.
+It should print `95/95 checks passed` or similar - if not, open an issue.
 
 ### API
 

@@ -2,7 +2,16 @@
   "panel": {
     "name": "Zefira",
     "what": "A self-hosted VPN sales panel (FastAPI + SQLite). The admin creates users with traffic and time limits; each user gets one subscription link that works in all common VPN client apps.",
-    "protocols": ["VLESS", "VLESS-REALITY", "VMess", "Trojan", "Shadowsocks", "Hysteria2", "WireGuard", "OpenVPN"],
+    "protocols": [
+      "VLESS",
+      "VLESS-REALITY",
+      "VMess",
+      "Trojan",
+      "Shadowsocks",
+      "Hysteria2",
+      "WireGuard",
+      "OpenVPN"
+    ],
     "notes": "One user can mix several protocols. Subscription link remarks show the plain username."
   },
   "navigation": {
@@ -13,7 +22,7 @@
     "Anti-Censorship": "REALITY X25519 keypair generator (private key encrypted, reveal is audit-logged), SNI rotation list, obfuscated host, per-user subdomains, CDN SNI spoofing, block-direct-IP.",
     "Site Blocker": "Custom blocked domains + 15-domain porn preset, appended to every Clash config as DOMAIN-SUFFIX REJECT rules (500 max).",
     "Update": "Compares server with GitHub, shows incoming changelog, one-click pull + pip + restart on password confirm.",
-    "Settings": "Password change, 2FA, appearance, server/hosts, SSL, Telegram, backup/restore, audit log."
+    "Settings": "Password change, appearance, server/hosts, SSL, Telegram, backup/restore, audit log."
   },
   "users": {
     "create": "Users section: username (English letters/digits/underscore, 3-32), protocols, volume GB, days. Optional: note, device limit, start-on-first-use.",
@@ -32,11 +41,11 @@
     "tunnel": "Public base URL (fixes links/QR behind proxy/tunnel) + trusted proxies (only these may send X-Forwarded-For).",
     "ssl": "One-click Let's Encrypt issue/renew for domain or sub.domain. Needs DNS->server, free port 80, certbot installed.",
     "telegram": "Bot token (encrypted) + chat id. Notifies on user create/delete and brute-force lockouts. Send the bot a message once before testing.",
-    "backup_restore": "Download needs password. Restore needs password, wipes users, skips bad rows, re-validates settings. Cross-server restores safely drop undecryptable 2FA (tfa_dropped).",
+    "backup_restore": "Download needs password. Restore needs password, wipes users, skips bad rows, re-validates settings.",
     "appearance": "Accent/background/card colors (live theme.css), brand name replacing ZEFIRA, message pinned on all user dashboards. Included in backups.",
-    "account": "Password change kills other sessions. 2FA TOTP needs code + current password to enable/disable."
+    "account": "Password change kills other sessions immediately."
   },
-  "security_model": "scrypt passwords, JWT in HttpOnly SameSite=Strict cookies (Secure behind HTTPS), TOTP 2FA, 8 logins/15min per IP+user, CSRF header on mutations, strict CSP, encrypted secrets at rest (Fernet, host-local key in instance/secret.key), audit log of last 2000 events. Backups hold password hashes: guard them like passwords.",
+  "security_model": "scrypt passwords, JWT in HttpOnly SameSite=Strict cookies (Secure behind HTTPS), 8 logins/15min per IP+user, CSRF header on mutations, strict CSP, encrypted secrets at rest (Fernet, host-local key in instance/secret.key), audit log of last 2000 events. Backups hold password hashes: guard them like passwords.",
   "limits": {
     "username": "3-32 chars a-z 0-9 _",
     "volume": "up to 100000 GB",

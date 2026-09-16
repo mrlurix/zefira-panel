@@ -312,19 +312,6 @@ check("node create blocked w/o session", stn2 in (401, 403), f"got {stn2}")
 stn3, _, _ = req("GET", "/api/nodes/1/guide")
 check("node guide requires auth", stn3 in (401, 404), f"got {stn3}")
 
-# ---- 15. 2FA brute force (wrong password: limiter must engage before any
-# code check, and no state may change) ----
-codes2 = []
-for i in range(15):
-    stt3, _, _ = req(
-        "POST", "/api/2fa/disable",
-        json.dumps({"code": f"{i:06d}", "current_password": "WrongPass12345"}),
-        AUTH,
-    )
-    codes2.append(stt3)
-limited_2fa = codes2.count(429) > 0
-check("2FA guessing rate-limited", limited_2fa, f"codes={set(codes2)}")
-
 # ---- 16. New-surface authz (telegram, qr, reality, selftunnel) ----
 for name, method, path, body in [
     ("tg settings", "GET", "/api/telegram", None),
@@ -555,7 +542,7 @@ stcap, _, _ = req("POST", "/api/restore", json.dumps({
 }), AUTH2)
 check("restore caps blocked_sites list", stcap == 422, f"got {stcap}")
 
-# ---- 33. Password-gated backup + 2FA management ----
+# ---- 33. Password-gated backup ----
 stb3, _, _ = req("POST", "/api/backup", json.dumps({"password_confirm": "WrongPass12345"}), AUTH2)
 check("backup with wrong password -> 400", stb3 == 400, f"got {stb3}")
 stb4, _, bbb4 = req("POST", "/api/backup", json.dumps({"password_confirm": PASSWORD}), AUTH2)
@@ -566,10 +553,6 @@ try:
 except Exception:
     bok = False
 check("backup with correct password downloads", bok, f"got {stb4}")
-stfa, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456"}), AUTH2)
-check("2fa/enable without password -> 422", stfa == 422, f"got {stfa}")
-stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
-check("2fa/enable with wrong password rejected", stfa2 in (400, 429), f"got {stfa2}")
 
 # ---- 34b. AI assistant: auth, validation, no key leak, needs config ----
 stai, _, _ = req("GET", "/api/ai/settings")

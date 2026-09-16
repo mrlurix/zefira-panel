@@ -1,9 +1,7 @@
 import base64
-import binascii
 import hashlib
 import hmac
 import os
-import struct
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -130,35 +128,3 @@ def decrypt_text(token: str | None) -> str:
         return _FERNET.decrypt(token.encode()).decode()
     except (InvalidToken, ValueError):
         return ""
-
-
-def gen_totp_secret() -> str:
-    return base64.b32encode(os.urandom(20)).decode().rstrip("=")
-
-
-def totp_now(secret: str, offset: int = 0) -> str | None:
-    try:
-        pad = "=" * ((8 - len(secret) % 8) % 8)
-        key = base64.b32decode(secret.upper() + pad)
-    except (binascii.Error, ValueError):
-        # Malformed secret (e.g. hand-edited backup): never crash, never match.
-        return None
-    counter = struct.pack(">Q", int(time.time() // 30) + offset)
-    digest = hmac.new(key, counter, hashlib.sha1).digest()
-    o = digest[-1] & 0x0F
-    code = (int.from_bytes(digest[o : o + 4], "big") & 0x7FFFFFFF) % 1000000
-    return f"{code:06d}"
-
-
-def verify_totp(secret: str, code: str, window: int = 1) -> bool:
-    if not secret or not code or not code.isdigit() or len(code) != 6:
-        return False
-    for offset in range(-window, window + 1):
-        expected = totp_now(secret, offset)
-        if expected is not None and hmac.compare_digest(expected, code):
-            return True
-    return False
-
-
-def otpauth_uri(username: str, secret: str) -> str:
-    return f"otpauth://totp/Zefira:{username}?secret={secret}&issuer=Zefira&algorithm=SHA1&digits=6&period=30"

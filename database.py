@@ -29,17 +29,12 @@ class Admin(Base):
     password_hash = Column(String(256), nullable=False)
     token_version = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=utcnow)
-    totp_enabled = Column(Boolean, nullable=False, default=False)
-    totp_secret = Column(Text, nullable=True)
-    totp_pending = Column(Text, nullable=True)
 
     def to_backup_dict(self) -> dict:
         return {
             "username": self.username,
             "password_hash": self.password_hash,
             "token_version": self.token_version,
-            "totp_enabled": self.totp_enabled,
-            "totp_secret": self.totp_secret,
             "created_at": self.created_at.isoformat(timespec="seconds"),
         }
 
@@ -296,9 +291,9 @@ class Database:
             except (OSError, AttributeError):
                 pass
         with self.engine.begin() as conn:
-            self._add_column(conn, "admins", "totp_enabled", "totp_enabled BOOLEAN NOT NULL DEFAULT 0")
-            self._add_column(conn, "admins", "totp_secret", "totp_secret TEXT")
-            self._add_column(conn, "admins", "totp_pending", "totp_pending TEXT")
+            self._drop_column(conn, "admins", "totp_enabled")
+            self._drop_column(conn, "admins", "totp_secret")
+            self._drop_column(conn, "admins", "totp_pending")
             self._add_column(conn, "vpn_users", "protocol", "protocol VARCHAR(16) NOT NULL DEFAULT 'vless'")
             self._add_column(conn, "vpn_users", "secret_data", "secret_data TEXT NOT NULL DEFAULT ''")
             self._add_column(conn, "vpn_users", "protocols", "protocols TEXT NOT NULL DEFAULT ''")
@@ -309,6 +304,18 @@ class Database:
             self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
+
+    @staticmethod
+    def _drop_column(conn, table: str, name: str) -> None:
+        # Only drops columns this app once created; identifiers are internal literals.
+        from sqlalchemy import inspect as sa_inspect
+
+        insp = sa_inspect(conn)
+        if not insp.has_table(table):
+            return
+        if name not in {c["name"] for c in insp.get_columns(table)}:
+            return
+        conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {name}"))
 
     @staticmethod
     def _add_column(conn, table: str, name: str, ddl: str) -> None:

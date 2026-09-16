@@ -359,5 +359,5 @@ echo "  Logs     : journalctl -u $SERVICE -n 100 --no-pager"
 echo "  Sub path : $SUB_PATH"
 if [[ "$SSL_DONE" == "yes" ]]; then echo "  SSL      : $SSL_CERT (auto-renew cron installed)"; fi
 if [[ -n "$DB_URL" ]]; then echo "  DB       : $DB_CHOICE"; else echo "  DB       : SQLite (instance/zefira.db)"; fi
-echo "  !! Change password + enable 2FA after first login !!"
+echo "  !! Change the password after first login !!"
 echo "============================================================"

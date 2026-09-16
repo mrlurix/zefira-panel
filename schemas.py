@@ -16,7 +16,6 @@ class LoginIn(BaseModel):
 
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=128)
-    code: Optional[str] = Field(default=None, pattern=r"^[0-9]{6}$")
 
 
 class UserCreateIn(BaseModel):
@@ -98,18 +97,6 @@ class AppearanceIn(BaseModel):
         if isinstance(v, str):
             return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
         return v
-
-
-class TotpCodeIn(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    code: str = Field(pattern=r"^[0-9]{6}$")
-
-
-class TotpManageIn(TotpCodeIn):
-    # Password gate: with a stolen session alone, nobody may enroll their own
-    # second factor (persistence) or remove yours (lockout).
-    current_password: str = Field(min_length=8, max_length=128)
 
 
 AI_PROVIDERS = ("openai", "anthropic", "gemini")
@@ -298,8 +285,6 @@ class RestoreAdminIn(BaseModel):
     username: str = Field(pattern=USERNAME_RE)
     password_hash: str = Field(min_length=10, max_length=256)
     token_version: int = Field(default=0, ge=0, le=999999999)
-    totp_enabled: bool = False
-    totp_secret: Optional[str] = None
 
 
 class RestoreConfirmIn(BaseModel):

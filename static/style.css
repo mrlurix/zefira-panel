@@ -560,21 +560,7 @@ select {
 select:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 64, .16); }
 select option { background: var(--card); color: var(--text); }
 
-/* ============ 2FA & AUDIT ============ */
-
-.tfa-chip {
-  font-size: 10.5px;
-  font-weight: 800;
-  color: var(--green);
-  background: rgba(46, 204, 113, .1);
-  border: 1px solid rgba(46, 204, 113, .35);
-  border-radius: 6px;
-  padding: 2px 7px;
-  margin-inline-start: 4px;
-}
-
-.tfa-on { color: var(--green); font-weight: 700; font-size: 13.5px; margin-bottom: 12px; }
-.tfa-off { color: var(--orange); font-weight: 600; font-size: 13px; margin-bottom: 12px; cursor: pointer; }
+/* ============ AUDIT ============ */
 
 .qr-box {
   display: grid;
