@@ -112,6 +112,38 @@ class TotpManageIn(TotpCodeIn):
     current_password: str = Field(min_length=8, max_length=128)
 
 
+AI_PROVIDERS = ("openai", "anthropic", "gemini")
+AI_URL_RE = r"^$|^https?://[^/\s]+(:[0-9]{1,5})?(/.*)?$"
+AI_MODEL_RE = r"^[A-Za-z0-9_.\-/:]{1,100}$"
+
+
+class AiMsgIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class AiChatIn(BaseModel):
+    messages: List[AiMsgIn] = Field(min_length=1, max_length=12)
+
+
+class AiSettingsIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    enabled: bool = False
+    provider: Literal["openai", "anthropic", "gemini"] = "openai"
+    base_url: str = Field(default="", max_length=300, pattern=AI_URL_RE)
+    model: str = Field(default="", max_length=100, pattern=r"^$|^[A-Za-z0-9_.\-/:]{1,100}$")
+    api_key: str = Field(default="", max_length=500)
+    extra: str = Field(default="", max_length=500)
+
+    @field_validator("extra", mode="before")
+    @classmethod
+    def _strip_extra(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
+
+
 class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

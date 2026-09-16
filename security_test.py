@@ -570,6 +570,27 @@ stfa, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456"}), AUTH
 check("2fa/enable without password -> 422", stfa == 422, f"got {stfa}")
 stfa2, _, _ = req("POST", "/api/2fa/enable", json.dumps({"code": "123456", "current_password": "WrongPass12345"}), AUTH2)
 check("2fa/enable with wrong password rejected", stfa2 in (400, 429), f"got {stfa2}")
+
+# ---- 34b. AI assistant: auth, validation, no key leak, needs config ----
+stai, _, _ = req("GET", "/api/ai/settings")
+check("ai settings requires auth", stai == 401, f"got {stai}")
+staip, _, _ = req("POST", "/api/ai/chat", json.dumps({"messages": [{"role": "user", "content": "hi"}]}), {"X-Requested-With": "XMLHttpRequest"})
+check("ai chat requires auth", staip in (401, 403), f"got {staip}")
+stai2, _, aib = req("GET", "/api/ai/settings", headers=AUTH2)
+aiok = stai2 == 200
+try:
+    aij = json.loads(aib)
+    blob = json.dumps(aij).lower()
+    aiok = aiok and "api_key" not in aij and "sk-" not in blob
+except Exception:
+    aiok = False
+check("ai settings never leaks the key", aiok, f"got {stai2}")
+staibad, _, _ = req("PUT", "/api/ai/settings", json.dumps({"provider": "evil", "model": "x"}), AUTH2)
+check("ai settings rejects bad provider", staibad == 422, f"got {staibad}")
+staihist, _, _ = req("POST", "/api/ai/chat", json.dumps({"messages": [{"role": "user", "content": "x"}] * 13}), AUTH2)
+check("ai chat caps history length", staihist == 422, f"got {staihist}")
+stainc, _, _ = req("POST", "/api/ai/chat", json.dumps({"messages": [{"role": "user", "content": "hi"}]}), AUTH2)
+check("ai chat without config -> 400", stainc == 400, f"got {stainc}")
 stup, _, upb = req("GET", "/api/update/status", headers=AUTH2)
 upok = stup == 200
 try:

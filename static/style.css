@@ -768,6 +768,34 @@ textarea:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255, 39, 6
 .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .ring-center b { font-size: 26px; line-height: 1; }
 .ring-center span { font-size: 12px; color: var(--muted); }
+/* AI assistant: floating circle + chat window (below modals at z-50) */
+.ai-fab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 40;
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 1px solid var(--border-red); background: var(--red); color: #fff;
+  font-size: 24px; font-weight: 800; cursor: pointer; font-family: inherit;
+  box-shadow: 0 8px 28px var(--red-glow); transition: transform .2s ease;
+}
+.ai-fab:hover { transform: scale(1.08); }
+.ai-chat {
+  position: fixed; right: 22px; bottom: 88px; z-index: 40;
+  width: min(380px, calc(100vw - 32px)); max-height: min(540px, calc(100vh - 120px));
+  display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border-red); border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .65), 0 0 26px var(--red-glow);
+  overflow: hidden;
+}
+.ai-chat-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.ai-chat-head b { font-size: 15px; }
+.ai-chat-head .muted { flex: 1; font-size: 12px; }
+.ai-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
+.ai-msg { max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
+.ai-msg.user { align-self: flex-end; background: var(--red); color: #fff; }
+.ai-msg.bot { align-self: flex-start; background: var(--code-bg); border: 1px solid var(--border); }
+.ai-msg.typing { color: var(--muted); }
+.ai-input-row { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+.ai-input-row input { flex: 1; background: var(--code-bg); border: 1px solid var(--border); border-radius: 9px; color: var(--text); padding: 9px 12px; font-size: 13.5px; font-family: inherit; min-width: 0; }
+.ai-input-row input:focus { outline: none; border-color: var(--red); }
 .sub-note { white-space: pre-line; border-color: var(--border-red); overflow-wrap: anywhere; }
 input[type="color"] { width: 100%; height: 42px; padding: 4px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
 /* Square app tiles */

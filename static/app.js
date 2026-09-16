@@ -338,7 +338,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); }
+    if (btn.dataset.section === "settings") { loadTfa(); loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "update") loadUpdate();
@@ -1163,6 +1163,84 @@ $("#update-now-btn").addEventListener("click", async () => {
     if (err.message !== "auth") toast(err.message, false);
   }
 });
+
+// ---- AI assistant ----
+let AI_HISTORY = [];
+function aiAddMsg(text, cls) {
+  const box = $("#ai-msgs");
+  const el = document.createElement("div");
+  el.className = "ai-msg " + cls;
+  el.textContent = text;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+async function loadAi() {
+  try {
+    const a = await api("/api/ai/settings");
+    $("#ai-enabled").checked = !!a.enabled;
+    $("#ai-provider").value = a.provider || "openai";
+    $("#ai-base").value = a.base_url || "";
+    $("#ai-model").value = a.model || "";
+    $("#ai-extra").value = a.extra || "";
+    const badge = $("#ai-badge");
+    if (badge) {
+      const ready = a.enabled && a.has_key && a.model;
+      badge.textContent = ready ? "ready" : "off";
+      badge.className = "badge proto " + (ready ? "ok" : "off");
+    }
+  } catch (_) {}
+}
+$("#ai-save-btn").addEventListener("click", async () => {
+  try {
+    await api("/api/ai/settings", {
+      method: "PUT",
+      body: {
+        enabled: $("#ai-enabled").checked,
+        provider: $("#ai-provider").value,
+        base_url: $("#ai-base").value.trim(),
+        model: $("#ai-model").value.trim(),
+        api_key: $("#ai-key").value,
+        extra: $("#ai-extra").value.trim()
+      }
+    });
+    $("#ai-key").value = "";
+    toast("AI settings saved");
+    loadAi();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+$("#ai-fab").addEventListener("click", () => {
+  $("#ai-chat").classList.toggle("hidden");
+  if (!$("#ai-chat").classList.contains("hidden")) {
+    if (!$("#ai-msgs").children.length) {
+      aiAddMsg("Hi! I know this panel inside-out. Ask me anything about users, protocols, settings or errors.", "bot");
+    }
+    $("#ai-input").focus();
+  }
+});
+$("#ai-close").addEventListener("click", () => $("#ai-chat").classList.add("hidden"));
+async function aiSend() {
+  const inp = $("#ai-input");
+  const text = inp.value.trim().slice(0, 2000);
+  if (!text) return;
+  inp.value = "";
+  aiAddMsg(text, "user");
+  AI_HISTORY.push({ role: "user", content: text });
+  AI_HISTORY = AI_HISTORY.slice(-11);
+  const typing = aiAddMsg("…", "bot typing");
+  try {
+    const r = await api("/api/ai/chat", { method: "POST", body: { messages: AI_HISTORY } });
+    typing.remove();
+    aiAddMsg(r.reply, "bot");
+    AI_HISTORY.push({ role: "assistant", content: r.reply });
+    AI_HISTORY = AI_HISTORY.slice(-12);
+  } catch (err) {
+    typing.remove();
+    aiAddMsg(err.message === "auth" ? "Session expired." : ("Error: " + err.message), "bot");
+  }
+}
+$("#ai-send").addEventListener("click", aiSend);
+$("#ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") aiSend(); });
 
 // ---- Telegram ----
 async function loadTelegram() {
