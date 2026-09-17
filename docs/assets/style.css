@@ -241,6 +241,7 @@ footer a { color: var(--red); text-decoration: none; }
 
 /* ---------- landing ---------- */
 .landing { max-width: 1080px; margin: 0 auto; padding: 0 24px 70px; }
+@media (min-width: 861px) { .landing { margin: 0 0 0 var(--sidebar-w); max-width: 1080px; } }
 .hero-xl { text-align: center; padding: 64px 16px 34px; }
 .hero-xl img { width: 110px; height: 110px; border-radius: 22px; box-shadow: 0 0 46px var(--red-glow); }
 .hero-xl h1 { font-size: 52px; letter-spacing: 12px; margin: 20px 0 8px; }
