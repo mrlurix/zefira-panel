@@ -297,7 +297,7 @@ async def lifespan(_: FastAPI):
             if not USERNAME_RE.match(username):
                 log.warning("Invalid ZEFIRA_ADMIN_USERNAME, falling back to 'admin'")
                 username = "admin"
-            password = os.environ.get("ZEFIRA_ADMIN_PASSWORD") or secrets.token_urlsafe(14)
+            password = (os.environ.get("ZEFIRA_ADMIN_PASSWORD") or "").strip() or secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
             s.commit()
             print("=" * 58)
@@ -984,7 +984,11 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
                 "generationConfig": {"maxOutputTokens": 800, "temperature": 0.3},
             }
         else:
-            url = (base_url or "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+            base = (base_url or "https://api.openai.com/v1").rstrip("/")
+            # Tolerate pasting the full endpoint URL instead of just the base.
+            if base.endswith("/chat/completions"):
+                base = base[: -len("/chat/completions")].rstrip("/")
+            url = base + "/chat/completions"
             payload = {
                 "model": model,
                 "messages": [{"role": "system", "content": system}, *msgs],
@@ -1026,6 +1030,10 @@ def api_ai_settings_get(admin: Admin = Depends(require_admin)):
 
 @app.put("/api/ai/settings")
 def api_ai_settings_put(data: AiSettingsIn, request: Request, admin: Admin = Depends(require_admin)):
+    if data.base_url:
+        m = re.search(r":([0-9]{1,5})(/|$)", data.base_url)
+        if m and int(m.group(1)) > 65535:
+            raise HTTPException(status_code=400, detail="Port out of range in base URL")
     with db.s() as s:
         _save_settings(s, {
             "ai_enabled": "1" if data.enabled else "0",
