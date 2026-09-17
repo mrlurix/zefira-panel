@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ title }}</title>
   <link rel="icon" href="/static/logo.png" type="image/png">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
@@ -528,6 +528,6 @@
   </div>
 </div>
 
-<script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </body>
 </html>
