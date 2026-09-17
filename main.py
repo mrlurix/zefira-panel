@@ -80,6 +80,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 log = logging.getLogger("zefira")
 
 db = Database(BASE_DIR / "instance" / "zefira.db")
+try:
+    APP_VERSION = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip() or "1"
+except OSError:
+    APP_VERSION = "1"
 # Autoescape ON: every {{ }} in templates is HTML-escaped. Login/panel only
 # interpolate server constants, so their output is unchanged; user-facing
 # pages (subscription dashboard) are XSS-safe by default.
@@ -466,12 +470,12 @@ def root():
 
 @app.get("/login")
 def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {"title": "Sign in | Zefira"})
+    return templates.TemplateResponse(request, "login.html", {"title": "Sign in | Zefira", "asset_v": APP_VERSION})
 
 
 @app.get("/panel")
 def panel_page(request: Request):
-    return templates.TemplateResponse(request, "panel.html", {"title": "Zefira Panel"})
+    return templates.TemplateResponse(request, "panel.html", {"title": "Zefira Panel", "asset_v": APP_VERSION})
 
 
 @app.post("/api/login")
@@ -2314,9 +2318,9 @@ def subscription(token: str, request: Request):
     srv = load_srv()
     inbounds = load_inbounds()
     if not want_clash and wants_dashboard(request):
-        return templates.TemplateResponse(
-            request, "sub.html", _dashboard_ctx(udict, srv, inbounds, request)
-        )
+        ctx = _dashboard_ctx(udict, srv, inbounds, request)
+        ctx["asset_v"] = APP_VERSION
+        return templates.TemplateResponse(request, "sub.html", ctx)
     blocked = load_blocked_for_clash()
     info = _sub_info(udict)
     if want_clash:
