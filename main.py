@@ -155,9 +155,37 @@ def load_appearance() -> dict:
     return out
 
 
-MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "settings")
-MENU_ALWAYS = ("dashboard", "users", "inbounds", "settings")
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "settings")
+MENU_ALWAYS = ("dashboard", "users", "inbounds", "customize", "settings")
 DASH_BLOCKS = ("usage", "link", "groups", "apps")
+
+
+def _slot_missing(ordered: list, canonical: tuple) -> list:
+    """Merge ids missing from a user order without disturbing its intent.
+
+    A missing id slots into its canonical spot only when every
+    canonically-earlier id is already present (i.e. it fills a genuine
+    gap, like a newly added section). Otherwise it appends, so an order
+    like ["apps"] never gets silently re-sorted back to defaults.
+    """
+    ordered = list(ordered)
+    canon_index = {c: i for i, c in enumerate(canonical)}
+    present = set(ordered)
+    original = set(ordered)
+    for m in canonical:
+        if m in present:
+            continue
+        earlier = canonical[: canon_index[m]]
+        if earlier and all(c in original for c in earlier):
+            pos = next(
+                (k for k, x in enumerate(ordered) if canon_index.get(x, 10**9) > canon_index[m]),
+                len(ordered),
+            )
+            ordered.insert(pos, m)
+        else:
+            ordered.append(m)
+        present.add(m)
+    return ordered
 
 
 def _canon_menu_layout(raw: str) -> list:
@@ -174,10 +202,11 @@ def _canon_menu_layout(raw: str) -> list:
             if sid in MENU_SECTIONS and sid not in seen:
                 seen.add(sid)
                 out.append({"id": sid, "hidden": bool(it.get("hidden")) and sid not in MENU_ALWAYS})
-    for sid in MENU_SECTIONS:
-        if sid not in seen:
-            out.append({"id": sid, "hidden": False})
-    return out
+    order = [it["id"] for it in out]
+    hidden = {it["id"] for it in out if it["hidden"]}
+    ordered_ids = _slot_missing(order, MENU_SECTIONS)
+    by_id = {it["id"]: it for it in out}
+    return [{"id": sid, "hidden": sid in hidden} for sid in ordered_ids]
 
 
 def _canon_dash_layout(raw: str) -> dict:
@@ -193,10 +222,7 @@ def _canon_dash_layout(raw: str) -> dict:
                     order.append(bid)
         if isinstance(data.get("hidden"), list):
             hidden = {b for b in data["hidden"][:16] if b in DASH_BLOCKS}
-    for bid in DASH_BLOCKS:
-        if bid not in order:
-            order.append(bid)
-    return {"order": order, "hidden": sorted(hidden)}
+    return {"order": _slot_missing(order, DASH_BLOCKS), "hidden": sorted(hidden)}
 
 
 def _hex_to_rgb(h: str) -> tuple:

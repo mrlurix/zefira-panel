@@ -50,6 +50,10 @@
         <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
         <span>Update</span>
       </button>
+      <button class="nav-btn" data-section="customize" data-title="Personalize">
+        <svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 1 9-9c0 3-2 4.5-3.5 4.5h-2a2 2 0 0 0-1.5 3.3c.5.6-.3 1.2-2 1.2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
+        <span>Personalize</span>
+      </button>
       <button class="nav-btn" data-section="settings" data-title="Settings & Security">
         <svg viewBox="0 0 24 24"><path d="M4 6h16"/><circle cx="9" cy="6" r="2.5"/><path d="M4 12h16"/><circle cx="15" cy="12" r="2.5"/><path d="M4 18h16"/><circle cx="7" cy="18" r="2.5"/></svg>
         <span>Settings</span>
@@ -362,7 +366,7 @@
     </section>
 
 
-    <section id="section-settings" class="section">
+    <section id="section-customize" class="section">
       <div class="settings-grid">
 
         <div class="card form-card">
@@ -384,6 +388,26 @@
             <button type="button" id="ap-reset-btn" class="btn btn-ghost">Reset to defaults</button>
           </div>
         </div>
+
+
+        <div class="card form-card">
+          <div class="card-head"><h2>Menu Layout</h2></div>
+          <p class="hint mt-0">Reorder the left menu and hide sections you never use. Dashboard, Users, Inbounds, Personalize and Settings always stay.</p>
+          <ul class="audit-list" id="menu-layout-list"></ul>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2>User Dashboard Layout</h2></div>
+          <p class="hint mt-0">Reorder or hide cards on every customer's subscription page.</p>
+          <ul class="audit-list" id="dash-layout-list"></ul>
+        </div>
+
+      </div>
+    </section>
+
+
+    <section id="section-settings" class="section">
+      <div class="settings-grid">
 
         <div class="card form-card">
           <div class="card-head"><h2>AI Assistant</h2><span class="badge proto" id="ai-badge">off</span></div>
@@ -413,18 +437,6 @@
             <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block">Create Token</button></div>
           </div>
           <ul class="audit-list" id="apitoken-list"></ul>
-        </div>
-
-        <div class="card form-card">
-          <div class="card-head"><h2>Menu Layout</h2></div>
-          <p class="hint mt-0">Reorder the left menu and hide sections you never use. Dashboard, Users, Inbounds and Settings always stay.</p>
-          <ul class="audit-list" id="menu-layout-list"></ul>
-        </div>
-
-        <div class="card form-card">
-          <div class="card-head"><h2>User Dashboard Layout</h2></div>
-          <p class="hint mt-0">Reorder or hide cards on every customer's subscription page.</p>
-          <ul class="audit-list" id="dash-layout-list"></ul>
         </div>
 
         <form id="pw-form" class="card form-card">
