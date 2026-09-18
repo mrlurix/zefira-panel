@@ -438,6 +438,27 @@ if strs == 200:
         req("DELETE", f"/api/users/{u['id']}", headers=AUTH2)
 check("restore atomic: bad row skipped, good row kept", ok_atomic)
 
+# ---- 25b. Restore imports API tokens (fresh session: restore reissues cookies) ----
+strst, _, rsb = req("POST", "/api/restore", json.dumps({
+    "zefira_backup": True, "users": [], "password_confirm": PASSWORD,
+    "api_tokens": [{"name": "restored-bot", "prefix": "zfp_abc",
+                    "token_sha": "d" * 64}]}), AUTH2)
+try:
+    check("restore imports api tokens", strst == 200 and json.loads(rsb).get("restored_tokens") == 1, f"got {strst}")
+except Exception:
+    check("restore imports api tokens", False, f"got {strst}")
+_st, _tokx, _ = login_with(PASSWORD)
+AUTH2 = {"Cookie": f"zefira_session={_tokx}", "X-Requested-With": "XMLHttpRequest"}
+stlst2, _, lsb2 = req("GET", "/api/api-tokens", headers=AUTH2)
+try:
+    items2 = json.loads(lsb2)
+    tid2 = next((t["id"] for t in items2 if t["name"] == "restored-bot"), None)
+    check("restored token listed", tid2 is not None)
+    if tid2:
+        req("DELETE", f"/api/api-tokens/{tid2}", headers=AUTH2)
+except Exception:
+    check("restored token listed", False)
+
 
 # ---- 22. CORP header ----
 stc2, hdrc2, _ = req("GET", "/panel")
@@ -634,6 +655,10 @@ except Exception:
 check("appearance public shows only display values", apok, f"got {stap}")
 stauw, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "#00c853"}), {"X-Requested-With": "XMLHttpRequest"})
 check("appearance PUT requires auth", stauw in (401, 403), f"got {stauw}")
+sttk, _, _ = req("GET", "/api/api-tokens")
+check("api tokens require auth", sttk == 401, f"got {sttk}")
+sttk2, _, _ = req("POST", "/api/api-tokens", json.dumps({"name": "x"}), {"X-Requested-With": "XMLHttpRequest"})
+check("api token create blocked w/o session", sttk2 in (401, 403), f"got {sttk2}")
 stupd, _, _ = req("GET", "/api/update/status")
 check("update status requires auth", stupd == 401, f"got {stupd}")
 stupa, _, _ = req("POST", "/api/update/apply", json.dumps({"password_confirm": "x"}), {"X-Requested-With": "XMLHttpRequest"})
@@ -663,6 +688,45 @@ if stmk2 == 200:
         ext_ok = False
     req("DELETE", f"/api/users/{uid}", headers=AUTH2)
 check("extending expired account starts from today", ext_ok, f"created={stmk2}")
+
+# ---- 35b. API tokens lifecycle (bots & integrations) ----
+stmk3, _, mkb3 = req("POST", "/api/api-tokens", json.dumps({"name": "pentest-bot"}), AUTH2)
+tok_once = ""
+try:
+    tj = json.loads(mkb3)
+    tok_once = tj.get("token_once", "")
+    check("api token create returns once-only secret", stmk3 == 200 and tok_once.startswith("zfp_"), f"got {stmk3}")
+except Exception:
+    check("api token create returns once-only secret", False, f"got {stmk3}")
+BH = {"Authorization": f"Bearer {tok_once}"} if tok_once else {}
+stb, _, mb = req("GET", "/api/me", headers=BH)
+try:
+    check("bearer works without cookie", stb == 200 and json.loads(mb).get("username") == ADMIN, f"got {stb}")
+except Exception:
+    check("bearer works without cookie", False, f"got {stb}")
+stbp, _, _ = req("POST", "/api/users", json.dumps(
+    {"username": "bottmp1", "protocols": ["vless"], "volume_gb": 1, "days": 1}), BH)
+check("bearer POST works without CSRF header", stbp == 200, f"got {stbp}")
+if stbp == 200:
+    lst = json.loads(req("GET", "/api/users?q=bottmp1", headers=AUTH2)[2])
+    for u2 in lst["items"]:
+        req("DELETE", f"/api/users/{u2['id']}", headers=AUTH2)
+stbb, _, _ = req("GET", "/api/me", headers={"Authorization": "Bearer garbage-token"})
+check("garbage bearer rejected", stbb == 401, f"got {stbb}")
+stlst, _, lsb = req("GET", "/api/api-tokens", headers=AUTH2)
+try:
+    items = json.loads(lsb)
+    tid = next((t["id"] for t in items if t["name"] == "pentest-bot"), None)
+    blob = json.dumps(items).lower()
+    check("token list hides hashes", stlst == 200 and tid is not None and "token_sha" not in blob and "token_once" not in blob, f"got {stlst}")
+except Exception:
+    tid = None
+    check("token list hides hashes", False, f"got {stlst}")
+if tid:
+    stdel, _, _ = req("DELETE", f"/api/api-tokens/{tid}", headers=AUTH2)
+    check("token revoke", stdel == 200, f"got {stdel}")
+    stdead, _, _ = req("GET", "/api/me", headers=BH)
+    check("revoked bearer rejected", stdead == 401, f"got {stdead}")
 
 # ---- 36. Logout invalidates the session server-side ----
 stme, _, _ = req("GET", "/api/me", headers=AUTH2)

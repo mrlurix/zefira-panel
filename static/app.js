@@ -334,7 +334,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); }
+    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); loadApiTokens(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "nodes") loadSrvNodes();
@@ -1326,6 +1326,72 @@ async function aiSend() {
 }
 $("#ai-send").addEventListener("click", aiSend);
 $("#ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") aiSend(); });
+
+// ---- API tokens (bots & integrations) ----
+function renderApiTokens(items) {
+  const ul = $("#apitoken-list");
+  ul.textContent = "";
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "No API tokens yet. Create one above — it is shown only once.";
+    ul.appendChild(li);
+    return;
+  }
+  for (const t of items) {
+    const li = document.createElement("li");
+    li.style.display = "flex";
+    li.style.flexWrap = "wrap";
+    li.style.alignItems = "center";
+    li.style.gap = "6px";
+    const main = document.createElement("span");
+    main.textContent = t.name;
+    const meta = document.createElement("small");
+    const bits = [`${t.prefix}…`];
+    bits.push(t.last_used_at ? `last used ${t.last_used_at}` : "never used");
+    meta.textContent = bits.join(" · ");
+    li.appendChild(main);
+    li.appendChild(meta);
+    const delBtn = iconBtn("Revoke token", ICONS.trash, "bad");
+    delBtn.dataset.act = "del-token";
+    delBtn.dataset.id = t.id;
+    delBtn.dataset.name = t.name;
+    li.appendChild(delBtn);
+    ul.appendChild(li);
+  }
+}
+async function loadApiTokens() {
+  try {
+    renderApiTokens(await api("/api/api-tokens"));
+  } catch (_) {}
+}
+$("#apitoken-create-btn").addEventListener("click", async () => {
+  const name = $("#apitoken-name").value.trim();
+  if (!name) { toast("Enter a token name", false); return; }
+  try {
+    const r = await api("/api/api-tokens", { method: "POST", body: { name } });
+    $("#apitoken-name").value = "";
+    try {
+      await navigator.clipboard.writeText(r.token_once);
+      toast(`Token created and copied — it will never be shown again`);
+    } catch (_) {
+      prompt("Copy your token now (shown only once):", r.token_once);
+    }
+    loadApiTokens();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+$("#apitoken-list").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".row-btn");
+  if (!btn) return;
+  try {
+    if (btn.dataset.act === "del-token") {
+      if (!confirm(`Revoke API token "${btn.dataset.name}"? Connected bots stop working immediately.`)) return;
+      await api("/api/api-tokens/" + btn.dataset.id, { method: "DELETE" });
+      toast("Token revoked");
+      loadApiTokens();
+    }
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
 
 // ---- Telegram ----
 async function loadTelegram() {

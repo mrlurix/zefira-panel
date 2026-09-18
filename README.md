@@ -56,6 +56,7 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - QR codes for every subscription, ZIP download for configs.
 - AI assistant bubble: panel-only helper (OpenAI/Anthropic/Gemini/Ollama) for beginners.
 - One-click updates from GitHub with changelog preview, right inside the panel.
+- API tokens (`zfp_…` bearer) for Telegram bots and dashboards — no CSRF header needed.
 - Full personalization: theme colors, brand name, dashboard message.
 - Strong password gate on sensitive actions, full audit log, system stats, Telegram notifications if you want.
 - JSON backup / restore (both password confirmed). Also imports/exports all settings.
@@ -78,7 +79,7 @@ There is a test suite with 81 checks that hits the running panel from the outsid
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `101/101 checks passed` or similar - if not, open an issue.
+It should print `112/112 checks passed` or similar - if not, open an issue.
 
 ### API
 
