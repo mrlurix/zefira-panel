@@ -87,6 +87,17 @@ It's a normal REST API, all under `/api/*`. Check the Docs page in the panel for
 
 MIT - see [LICENSE](LICENSE). Do what you want, just keep the notice.
 
+### Donation
+
+If Zefira helps you, consider supporting it: full details (wallets + contact) on the [donate page](https://mrlurix.github.io/zefira-panel/donate.html).
+
+```text
+TRX (Tron):      YOUR_TRX_ADDRESS_HERE
+TON:             YOUR_TON_ADDRESS_HERE
+USDT (TRC-20):   YOUR_USDT_TRC20_ADDRESS_HERE
+Telegram:        @YourHandle
+```
+
 ---
 
 If you like it, give it a star. Issues and PRs are welcome.
