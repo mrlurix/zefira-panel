@@ -22,6 +22,8 @@
     <div class="card sub-span sub-note">{{ dash_note }}</div>
     {% endif %}
 
+    {% for b in blocks %}
+    {% if b.id == "usage" %}
     <div class="card">
       <div class="card-head"><h2>Usage</h2></div>
       <div class="sub-usage">
@@ -42,7 +44,7 @@
         </div>
       </div>
     </div>
-
+    {% elif b.id == "link" %}
     <div class="card">
       <div class="card-head"><h2>Subscription link</h2></div>
       <p class="mono sub-url">{{ sub_url }}</p>
@@ -60,25 +62,24 @@
         </div>
       </div>
     </div>
-
-    {% for g in groups %}
+    {% elif b.id == "group" %}
+    {% set outer = loop.index %}
     <div class="card">
-      <div class="card-head"><h2>{{ g.label }}</h2></div>
-      {% for link in g.links %}
+      <div class="card-head"><h2>{{ b.label }}</h2></div>
+      {% for link in b.links %}
       <div class="sub-link-row">
         <p class="mono sub-url">{{ link }}</p>
         <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ link }}" data-label="Copy">Copy</button>
       </div>
       {% endfor %}
-      {% if g.config %}
-      <textarea class="sub-config" id="cfg-{{ loop.index }}" readonly rows="8">{{ g.config }}</textarea>
+      {% if b.config %}
+      <textarea class="sub-config" id="cfg-{{ outer }}-{{ b.links|length }}" readonly rows="8">{{ b.config }}</textarea>
       <div class="reality-actions">
-        <button type="button" class="btn btn-sm btn-ghost" data-copy-target="#cfg-{{ loop.index }}" data-label="Copy config">Copy config</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy-target="#cfg-{{ outer }}-{{ b.links|length }}" data-label="Copy config">Copy config</button>
       </div>
       {% endif %}
     </div>
-    {% endfor %}
-
+    {% elif b.id == "apps" %}
     <div class="card sub-span">
       <div class="card-head"><h2>Apps</h2></div>
       <p class="hint">Official downloads — pick your platform:</p>
@@ -90,6 +91,8 @@
       </div>
       <p class="hint">Keep this page private — anyone with your link uses your volume.</p>
     </div>
+    {% endif %}
+    {% endfor %}
   </main>
   <script src="/static/sub.js?v={{ asset_v }}" defer></script>
 </body>

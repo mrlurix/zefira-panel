@@ -92,6 +92,8 @@ class AppearanceIn(BaseModel):
     theme_muted: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
     brand_name: str = Field(default="", max_length=24, pattern=BRAND_RE)
     dash_note: str = Field(default="", max_length=300)
+    menu_layout: str = Field(default="", max_length=2000)
+    dash_layout: str = Field(default="", max_length=2000)
 
     @field_validator("dash_note", mode="before")
     @classmethod
