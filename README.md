@@ -95,7 +95,6 @@ If Zefira helps you, consider supporting it: full details (wallets + contact) on
 TRX (Tron):      YOUR_TRX_ADDRESS_HERE
 TON:             YOUR_TON_ADDRESS_HERE
 USDT (TRC-20):   YOUR_USDT_TRC20_ADDRESS_HERE
-Telegram:        @YourHandle
 ```
 
 ---
