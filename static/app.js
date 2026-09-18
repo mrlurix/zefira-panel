@@ -591,6 +591,8 @@ async function loadAppearance() {
     $("#ap-accent").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_accent || "") ? a.theme_accent : "#ff2740";
     $("#ap-bg").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_bg || "") ? a.theme_bg : "#06060a";
     $("#ap-card").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_card || "") ? a.theme_card : "#10101a";
+    $("#ap-text").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_text || "") ? a.theme_text : "#ececf2";
+    $("#ap-muted").value = /^#[0-9a-fA-F]{6}$/.test(a.theme_muted || "") ? a.theme_muted : "#8b8c9e";
     $("#ap-brand").value = a.brand_name === "ZEFIRA" ? "" : (a.brand_name || "");
     $("#ap-note").value = a.dash_note || "";
     applyBrand(a.brand_name);
@@ -604,6 +606,8 @@ $("#ap-save-btn").addEventListener("click", async () => {
         theme_accent: $("#ap-accent").value,
         theme_bg: $("#ap-bg").value,
         theme_card: $("#ap-card").value,
+        theme_text: $("#ap-text").value,
+        theme_muted: $("#ap-muted").value,
         brand_name: $("#ap-brand").value.trim(),
         dash_note: $("#ap-note").value.trim()
       }
@@ -617,7 +621,7 @@ $("#ap-reset-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/appearance", {
       method: "PUT",
-      body: { theme_accent: "", theme_bg: "", theme_card: "", brand_name: "", dash_note: "" }
+      body: { theme_accent: "", theme_bg: "", theme_card: "", theme_text: "", theme_muted: "", brand_name: "", dash_note: "" }
     });
     applyBrand(r.brand_name);
     loadAppearance();

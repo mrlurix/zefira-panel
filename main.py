@@ -120,11 +120,13 @@ ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
 
-APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "brand_name", "dash_note"}
+APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted", "brand_name", "dash_note"}
 APPEARANCE_DEFAULTS = {
     "theme_accent": "#ff2740",
     "theme_bg": "#06060a",
     "theme_card": "#10101a",
+    "theme_text": "#ececf2",
+    "theme_muted": "#8b8c9e",
     "brand_name": "ZEFIRA",
     "dash_note": "",
 }
@@ -134,7 +136,7 @@ def load_appearance() -> dict:
     out = {}
     for k in APPEARANCE_KEYS:
         v = (cached_setting(k) or "").strip()
-        if k in ("theme_accent", "theme_bg", "theme_card"):
+        if k in ("theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted"):
             # Fail safe to defaults: a hand-edited DB value must never 500
             # /theme.css or inject CSS (only #rrggbb ever reaches the stylesheet).
             if not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
@@ -165,6 +167,8 @@ def build_theme_css(vals: dict) -> str:
     a = vals.get("theme_accent") or APPEARANCE_DEFAULTS["theme_accent"]
     bg = vals.get("theme_bg") or APPEARANCE_DEFAULTS["theme_bg"]
     card = vals.get("theme_card") or APPEARANCE_DEFAULTS["theme_card"]
+    text = vals.get("theme_text") or APPEARANCE_DEFAULTS["theme_text"]
+    muted = vals.get("theme_muted") or APPEARANCE_DEFAULTS["theme_muted"]
     r, g, b = _hex_to_rgb(a)
     return (
         ":root{"
@@ -172,6 +176,7 @@ def build_theme_css(vals: dict) -> str:
         f"--border-red:rgba({r},{g},{b},.28);--red-glow:rgba({r},{g},{b},.35);"
         f"--bg:{bg};--bg-2:{_lighten(bg, 0.07)};"
         f"--card:{card};--card-2:{_lighten(card, 0.09)};"
+        f"--text:{text};--muted:{muted};"
         "}\n"
     )
 
@@ -1042,6 +1047,8 @@ def api_appearance_put(data: AppearanceIn, request: Request, admin: Admin = Depe
             "theme_accent": data.theme_accent,
             "theme_bg": data.theme_bg,
             "theme_card": data.theme_card,
+            "theme_text": data.theme_text,
+            "theme_muted": data.theme_muted,
             "brand_name": data.brand_name,
             "dash_note": data.dash_note,
         })
@@ -1638,6 +1645,7 @@ def api_srvnodes_patch(node_id: int, data: ServerNodePatchIn, request: Request, 
             node.note = data.note
         if data.address is not None or data.check_port is not None:
             node.status = "unknown"
+            node.latency_ms = None
         s.commit()
         out = node.to_dict()
         audit(s, "SRVNODE_PATCH", f"{node.name} by {admin.username}", client_ip(request))
@@ -1817,7 +1825,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     ok = sval.lower() in ("0", "1", "true", "false", "yes", "no", "on", "off", "")
                     if ok:
                         sval = "1" if sval.lower() in ("1", "true", "yes", "on") else "0"
-                elif k in ("theme_accent", "theme_bg", "theme_card"):
+                elif k in ("theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted"):
                     if sval and not re.fullmatch(r"#[0-9a-fA-F]{6}", sval):
                         ok = False
                 elif k == "brand_name":

@@ -665,6 +665,8 @@ stupa, _, _ = req("POST", "/api/update/apply", json.dumps({"password_confirm": "
 check("update apply requires auth", stupa in (401, 403), f"got {stupa}")
 stabad, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "red", "brand_name": "<script>"}), AUTH2)
 check("appearance rejects non-hex color / html brand", stabad == 422, f"got {stabad}")
+stabad2, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_text": "#12345", "theme_muted": "blue"}), AUTH2)
+check("appearance rejects bad text colors", stabad2 == 422, f"got {stabad2}")
 stcss, hdrcss, cssb = req("GET", "/theme.css")
 cssb = cssb.decode("utf-8", "replace") if isinstance(cssb, bytes) else cssb
 check("theme.css served as css with defaults", stcss == 200 and "text/css" in hget(hdrcss, "Content-Type") and ":root" in cssb and "#ff2740" in cssb, f"got {stcss}")

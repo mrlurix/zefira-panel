@@ -88,6 +88,8 @@ class AppearanceIn(BaseModel):
     theme_accent: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
     theme_bg: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
     theme_card: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
+    theme_text: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
+    theme_muted: str = Field(default="", max_length=7, pattern=HEX_COLOR_RE)
     brand_name: str = Field(default="", max_length=24, pattern=BRAND_RE)
     dash_note: str = Field(default="", max_length=300)
 
@@ -284,6 +286,13 @@ class ServerNodePatchIn(BaseModel):
     address: Optional[str] = Field(default=None, min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
     check_port: Optional[int] = Field(default=None, ge=1, le=65535)
     note: Optional[str] = Field(default=None, max_length=200)
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
 
 
 class RestoreUserIn(BaseModel):
