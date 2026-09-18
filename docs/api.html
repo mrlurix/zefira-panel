@@ -45,6 +45,7 @@
 
 <div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
 <p><b>Bots &amp; integrations:</b> create a long-lived token under <b>Settings → API Tokens</b> and send it as <code>Authorization: Bearer zfp_…</code> — no CSRF header needed then. Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime.</p>
+<p>Ready-made reseller bots: <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node">Node.js</a> — plans keyboard, account creation, subscription link.</p>
 
 <h2 id="auth-account">Auth &amp; account</h2>
 <table>
