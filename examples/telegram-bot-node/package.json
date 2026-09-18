@@ -1,0 +1,10 @@
+{
+  "name": "zefira-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zefira reseller bot (Telegram)",
+  "main": "bot.js",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
