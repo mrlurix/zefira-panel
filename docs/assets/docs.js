@@ -194,6 +194,84 @@ document.querySelectorAll("pre").forEach(function (pre) {
   window.__zefiraSearch = { open: open, close: close, isOpen: isOpen };
 })();
 
+// Online donations via Shieldz (worker holds the secret key).
+// Page works without configuration: amounts simply stay disabled.
+(function () {
+  var payBtn = document.getElementById("donate-pay");
+  if (!payBtn) return;
+  var box = document.getElementById("donate-amounts");
+  var custom = document.getElementById("donate-custom");
+  var status = document.getElementById("donate-status");
+  var cfg = { api: "", currency: "USD", presets: [5, 10, 25, 50], min: 1, max: 500 };
+  var selected = null;
+  function say(msg) { if (status) status.textContent = msg; }
+  function paint() {
+    box.querySelectorAll(".amt-btn").forEach(function (b) {
+      b.classList.toggle("sel", String(selected) === b.getAttribute("data-amt"));
+    });
+  }
+  (cfg.presets || []).forEach(function (p) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "amt-btn";
+    b.setAttribute("data-amt", String(p));
+    b.textContent = "$" + p;
+    b.addEventListener("click", function () {
+      selected = p;
+      if (custom) custom.value = "";
+      paint();
+    });
+    box.appendChild(b);
+  });
+  if (custom) custom.addEventListener("input", function () { selected = null; paint(); });
+  fetch("assets/donate-config.json").then(function (r) { return r.json(); }).then(function (j) {
+    if (j && typeof j === "object") {
+      if (typeof j.api === "string") cfg.api = j.api;
+      if (j.min) cfg.min = j.min;
+      if (j.max) cfg.max = j.max;
+    }
+    if (!cfg.api) {
+      payBtn.disabled = true;
+      say("Online payments are not connected yet — use a wallet address below.");
+    }
+  }).catch(function () {
+    payBtn.disabled = true;
+    say("Online payments are not connected yet — use a wallet address below.");
+  });
+  payBtn.addEventListener("click", async function () {
+    var amount = selected;
+    if (amount == null && custom && custom.value !== "") {
+      amount = Math.floor(Number(custom.value));
+    }
+    if (!amount || !(amount >= cfg.min && amount <= cfg.max)) {
+      say("Enter an amount between $" + cfg.min + " and $" + cfg.max + ".");
+      return;
+    }
+    if (!cfg.api) { say("Online payments are not connected yet."); return; }
+    payBtn.disabled = true;
+    say("Creating secure checkout…");
+    try {
+      const res = await fetch(cfg.api, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_usd: amount })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (_) {}
+      if (!res.ok || !data || typeof data.pay_url !== "string" || !/^https:\/\/shieldz\.cash\//.test(data.pay_url)) {
+        say("Payment service error — try again or use a wallet below.");
+        payBtn.disabled = false;
+        return;
+      }
+      say("Redirecting to secure checkout…");
+      location.href = data.pay_url;
+    } catch (_) {
+      say("Network error — try again or use a wallet below.");
+      payBtn.disabled = false;
+    }
+  });
+})();
+
 // Floating support bubble (bottom corner) — static links only, no backend.
 (function () {
   var fab = document.createElement("button");
