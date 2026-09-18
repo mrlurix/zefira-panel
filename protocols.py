@@ -509,6 +509,12 @@ def _srvs_for(proto: str, srv: dict, inbounds: list) -> list:
     out = [(srv, "")]
     for i in (inbounds or []):
         if i.get("enabled") and i.get("protocol") == proto:
+            # Inbounds pinned to an explicitly offline/disabled server node
+            # are skipped so users never get dead endpoints. Unchecked
+            # nodes (unknown) still serve links: monitoring is advisory
+            # until the first check runs.
+            if i.get("node_id") and (not i.get("node_enabled", True) or i.get("node_status") == "offline"):
+                continue
             out.append((_variant_srv(srv, i), i["name"]))
     return out
 

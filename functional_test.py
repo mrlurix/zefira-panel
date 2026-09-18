@@ -71,13 +71,17 @@ if st != 200:
     sys.exit(2)
 
 st, _, sbody = req("GET", "/api/stats", headers=AUTH)
-total0 = 0
+total0 = -1
 try:
-    total0 = json.loads(sbody).get("total_users", 0)
+    if st == 200:
+        total0 = json.loads(sbody).get("total_users", -1)
 except Exception:
     pass
-if "--allow-live" not in sys.argv and total0 > 0:
-    print(f"ABORT: panel has {total0} user(s). Re-run with --allow-live.")
+if "--allow-live" not in sys.argv and total0 != 0:
+    if total0 > 0:
+        print(f"ABORT: panel has {total0} user(s). Re-run with --allow-live.")
+    else:
+        print("ABORT: could not verify the panel is empty. Refusing to run wipe tests.")
     sys.exit(2)
 
 # ---- stats / system / audit / me ----
@@ -184,6 +188,64 @@ if iid:
     check("inbound patch", st == 200, f"got {st}")
     st, _, _ = req("DELETE", f"/api/inbounds/{iid}", headers=AUTH)
     check("inbound delete", st == 200, f"got {st}")
+
+# ---- server nodes + offline failover ----
+st, _, snb = req("POST", "/api/server-nodes", json.dumps({
+    "name": "fte_srv", "address": "127.0.0.1", "check_port": 8000, "note": "func"}), AUTH)
+try:
+    snid = json.loads(snb).get("id")
+    check("server node create", st == 200 and bool(snid), f"got {st}")
+except Exception:
+    snid = None
+    check("server node create", False, f"got {st}")
+failover_ok = False
+if snid:
+    st, _, ckb = req("POST", f"/api/server-nodes/{snid}/check", headers=AUTH, timeout=30)
+    try:
+        check("server node check online", st == 200 and json.loads(ckb).get("status") == "online", f"got {st}")
+    except Exception:
+        check("server node check online", False, f"got {st}")
+    st, _, _ = req("POST", "/api/inbounds", json.dumps(
+        {"name": "fte_nodeib", "protocol": "vless", "port": 29443, "node_id": snid}), AUTH)
+    st, _, uub = req("POST", "/api/users", json.dumps({
+        "username": "fte_srvuser", "protocols": ["vless"], "volume_gb": 5, "days": 7}), AUTH)
+    try:
+        szk = json.loads(uub)["token"]
+        st, _, s1b = req("GET", f"/sub/{szk}", headers={"User-Agent": "v2rayNG/1.9"})
+        s1 = s1b.decode("utf-8", "replace") if isinstance(s1b, bytes) else s1b
+        inc1 = st == 200 and "fte_nodeib" in __import__("base64").b64decode(s1).decode("utf-8", "replace")
+    except Exception:
+        inc1 = False
+    check("pinned inbound served while node online", inc1)
+    req("PATCH", f"/api/server-nodes/{snid}", json.dumps({"address": "127.0.0.1", "check_port": 9}), AUTH)
+    st, _, ckb2 = req("POST", f"/api/server-nodes/{snid}/check", headers=AUTH, timeout=30)
+    off = st == 200
+    try:
+        off = off and json.loads(ckb2).get("status") == "offline"
+    except Exception:
+        off = False
+    st, _, s2b = req("GET", f"/sub/{szk}", headers={"User-Agent": "v2rayNG/1.9"})
+    s2 = s2b.decode("utf-8", "replace") if isinstance(s2b, bytes) else s2b
+    try:
+        exc2 = "fte_nodeib" not in __import__("base64").b64decode(s2).decode("utf-8", "replace")
+    except Exception:
+        exc2 = False
+    check("offline node links excluded", off and st == 200 and exc2, f"off={off} got {st}")
+    failover_ok = off and exc2
+    st, _, _ = req("DELETE", f"/api/server-nodes/{snid}", headers=AUTH)
+    check("server node delete", st == 200, f"got {st}")
+    st, _, ilb2 = req("GET", "/api/inbounds", headers=AUTH)
+    unpinned = any(b["name"] == "fte_nodeib" and not b.get("node_id") for b in json.loads(ilb2))
+    check("delete unpins its inbounds", unpinned)
+    for uname in ("fte_srvuser",):
+        lst = json.loads(req("GET", f"/api/users?q={uname}", headers=AUTH)[2])
+        for u2 in lst["items"]:
+            req("DELETE", f"/api/users/{u2['id']}", headers=AUTH)
+    for iname in ("fte_nodeib",):
+        lst = [b for b in json.loads(req("GET", "/api/inbounds", headers=AUTH)[2]) if b["name"] == iname]
+        for b in lst:
+            req("DELETE", f"/api/inbounds/{b['id']}", headers=AUTH)
+check("failover scenario complete", failover_ok)
 
 # ---- blocklist CRUD ----
 st, _, _ = req("POST", "/api/blocklist", json.dumps({"domain": "ftest-block.example.com"}), AUTH)

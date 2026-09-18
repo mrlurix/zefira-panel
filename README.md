@@ -49,7 +49,8 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - Users with traffic limit, expiry date, and notes. Start-on-first-use is supported if you want the timer to start only after the first connection. Pencil button per row edits note, volume, expiry, device limit.
 - Multiple protocols per user, all in one subscription. Supports normal base64 subs and Clash YAML (`?format=clash`). Link remarks show the plain username.
 - Browser dashboard: opening a subscription link in a browser shows usage, links, QR and apps; VPN clients always get raw bytes.
-- Inbounds: define extra ports/hosts per protocol and every user gets links for all of them.
+- Inbounds: define extra ports/hosts per protocol and every user gets links for all of them. Pin inbounds to server nodes — offline nodes are auto-excluded from links.
+- Server nodes: register remote servers with 5-minute health checks, latency and uptime; on-demand check, enable/disable, safe delete.
 - Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
 - BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable.
 - QR codes for every subscription, ZIP download for configs.
@@ -77,7 +78,7 @@ There is a test suite with 81 checks that hits the running panel from the outsid
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `97/97 checks passed` or similar - if not, open an issue.
+It should print `101/101 checks passed` or similar - if not, open an issue.
 
 ### API
 

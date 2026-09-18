@@ -80,7 +80,9 @@
 <tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td>Password-confirmed pull + pip + restart</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/ssl/issue</code> · <code>/ssl/renew</code></td><td><code>{domain, subdomain?, email}</code></td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/server-nodes…</code></td><td>Register servers, health, latency, uptime</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/server-nodes/{id}/check</code></td><td>On-demand probe</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol (optional node pin)</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/templates…</code> · <code>/api/nodes…</code> · <code>/api/blocklist…</code></td><td>Plans, tunnels, blocked sites</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/nodes/{id}/check</code> · <code>/guide</code> · <code>/reveal-token</code> · <code>/regen-token</code></td><td>Tunnel ops</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/backup</code></td><td>Full JSON export, password-confirmed (download)</td></tr>

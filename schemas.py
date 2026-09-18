@@ -243,6 +243,7 @@ class InboundIn(BaseModel):
     port: int = Field(ge=1, le=65535)
     host: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
     enabled: bool = True
+    node_id: Optional[int] = Field(default=None, ge=1)
 
 
 class InboundPatchIn(BaseModel):
@@ -251,6 +252,32 @@ class InboundPatchIn(BaseModel):
     enabled: Optional[bool] = None
     port: Optional[int] = Field(default=None, ge=1, le=65535)
     host: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    node_id: Optional[int] = Field(default=None, ge=1)
+
+
+class ServerNodeIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+    address: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
+    check_port: int = Field(default=443, ge=1, le=65535)
+    note: str = Field(default="", max_length=200)
+
+    @field_validator("note", mode="before")
+    @classmethod
+    def _strip_note(cls, v):
+        if isinstance(v, str):
+            return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
+        return v
+
+
+class ServerNodePatchIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    enabled: Optional[bool] = None
+    address: Optional[str] = Field(default=None, min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
+    check_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    note: Optional[str] = Field(default=None, max_length=200)
 
 
 class RestoreUserIn(BaseModel):

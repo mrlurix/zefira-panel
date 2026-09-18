@@ -43,6 +43,13 @@
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
 
+<h2 id="unreleased-nodes">Latest — Server nodes with auto-failover</h2>
+<ul>
+  <li><b>Nodes section:</b> register remote VPN servers with automatic health checks every 5 minutes (status, latency, uptime %).</li>
+  <li><b>Pin inbounds to nodes:</b> links from an offline/disabled node are automatically excluded from subscriptions until it recovers.</li>
+  <li>Also fixed: the missing tunnel-delete endpoint the UI was already calling.</li>
+</ul>
+
 <h2 id="unreleased">Latest — AI assistant, 2FA removed</h2>
 <ul>
   <li><b>AI assistant</b> bubble: a panel-only helper (OpenAI-compatible, Anthropic, Gemini) with an encrypted API key, scoped knowledge file and hourly quota.</li>

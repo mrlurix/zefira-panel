@@ -168,6 +168,7 @@ class Inbound(Base):
     port = Column(Integer, nullable=False)
     host = Column(String(253), nullable=False, default="")
     enabled = Column(Boolean, nullable=False, default=True)
+    node_id = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -177,6 +178,47 @@ class Inbound(Base):
             "port": self.port,
             "host": self.host,
             "enabled": self.enabled,
+            "node_id": self.node_id,
+        }
+
+
+class ServerNode(Base):
+    __tablename__ = "server_nodes"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(40), unique=True, nullable=False)
+    address = Column(String(253), nullable=False)
+    check_port = Column(Integer, nullable=False, default=443)
+    note = Column(Text, nullable=False, default="")
+    enabled = Column(Boolean, nullable=False, default=True)
+    status = Column(String(12), nullable=False, default="unknown")
+    latency_ms = Column(Integer, nullable=True)
+    success_count = Column(Integer, nullable=False, default=0)
+    fail_count = Column(Integer, nullable=False, default=0)
+    last_check = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    def uptime_pct(self) -> int | None:
+        total = (self.success_count or 0) + (self.fail_count or 0)
+        if not total:
+            return None
+        return round(100 * (self.success_count or 0) / total)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "address": self.address,
+            "check_port": self.check_port,
+            "note": self.note,
+            "enabled": self.enabled,
+            "status": self.status,
+            "latency_ms": self.latency_ms,
+            "uptime_pct": self.uptime_pct(),
+            "last_check": (
+                self.last_check.isoformat(timespec="seconds") + "Z" if self.last_check else None
+            ),
+            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
         }
 
 
@@ -302,6 +344,7 @@ class Database:
             self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
             self._add_column(conn, "vpn_users", "last_fetch_at", "last_fetch_at TIMESTAMP")
             self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
+            self._add_column(conn, "inbounds", "node_id", "node_id INTEGER")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
 

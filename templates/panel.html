@@ -34,6 +34,10 @@
         <svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 1 0-4.4-5.5"/><circle cx="9" cy="9" r="6"/><path d="M6.5 9h5"/><path d="M9 6.5v5"/></svg>
         <span>Tunnels</span>
       </button>
+      <button class="nav-btn" data-section="nodes" data-title="Server Nodes">
+        <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>
+        <span>Nodes</span>
+      </button>
       <button class="nav-btn" data-section="reality" data-title="Anti-Censorship">
         <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
         <span>Anti-Censorship</span>
@@ -171,6 +175,9 @@
         <div class="search-box flex-1">
           <input type="text" id="ib-host" placeholder="Host / domain override (optional)" spellcheck="false">
         </div>
+        <select id="ib-node" class="mw-140" title="Server node (optional)">
+          <option value="">Local panel</option>
+        </select>
         <button id="ib-add-btn" class="btn btn-primary">
           <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
           Add Inbound
@@ -181,7 +188,7 @@
         <p class="hint mt-0-mb-12">Each enabled inbound adds an extra endpoint for user configs of the same protocol (Marzban-style multi-inbound). With no inbounds defined, the global ports from Server Settings are used.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Protocol</th><th>Port</th><th>Host override</th><th>Enabled</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Protocol</th><th>Port</th><th>Host override</th><th>Node</th><th>Enabled</th><th>Actions</th></tr></thead>
             <tbody id="inbounds-tbody"></tbody>
           </table>
         </div>
@@ -308,8 +315,33 @@
     </section>
 
 
-    <section id="section-update" class="section">
+    <section id="section-nodes" class="section">
       <div class="settings-grid">
+
+        <div class="card form-card">
+          <div class="card-head"><h2>Register Server</h2></div>
+          <p class="hint mt-0">Add a remote VPN server. The panel probes it every 5 minutes (plus on demand) and shows latency + uptime. Pin inbounds to a node and its links vanish from subscriptions while it is offline.</p>
+          <div class="field-row">
+            <label class="field"><span>Node name</span><input type="text" id="snode-name" placeholder="Germany 1" maxlength="40"></label>
+            <label class="field"><span>Address (IP or domain)</span><input type="text" id="snode-addr" placeholder="vpn2.example.com" spellcheck="false"></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>Check port</span><input type="number" id="snode-port" min="1" max="65535" value="443"></label>
+            <label class="field"><span>Note (optional)</span><input type="text" id="snode-note" maxlength="200" placeholder="Hetzner, 4 vCPU"></label>
+          </div>
+          <button type="button" id="snode-create-btn" class="btn btn-primary btn-block">Add Server Node</button>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2>Servers</h2><button type="button" class="icon-btn" id="snodes-refresh">&#8635;</button></div>
+          <ul class="audit-list" id="snodes-list"></ul>
+          <p class="hint">Tip: assign an inbound to a node from the Inbounds section (per-row dropdown). Unassigned inbounds always stay in links.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="section-update" class="section">      <div class="settings-grid">
 
         <div class="card form-card">
           <div class="card-head"><h2>Panel Update</h2><span class="badge proto" id="update-badge">unknown</span></div>

@@ -34,6 +34,7 @@ from database import (
     BlockedSite,
     Database,
     Inbound,
+    ServerNode,
     Setting,
     TunnelNode,
     UserTemplate,
@@ -52,6 +53,8 @@ from schemas import (
     LoginIn,
     RestoreConfirmIn,
     RestoreIn,
+    ServerNodeIn,
+    ServerNodePatchIn,
     SettingsIn,
     SslIssueIn,
     TelegramSettingsIn,
@@ -247,7 +250,42 @@ def load_srv() -> dict:
 def load_inbounds() -> list:
     with db.s() as s:
         rows = s.scalars(select(Inbound).order_by(Inbound.id)).all()
-        return [r.to_dict() for r in rows]
+        out = [r.to_dict() for r in rows]
+        nodes = {n.id: n for n in s.scalars(select(ServerNode)).all()}
+    # Attach node health so link builders can skip inbounds whose server
+    # node is explicitly offline/disabled (fail-open for unknown).
+    for ib in out:
+        n = nodes.get(ib.get("node_id") or 0)
+        ib["node_name"] = n.name if n else None
+        ib["node_status"] = n.status if n else None
+        ib["node_enabled"] = bool(n.enabled) if n else True
+    return out
+
+
+def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
+    """TCP probe used by node health checks. Returns (online, latency_ms)."""
+    import socket
+
+    online, latency = False, None
+    try:
+        addrinfos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False, None
+    for family, socktype, proto, _canon, sa in addrinfos[:3]:
+        conn = socket.socket(family, socktype, proto)
+        conn.settimeout(timeout)
+        try:
+            start = time_mod.monotonic()
+            conn.connect(sa)
+            online = True
+            latency = int((time_mod.monotonic() - start) * 1000)
+        except OSError:
+            pass
+        finally:
+            conn.close()
+        if online:
+            break
+    return online, latency
 
 
 def load_blocked_for_clash() -> list:
@@ -325,7 +363,37 @@ async def lifespan(_: FastAPI):
                 dirty = True
             if dirty:
                 s.commit()
+    threading.Thread(target=_srvnode_monitor_loop, daemon=True).start()
     yield
+
+
+def _srvnode_monitor_loop() -> None:
+    """Background health checks for server nodes (every 5 min)."""
+    time_mod.sleep(60)
+    while True:
+        try:
+            with db.s() as s:
+                items = [
+                    (n.id, n.address, n.check_port)
+                    for n in s.scalars(select(ServerNode).where(ServerNode.enabled == True)).all()  # noqa: E712
+                ]
+            for nid, host, port in items:
+                try:
+                    online, latency = probe_host(host, port)
+                except Exception:
+                    online, latency = False, None
+                try:
+                    with db.s() as s:
+                        node = s.get(ServerNode, nid)
+                        if node is None:
+                            continue
+                        _record_srvnode_probe(s, node, online, latency)
+                        s.commit()
+                except Exception as exc:
+                    log.debug("srvnode monitor write failed: %s", exc)
+        except Exception as exc:
+            log.debug("srvnode monitor cycle failed: %s", exc)
+        time_mod.sleep(300)
 
 
 app = FastAPI(title="Zefira", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -1433,6 +1501,105 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
     return out
 
 
+def _get_srvnode_or_404(s, node_id: int) -> ServerNode:
+    node = s.get(ServerNode, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Server node not found")
+    return node
+
+
+def _record_srvnode_probe(s, node: ServerNode, online: bool, latency: int | None) -> None:
+    node.status = "online" if online else "offline"
+    node.latency_ms = latency
+    node.last_check = utcnow()
+    if online:
+        node.success_count = (node.success_count or 0) + 1
+    else:
+        node.fail_count = (node.fail_count or 0) + 1
+
+
+@app.get("/api/server-nodes")
+def api_srvnodes_list(admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        return [n.to_dict() for n in s.scalars(select(ServerNode).order_by(ServerNode.id)).all()]
+
+
+@app.post("/api/server-nodes")
+def api_srvnodes_create(data: ServerNodeIn, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        if s.scalar(select(ServerNode.id).where(ServerNode.name == data.name)):
+            raise HTTPException(status_code=409, detail="A server node with this name already exists")
+        node = ServerNode(
+            name=data.name,
+            address=data.address,
+            check_port=data.check_port,
+            note=data.note or "",
+        )
+        s.add(node)
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            raise HTTPException(status_code=409, detail="A server node with this name already exists")
+        out = node.to_dict()
+        audit(s, "SRVNODE_CREATE", f"{data.name} {data.address}:{data.check_port} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Server node created %s by %s", data.name, admin.username)
+    return out
+
+
+@app.patch("/api/server-nodes/{node_id}")
+def api_srvnodes_patch(node_id: int, data: ServerNodePatchIn, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        node = _get_srvnode_or_404(s, node_id)
+        if data.enabled is not None:
+            node.enabled = data.enabled
+        if data.address is not None:
+            node.address = data.address
+        if data.check_port is not None:
+            node.check_port = data.check_port
+        if data.note is not None:
+            node.note = data.note
+        if data.address is not None or data.check_port is not None:
+            node.status = "unknown"
+        s.commit()
+        out = node.to_dict()
+        audit(s, "SRVNODE_PATCH", f"{node.name} by {admin.username}", client_ip(request))
+        s.commit()
+    return out
+
+
+@app.delete("/api/server-nodes/{node_id}")
+def api_srvnodes_delete(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        node = _get_srvnode_or_404(s, node_id)
+        name = node.name
+        for ib in s.scalars(select(Inbound).where(Inbound.node_id == node_id)).all():
+            ib.node_id = None
+        s.delete(node)
+        audit(s, "SRVNODE_DELETE", f"{name} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Server node deleted %s by %s", name, admin.username)
+    return {"ok": True}
+
+
+@app.post("/api/server-nodes/{node_id}/check")
+def api_srvnodes_check(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    if not probe_limiter.hit(f"srvprobe|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many checks, wait a minute")
+    with db.s() as s:
+        node = _get_srvnode_or_404(s, node_id)
+        host, port, node_id_val = node.address, node.check_port, node.id
+    online, latency = probe_host(host, port)
+    with db.s() as s:
+        node = s.get(ServerNode, node_id_val)
+        _record_srvnode_probe(s, node, online, latency)
+        out = node.to_dict()
+        audit(s, "SRVNODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
+        s.commit()
+    return out
+
+
 @app.post("/api/backup")
 def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
     if not verify_password(data.password_confirm, admin.password_hash):
@@ -1748,12 +1915,15 @@ def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depend
         exists = s.scalar(select(Inbound.id).where(Inbound.name == data.name))
         if exists:
             raise HTTPException(status_code=409, detail="An inbound with this name already exists")
+        if data.node_id is not None and not s.get(ServerNode, data.node_id):
+            raise HTTPException(status_code=404, detail="Server node not found")
         ib = Inbound(
             name=data.name,
             protocol=data.protocol,
             port=data.port,
             host=data.host or "",
             enabled=data.enabled,
+            node_id=data.node_id,
         )
         s.add(ib)
         try:
@@ -1782,6 +1952,11 @@ def api_inbounds_patch(
             ib.port = data.port
         if data.host is not None:
             ib.host = data.host
+        if "node_id" in data.model_fields_set:
+            # Explicit null unassigns the inbound back to this panel.
+            if data.node_id and not s.get(ServerNode, data.node_id):
+                raise HTTPException(status_code=404, detail="Server node not found")
+            ib.node_id = data.node_id or None
         s.commit()
         out = ib.to_dict()
         audit(s, "INBOUND_PATCH", f"{ib.name} by {admin.username}", client_ip(request))

@@ -337,6 +337,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
+    if (btn.dataset.section === "nodes") loadSrvNodes();
     if (btn.dataset.section === "update") loadUpdate();
     if (btn.dataset.section === "blocker") loadBlocklist();
   });
@@ -851,7 +852,44 @@ function inboundRow(ib) {
   c3.style.direction = "ltr";
   const c4 = document.createElement("td");
   c4.className = "muted";
-  c4.textContent = ib.host || "\u2014";
+  c4.textContent = ib.host || "—";
+  const cNode = document.createElement("td");
+  const nodeSel = document.createElement("select");
+  nodeSel.className = "ib-node-sel";
+  nodeSel.title = "Server node (offline nodes are skipped in links)";
+  const oLocal = document.createElement("option");
+  oLocal.value = "";
+  oLocal.textContent = "Local";
+  nodeSel.appendChild(oLocal);
+  for (const n of SERVER_NODES) {
+    const o = document.createElement("option");
+    o.value = String(n.id);
+    o.textContent = n.name;
+    nodeSel.appendChild(o);
+  }
+  nodeSel.value = ib.node_id ? String(ib.node_id) : "";
+  if (ib.node_id && !nodeSel.value) {
+    const oGone = document.createElement("option");
+    oGone.value = String(ib.node_id);
+    oGone.textContent = `node #${ib.node_id}?`;
+    nodeSel.appendChild(oGone);
+    nodeSel.value = String(ib.node_id);
+  }
+  nodeSel.dataset.id = ib.id;
+  nodeSel.addEventListener("change", async () => {
+    try {
+      await api("/api/inbounds/" + ib.id, {
+        method: "PATCH",
+        body: { node_id: nodeSel.value ? parseInt(nodeSel.value, 10) : null }
+      });
+      toast(nodeSel.value ? "Inbound pinned to node" : "Inbound back to local");
+      loadInbounds();
+    } catch (err) {
+      if (err.message !== "auth") toast(err.message, false);
+      loadInbounds();
+    }
+  });
+  cNode.appendChild(nodeSel);
   const c5 = document.createElement("td");
   c5.appendChild(badge(ib.enabled ? "ON" : "OFF", ib.enabled ? "ok" : "off"));
   const c6 = document.createElement("td");
@@ -863,12 +901,13 @@ function inboundRow(ib) {
   delBtn.dataset.id = ib.id;
   delBtn.dataset.name = ib.name;
   c6.append(tglBtn, delBtn);
-  tr.append(c1, c2, c3, c4, c5, c6);
+  tr.append(c1, c2, c3, c4, cNode, c5, c6);
   return tr;
 }
 
 async function loadInbounds() {
   try {
+    await loadSrvNodes();
     const items = await api("/api/inbounds");
     const tbody = $("#inbounds-tbody");
     tbody.textContent = "";
@@ -889,7 +928,8 @@ $("#ib-add-btn").addEventListener("click", async () => {
         protocol: $("#ib-proto").value,
         port,
         host: $("#ib-host").value.trim(),
-        enabled: true
+        enabled: true,
+        node_id: $("#ib-node") && $("#ib-node").value ? parseInt($("#ib-node").value, 10) : null
       }
     });
     $("#ib-name").value = ""; $("#ib-port").value = ""; $("#ib-host").value = "";
@@ -914,6 +954,124 @@ $("#inbounds-tbody").addEventListener("click", async (e) => {
     loadInbounds();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
+
+// ---- Server nodes ----
+let SERVER_NODES = [];
+
+function srvNodeStatus(n) {
+  if (!n.enabled) return badge("Disabled", "off");
+  if (n.status === "online") return badge("Online", "ok");
+  if (n.status === "offline") return badge("Offline", "expired");
+  return badge("Unknown", "pending");
+}
+
+function fillNodeSelect(sel, current) {
+  if (!sel) return;
+  sel.textContent = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "Local panel";
+  sel.appendChild(o0);
+  for (const n of SERVER_NODES) {
+    const o = document.createElement("option");
+    o.value = String(n.id);
+    o.textContent = n.enabled ? n.name : `${n.name} (off)`;
+    sel.appendChild(o);
+  }
+  if (current) sel.value = String(current);
+}
+
+function renderSrvNodes(nodes) {
+  SERVER_NODES = nodes;
+  fillNodeSelect($("#ib-node"), $("#ib-node") ? $("#ib-node").value : "");
+  const ul = $("#snodes-list");
+  ul.textContent = "";
+  if (!nodes.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "No server nodes yet. Add one above.";
+    ul.appendChild(li);
+    return;
+  }
+  for (const n of nodes) {
+    const li = document.createElement("li");
+    li.style.display = "flex";
+    li.style.flexWrap = "wrap";
+    li.style.alignItems = "center";
+    li.style.gap = "6px";
+    const main = document.createElement("span");
+    main.textContent = `${n.name} [${n.address}:${n.check_port}]`;
+    const meta = document.createElement("small");
+    const bits = [];
+    if (n.latency_ms != null) bits.push(`${n.latency_ms} ms`);
+    bits.push(n.uptime_pct != null ? `${n.uptime_pct}% uptime` : "not checked yet");
+    if (n.note) bits.push(n.note);
+    meta.textContent = bits.join(" · ");
+    const st = document.createElement("span");
+    st.appendChild(srvNodeStatus(n));
+    li.appendChild(main);
+    li.appendChild(meta);
+    li.appendChild(st);
+    const checkBtn = iconBtn("Check now", ICONS.refresh, "good");
+    checkBtn.dataset.act = "check";
+    checkBtn.dataset.id = n.id;
+    const tglBtn = iconBtn(n.enabled ? "Disable" : "Enable", n.enabled ? ICONS.toggleOff : ICONS.toggleOn, n.enabled ? "warn" : "good");
+    tglBtn.dataset.act = "toggle";
+    tglBtn.dataset.id = n.id;
+    const delBtn = iconBtn("Delete node", ICONS.trash, "bad");
+    delBtn.dataset.act = "del-snode";
+    delBtn.dataset.id = n.id;
+    delBtn.dataset.name = n.name;
+    li.append(checkBtn, tglBtn, delBtn);
+    ul.appendChild(li);
+  }
+}
+
+async function loadSrvNodes() {
+  try {
+    renderSrvNodes(await api("/api/server-nodes"));
+  } catch (_) {}
+}
+
+$("#snode-create-btn").addEventListener("click", async () => {
+  const name = $("#snode-name").value.trim();
+  const address = $("#snode-addr").value.trim();
+  const port = parseInt($("#snode-port").value, 10) || 443;
+  if (!name || !address) { toast("Enter a name and address", false); return; }
+  try {
+    await api("/api/server-nodes", {
+      method: "POST",
+      body: { name, address, check_port: port, note: $("#snode-note").value.trim() }
+    });
+    $("#snode-name").value = ""; $("#snode-addr").value = ""; $("#snode-note").value = "";
+    toast(`Server node "${name}" added`);
+    loadSrvNodes();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+
+$("#snodes-list").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".row-btn");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  try {
+    if (btn.dataset.act === "check") {
+      const n = await api(`/api/server-nodes/${id}/check`, { method: "POST" });
+      toast(n.status === "online" ? `${n.name} ONLINE (${n.latency_ms} ms)` : `${n.name} UNREACHABLE`, n.status === "online");
+      loadSrvNodes();
+    } else if (btn.dataset.act === "toggle") {
+      const cur = SERVER_NODES.find((x) => String(x.id) === String(id));
+      await api(`/api/server-nodes/${id}`, { method: "PATCH", body: { enabled: !(cur && cur.enabled) } });
+      toast("Node updated");
+      loadSrvNodes();
+    } else if (btn.dataset.act === "del-snode") {
+      if (!confirm(`Delete server node "${btn.dataset.name}"? Its inbounds become local.`)) return;
+      await api(`/api/server-nodes/${id}`, { method: "DELETE" });
+      toast("Server node deleted");
+      loadSrvNodes();
+    }
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+$("#snodes-refresh").addEventListener("click", loadSrvNodes);
 
 async function loadBlocklist() {
   try {
