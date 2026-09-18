@@ -94,9 +94,12 @@ if "--allow-live" not in sys.argv and st == 200:
         _sst, _, _sbody = req("GET", "/api/stats", headers=_auth)
         _total = json.loads(_sbody).get("total_users", 0) if _sst == 200 else 0
     except Exception:
-        _total = 0
-    if _total and _total > 0:
-        print(f"ABORT: panel has {_total} user(s). This suite runs restore tests that WIPE users.")
+        _total = -1
+    if _total != 0:
+        if _total and _total > 0:
+            print(f"ABORT: panel has {_total} user(s). This suite runs restore tests that WIPE users.")
+        else:
+            print("ABORT: could not verify the panel is empty (stats unreachable). Refusing to run wipe tests.")
         print("Back up first (Settings -> Download Backup), then re-run with: --allow-live")
         sys.exit(2)
 
@@ -314,6 +317,10 @@ stn2, _, _ = req(
 check("node create blocked w/o session", stn2 in (401, 403), f"got {stn2}")
 stn3, _, _ = req("GET", "/api/nodes/1/guide")
 check("node guide requires auth", stn3 in (401, 404), f"got {stn3}")
+stsv1, _, _ = req("GET", "/api/server-nodes")
+check("server nodes require auth", stsv1 == 401, f"got {stsv1}")
+stsv2, _, _ = req("POST", "/api/server-nodes", json.dumps({"name": "x", "address": "1.2.3.4"}))
+check("server node create blocked w/o session", stsv2 in (401, 403), f"got {stsv2}")
 
 # ---- 16. New-surface authz (telegram, qr, reality, selftunnel) ----
 for name, method, path, body in [
@@ -517,6 +524,26 @@ for payload in [
         fuzz_ok2 = False
         print(f"      node fuzz accepted {str(payload)[:60]} -> {stf2} body={rbx[:80]}")
 check("node input fuzz rejected (422/400)", fuzz_ok2)
+
+# ---- 29b. Server-node validation ----
+svfuzz_ok = True
+for payload in [
+    {"name": "s1", "transport": "tcp", "address": "not a host!!", "check_port": 443},
+    {"name": "s2", "transport": "tcp", "address": "1.1.1.1", "check_port": 0},
+    {"name": "s3", "transport": "tcp", "address": "1.1.1.1", "check_port": 443, "note": "x" * 500},
+    {"name": "x" * 100, "transport": "tcp", "address": "1.1.1.1", "check_port": 443},
+]:
+    p2 = {"name": payload["name"], "address": payload["address"], "check_port": payload["check_port"]}
+    if "note" in payload:
+        p2["note"] = payload["note"]
+    stfv, _, _ = req("POST", "/api/server-nodes", json.dumps(p2), AUTH2)
+    if stfv not in (400, 422):
+        svfuzz_ok = False
+        print(f"      srvnode fuzz accepted {str(p2)[:60]} -> {stfv}")
+check("server-node input fuzz rejected (422/400)", svfuzz_ok)
+stbadn, _, _ = req("POST", "/api/inbounds", json.dumps(
+    {"name": "badnodeib", "protocol": "vless", "port": 29443, "node_id": 999999}), AUTH2)
+check("inbound with unknown node rejected", stbadn == 404, f"got {stbadn}")
 
 # ---- 30. CSV-injection source stored server-side (client sanitizes on export) ----
 stcsv, _, _ = req("POST", "/api/users", json.dumps({

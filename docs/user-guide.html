@@ -91,8 +91,11 @@
 <h2 id="inbounds">Inbounds</h2>
 <p>Extra ports per protocol (<b>Inbounds</b>): give VLESS port 443 <i>and</i> 8443, each with its own host. Subscription links and Clash configs include every enabled inbound automatically, labeled with the inbound name.</p>
 
-<h2 id="tunnels-backpack">Tunnels (BackPack)</h2>
-<p>Register Iran ⇄ Kharej tunnels: transport, both IPs, tunnel port, forwarded ports, UDP flag. Zefira stores an encrypted token per tunnel, generates a step-by-step setup guide for both servers, and can probe the Iran endpoint (<b>Check now</b>) with automatic online/offline status.</p>
+<h2 id="server-nodes">Server nodes</h2>
+<p><b>Nodes</b> (left menu) registers your remote VPN servers: name, address, check port, note. The panel probes each server every 5 minutes (plus on-demand <b>Check now</b>) and shows live status, latency in ms and uptime %.</p>
+<p>Pin any inbound to a node from the Inbounds section (per-row dropdown, or at creation). Links served from a node that goes <b>offline</b> (or is disabled) are automatically left out of subscriptions until it recovers — unchecked nodes keep serving. Deleting a node returns its inbounds to the local panel.</p>
+
+<h2 id="tunnels-backpack">Tunnels (BackPack)</h2><p>Register Iran ⇄ Kharej tunnels: transport, both IPs, tunnel port, forwarded ports, UDP flag. Zefira stores an encrypted token per tunnel, generates a step-by-step setup guide for both servers, and can probe the Iran endpoint (<b>Check now</b>) with automatic online/offline status.</p>
 
 <h2 id="anti-censorship-settings">Anti-censorship settings</h2>
 <table>
