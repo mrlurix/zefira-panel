@@ -54,6 +54,10 @@ async function api(method, path, body) {
 }
 
 const uname = (tgId) => `tg${tgId}`;
+const md = (s) =>
+  // Telegram legacy-Markdown: escape everything interpolated (usernames and
+  // URLs may contain _ * ` [ ] etc., which would otherwise 400 the message).
+  String(s).replace(/([_*[\]()~`>#+\-=|{}.!])/g, "\\$1");
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
 
 bot.onText(/^\/start$/, (msg) => {
@@ -82,7 +86,7 @@ bot.onText(/^\/my$/, async (msg) => {
   }
   bot.sendMessage(
     msg.chat.id,
-    `Your account: ${mine.username}\nVolume: ${mine.used_gb} / ${mine.volume_gb} GB\nExpires: ${mine.expires_at}\n\nSubscription:\n\`${SUB_BASE}/${mine.token}\``,
+    `Your account: ${md(mine.username)}\nVolume: ${md(mine.used_gb)} / ${md(mine.volume_gb)} GB\nExpires: ${md(mine.expires_at)}\n\nSubscription:\n\`${md(SUB_BASE)}/${md(mine.token)}\``,
     { parse_mode: "Markdown" }
   );
 });
@@ -111,7 +115,7 @@ bot.on("callback_query", async (q) => {
   }
   bot.sendMessage(
     q.message.chat.id,
-    `Done! ${plan.label}\n\nSubscription (tap to copy):\n\`${SUB_BASE}/${data.token}\`\n\nPaste it into v2rayNG / Streisand / Clash.`,
+    `Done! ${md(plan.label)}\n\nSubscription (tap to copy):\n\`${md(SUB_BASE)}/${md(data.token)}\`\n\nPaste it into v2rayNG / Streisand / Clash.`,
     { parse_mode: "Markdown" }
   );
 });
