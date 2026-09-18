@@ -339,6 +339,11 @@ if uid:
               and pj.get("device_limit") == 3 and abs(pj.get("used_gb", 0) - 1.5) < 0.01, f"got {st}")
     except Exception:
         check("patch all fields", False, f"got {st}")
+    st, _, rub = req("POST", f"/api/users/{uid}/reset-usage", headers=AUTH)
+    try:
+        check("reset-usage zeroes traffic", st == 200 and json.loads(rub).get("used_gb") == 0, f"got {st}")
+    except Exception:
+        check("reset-usage zeroes traffic", False, f"got {st}")
     st, _, rtb = req("POST", f"/api/users/{uid}/reset-token", headers=AUTH)
     try:
         check("reset token rotates", st == 200 and json.loads(rtb).get("token") != utok, f"got {st}")

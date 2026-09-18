@@ -2445,6 +2445,20 @@ def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(requi
     return out
 
 
+@app.post("/api/users/{user_id}/reset-usage")
+def api_reset_usage(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    """Dedicated reset endpoint for developers: zeroes used traffic."""
+    with db.s() as s:
+        user = _get_user_or_404(s, user_id)
+        user.used_gb = 0.0
+        s.commit()
+        out = user.to_dict()
+        audit(s, "USAGE_RESET", f"{user.username} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Usage reset id=%s by %s", user_id, admin.username)
+    return out
+
+
 @app.get("/api/users/{user_id}/qr")
 def api_user_qr(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
