@@ -97,6 +97,15 @@ TON:             YOUR_TON_ADDRESS_HERE
 USDT (TRC-20):   YOUR_USDT_TRC20_ADDRESS_HERE
 ```
 
+**Online crypto checkout (Shieldz):** the donate page can create payment links
+with selectable amounts. It needs a tiny free Cloudflare Worker to hold your
+secret key (never put `sk_live_...` in the static site — its source is public):
+1. Workers & Pages → Create Worker, paste `donate-worker.js`, Deploy.
+2. Worker Settings → Variables → add `SHIELDZ_API_KEY` (`sk_live_...`, or
+   `sk_test_...` to try test mode first).
+3. Put the worker URL into `docs/assets/donate-config.json` (`"api"` field),
+   commit + push. Amounts are validated twice (page + worker).
+
 ---
 
 If you like it, give it a star. Issues and PRs are welcome.
