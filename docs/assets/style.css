@@ -466,35 +466,6 @@ table { display: block; width: 100%; overflow-x: auto; }
   .sp-overlay { padding: 8vh 12px 12px; }
 }
 
-/* ---------- donate amounts ---------- */
-.amt-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
-.amt-btn {
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 9px 20px;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-}
-.amt-btn:hover { border-color: var(--red); }
-.amt-btn.sel { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 0 18px var(--red-glow); }
-.amt-input {
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 15px;
-  font-family: inherit;
-  width: 220px;
-  max-width: 100%;
-}
-.amt-input:focus { outline: none; border-color: var(--red); }
-.btn[disabled] { opacity: .45; cursor: not-allowed; }
-
 /* ---------- floating support bubble ---------- */
 .sup-fab {
   position: fixed;
