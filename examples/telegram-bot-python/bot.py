@@ -13,6 +13,7 @@ subscription link. /my shows your existing account.
 """
 import logging
 import os
+import re
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -50,6 +51,13 @@ def uname(tg_id: int) -> str:
     return f"tg{tg_id}"
 
 
+def md(text) -> str:
+    # Telegram legacy-Markdown: usernames/URLs may contain _ * ` [ ] etc.
+    # Unescaped, the API rejects the whole message (400). Escape everything
+    # we interpolate; static template text has no specials.
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", str(text))
+
+
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Welcome to Zefira VPN shop!\nUse /buy to get an account, /my to see yours.")
@@ -72,10 +80,11 @@ async def my(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     u = mine[0]
     await update.message.reply_text(
-        f"Your account: {u['username']}\n"
-        f"Volume: {u['used_gb']} / {u['volume_gb']} GB\n"
-        f"Expires: {u['expires_at']}\n\n"
-        f"Subscription:\n{SUB_BASE}/{u['token']}")
+        f"Your account: {md(u['username'])}\n"
+        f"Volume: {md(u['used_gb'])} / {md(u['volume_gb'])} GB\n"
+        f"Expires: {md(u['expires_at'])}\n\n"
+        f"Subscription:\n`{md(SUB_BASE)}/{md(u['token'])}`",
+        parse_mode="Markdown")
 
 
 async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -98,8 +107,8 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await q.message.reply_text("Could not create the account, try later.")
         return
     await q.message.reply_text(
-        f"Done! {label}\n\nSubscription (tap to copy):\n"
-        f"`{SUB_BASE}/{data['token']}`\n\n"
+        f"Done! {md(label)}\n\nSubscription (tap to copy):\n"
+        f"`{md(SUB_BASE)}/{md(data['token'])}`\n\n"
         f"Paste it into v2rayNG / Streisand / Clash.",
         parse_mode="Markdown")
 
