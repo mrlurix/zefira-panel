@@ -56,7 +56,7 @@
 <tr><td><code>ZEFIRA_WG_PORT</code></td><td><code>51820</code></td><td>WireGuard endpoint port</td></tr>
 <tr><td><code>ZEFIRA_DNS</code></td><td><code>1.1.1.1</code></td><td>DNS in WireGuard configs</td></tr>
 <tr><td><code>ZEFIRA_OVPN_PORT</code> / <code>ZEFIRA_OVPN_PROTO</code></td><td><code>1194</code> / <code>udp</code></td><td>OpenVPN endpoint</td></tr>
-<tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> or <code>postgresql+psycopg2://…</code></td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> or <code>postgresql+psycopg2://…</code> (MySQL: use <code>utf8mb4</code> charset, or emoji notes break inserts)</td></tr>
 <tr><td><code>SUBSCRIPTION_PATH</code></td><td><code>/sub</code></td><td>Subscription URL prefix</td></tr>
 <tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td>Login session lifetime, seconds (clamped to 5 min – 7 days, default 8h)</td></tr>
 <tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td>empty</td><td>CIDRs allowed to send <code>X-Forwarded-For</code></td></tr>

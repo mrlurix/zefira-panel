@@ -14,7 +14,15 @@ except OSError:
 def _load_or_create_secret() -> str:
     path = INSTANCE_DIR / "secret.key"
     if path.exists():
-        return path.read_text(encoding="utf-8").strip()
+        try:
+            existing = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            existing = ""
+        # Refuse short/empty keys: HS256/Fernet with a guessable key would let
+        # anyone forge sessions or decrypt secrets (e.g. operator created an
+        # empty file by accident). Fall through and generate a real one.
+        if len(existing) >= 32:
+            return existing
     key = secrets.token_hex(48)
     path.write_text(key, encoding="utf-8")
     try:
