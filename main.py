@@ -120,7 +120,7 @@ ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
 
-APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted", "brand_name", "dash_note"}
+APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted", "brand_name", "dash_note", "menu_layout", "dash_layout"}
 APPEARANCE_DEFAULTS = {
     "theme_accent": "#ff2740",
     "theme_bg": "#06060a",
@@ -136,7 +136,8 @@ def load_appearance() -> dict:
     out = {}
     for k in APPEARANCE_KEYS:
         v = (cached_setting(k) or "").strip()
-        if k in ("theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted"):
+        if k in ("theme_accent", "theme_bg", "theme_card", "theme_text",
+                 "theme_muted"):
             # Fail safe to defaults: a hand-edited DB value must never 500
             # /theme.css or inject CSS (only #rrggbb ever reaches the stylesheet).
             if not re.fullmatch(r"#[0-9a-fA-F]{6}", v):
@@ -146,8 +147,56 @@ def load_appearance() -> dict:
                 v = ""
         elif k == "dash_note":
             v = "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")[:300]
-        out[k] = v or APPEARANCE_DEFAULTS[k]
+        elif k in ("menu_layout", "dash_layout"):
+            v = v[:2000]
+        out[k] = v or APPEARANCE_DEFAULTS.get(k, "")
+    out["menu_layout"] = _canon_menu_layout(out.get("menu_layout", ""))
+    out["dash_layout"] = _canon_dash_layout(out.get("dash_layout", ""))
     return out
+
+
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "settings")
+MENU_ALWAYS = ("dashboard", "users", "inbounds", "settings")
+DASH_BLOCKS = ("usage", "link", "groups", "apps")
+
+
+def _canon_menu_layout(raw: str) -> list:
+    try:
+        items = json.loads(raw) if raw else []
+    except ValueError:
+        items = []
+    seen, out = set(), []
+    if isinstance(items, list):
+        for it in items[:32]:
+            if not isinstance(it, dict):
+                continue
+            sid = str(it.get("id", ""))
+            if sid in MENU_SECTIONS and sid not in seen:
+                seen.add(sid)
+                out.append({"id": sid, "hidden": bool(it.get("hidden")) and sid not in MENU_ALWAYS})
+    for sid in MENU_SECTIONS:
+        if sid not in seen:
+            out.append({"id": sid, "hidden": False})
+    return out
+
+
+def _canon_dash_layout(raw: str) -> dict:
+    order, hidden = [], set()
+    try:
+        data = json.loads(raw) if raw else {}
+    except ValueError:
+        data = {}
+    if isinstance(data, dict):
+        if isinstance(data.get("order"), list):
+            for bid in data["order"][:16]:
+                if bid in DASH_BLOCKS and bid not in order:
+                    order.append(bid)
+        if isinstance(data.get("hidden"), list):
+            hidden = {b for b in data["hidden"][:16] if b in DASH_BLOCKS}
+    for bid in DASH_BLOCKS:
+        if bid not in order:
+            order.append(bid)
+    return {"order": order, "hidden": sorted(hidden)}
 
 
 def _hex_to_rgb(h: str) -> tuple:
@@ -1051,6 +1100,8 @@ def api_appearance_put(data: AppearanceIn, request: Request, admin: Admin = Depe
             "theme_muted": data.theme_muted,
             "brand_name": data.brand_name,
             "dash_note": data.dash_note,
+            "menu_layout": json.dumps(_canon_menu_layout(data.menu_layout)),
+            "dash_layout": json.dumps(_canon_dash_layout(data.dash_layout)),
         })
         audit(s, "APPEARANCE", f"theme/brand updated by {admin.username}", client_ip(request))
         s.commit()
@@ -1851,6 +1902,14 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     sval = "".join(ch for ch in sval if ord(ch) >= 32 or ch in "\n\r\t")
                     if len(sval) > 500:
                         ok = False
+                elif k in ("menu_layout", "dash_layout"):
+                    # Layouts self-heal: garbage becomes defaults, never rejected.
+                    try:
+                        sval = json.dumps(
+                            _canon_menu_layout(sval) if k == "menu_layout" else _canon_dash_layout(sval)
+                        )
+                    except (TypeError, ValueError):
+                        continue
                 elif k == "reality_sni":
                     if not re.fullmatch(r"[a-zA-Z0-9.,\- ]{0,300}", sval):
                         ok = False
@@ -2542,6 +2601,28 @@ def wants_dashboard(request: Request) -> bool:
     return any(t in ua for t in BROWSER_UA_TOKENS)
 
 
+def _dashboard_blocks(groups_raw: dict, layout) -> list:
+    """Order + visibility of user-dashboard cards (seller-customizable)."""
+    try:
+        dl = _canon_dash_layout(json.dumps(layout) if isinstance(layout, dict) else (layout or ""))
+    except (TypeError, ValueError):
+        dl = _canon_dash_layout("")
+    blocks = []
+    for bid in dl["order"]:
+        if bid in dl["hidden"]:
+            continue
+        if bid == "usage":
+            blocks.append({"id": "usage"})
+        elif bid == "link":
+            blocks.append({"id": "link"})
+        elif bid == "groups":
+            for label, v in groups_raw.items():
+                blocks.append({"id": "group", "label": label, "links": v["links"], "config": v["config"]})
+        elif bid == "apps":
+            blocks.append({"id": "apps"})
+    return blocks
+
+
 def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> dict:
     from config import SUBSCRIPTION_PATH as _SUB_PATH
 
@@ -2622,6 +2703,7 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
             {"label": label, "links": v["links"], "config": v["config"]}
             for label, v in groups_raw.items()
         ],
+        "blocks": _dashboard_blocks(groups_raw, app.get("dash_layout") or ""),
         "import_v2rayng": f"v2rayng://install-config?url={enc}",
         "import_clash": f"clash://install-config?url={enc}",
         "import_singbox": f"sing-box://import-remote-profile?url={enc}",

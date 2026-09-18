@@ -667,6 +667,25 @@ stabad, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "red", 
 check("appearance rejects non-hex color / html brand", stabad == 422, f"got {stabad}")
 stabad2, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_text": "#12345", "theme_muted": "blue"}), AUTH2)
 check("appearance rejects bad text colors", stabad2 == 422, f"got {stabad2}")
+stlay, _, layb = req("PUT", "/api/appearance", json.dumps({
+    "menu_layout": json.dumps([{"id": "users", "hidden": False}, {"id": "settings", "hidden": True}, {"id": "nope", "hidden": True}]),
+    "dash_layout": json.dumps({"order": ["apps"], "hidden": ["link", "bogus"]})}), AUTH2)
+try:
+    layj = json.loads(layb)
+    ml = layj.get("menu_layout", [])
+    dl = layj.get("dash_layout", {})
+    check("menu layout canonicalized (locked kept, junk dropped)",
+          stlay == 200 and ml[0].get("id") == "users"
+          and all(not (m.get("id") == "settings" and m.get("hidden")) for m in ml)
+          and not any(m.get("id") == "nope" for m in ml)
+          and len(ml) == 9, f"got {stlay}")
+    check("dash layout canonicalized",
+          dl.get("order", [])[0] == "apps" and "link" in dl.get("hidden", [])
+          and "bogus" not in dl.get("hidden", []), f"got {stlay}")
+except Exception:
+    check("menu layout canonicalized (locked kept, junk dropped)", False, f"got {stlay}")
+    check("dash layout canonicalized", False, f"got {stlay}")
+req("PUT", "/api/appearance", json.dumps({"menu_layout": "", "dash_layout": ""}), AUTH2)
 stcss, hdrcss, cssb = req("GET", "/theme.css")
 cssb = cssb.decode("utf-8", "replace") if isinstance(cssb, bytes) else cssb
 check("theme.css served as css with defaults", stcss == 200 and "text/css" in hget(hdrcss, "Content-Type") and ":root" in cssb and "#ff2740" in cssb, f"got {stcss}")

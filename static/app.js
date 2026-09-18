@@ -585,6 +585,166 @@ function applyBrand(name) {
   document.title = b + " Panel";
 }
 
+// ---- Menu & dashboard layout ----
+const MENU_LABELS = {
+  dashboard: "Dashboard", users: "Users", inbounds: "Inbounds",
+  tunnels: "Tunnels", nodes: "Nodes", reality: "Anti-Censorship",
+  blocker: "Site Blocker", update: "Update", settings: "Settings"
+};
+const MENU_IDS = Object.keys(MENU_LABELS);
+const MENU_LOCKED = ["dashboard", "users", "inbounds", "settings"];
+const DASH_LABELS = { usage: "Usage ring", link: "Subscription link", groups: "Config groups", apps: "Apps" };
+const DASH_IDS = Object.keys(DASH_LABELS);
+let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));
+let DASH_STATE = { order: DASH_IDS.slice(), hidden: [] };
+
+function normalizeMenu(v) {
+  const out = [], seen = new Set();
+  const arr = Array.isArray(v) ? v : [];
+  for (const it of arr) {
+    if (it && MENU_IDS.includes(it.id) && !seen.has(it.id)) {
+      seen.add(it.id);
+      out.push({ id: it.id, hidden: !!it.hidden && !MENU_LOCKED.includes(it.id) });
+    }
+  }
+  for (const id of MENU_IDS) {
+    if (!seen.has(id)) out.push({ id, hidden: false });
+  }
+  return out;
+}
+function normalizeDash(v) {
+  const src = (v && typeof v === "object") ? v : {};
+  const order = [], seen = new Set();
+  for (const id of Array.isArray(src.order) ? src.order : []) {
+    if (DASH_IDS.includes(id) && !seen.has(id)) { seen.add(id); order.push(id); }
+  }
+  for (const id of DASH_IDS) {
+    if (!seen.has(id)) order.push(id);
+  }
+  const hidden = Array.isArray(src.hidden) ? src.hidden.filter((id) => DASH_IDS.includes(id)) : [];
+  return { order, hidden };
+}
+function collectAppearance() {
+  return {
+    theme_accent: $("#ap-accent").value,
+    theme_bg: $("#ap-bg").value,
+    theme_card: $("#ap-card").value,
+    theme_text: $("#ap-text").value,
+    theme_muted: $("#ap-muted").value,
+    brand_name: $("#ap-brand").value.trim(),
+    dash_note: $("#ap-note").value.trim(),
+    menu_layout: JSON.stringify(MENU_STATE),
+    dash_layout: JSON.stringify(DASH_STATE)
+  };
+}
+function applyMenuLayout(layout) {
+  const first = document.querySelector(".nav-btn");
+  if (!first || !Array.isArray(layout)) return;
+  const nav = first.parentElement;
+  const btns = {};
+  nav.querySelectorAll(".nav-btn").forEach((b) => { btns[b.dataset.section] = b; });
+  for (const item of layout) {
+    const b = btns[item.id];
+    if (!b) continue;
+    nav.appendChild(b);
+    const hide = !!item.hidden;
+    b.classList.toggle("hidden", hide);
+    const sec = document.getElementById("section-" + item.id);
+    if (sec) sec.classList.toggle("hidden", hide);
+  }
+}
+function layoutRow(label, locked, hidden, onUp, onDown, onEye) {
+  const li = document.createElement("li");
+  li.style.display = "flex";
+  li.style.alignItems = "center";
+  li.style.gap = "6px";
+  const name = document.createElement("span");
+  name.textContent = label;
+  name.style.flex = "1";
+  li.appendChild(name);
+  const mk = (label, fn, disabled) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "row-btn mini-btn";
+    b.textContent = label;
+    b.title = label;
+    b.disabled = !!disabled;
+    b.style.opacity = disabled ? ".35" : "";
+    if (!disabled) b.addEventListener("click", fn);
+    li.appendChild(b);
+    return b;
+  };
+  mk("▲", onUp, false);
+  mk("▼", onDown, false);
+  const eye = mk(hidden ? "Show" : "Hide", onEye, locked);
+  if (locked) eye.title = "Always visible";
+  return li;
+}
+async function saveLayout(silent) {
+  try {
+    await api("/api/appearance", { method: "PUT", body: collectAppearance() });
+    if (!silent) toast("Layout saved");
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+}
+function renderMenuLayout() {
+  const ul = $("#menu-layout-list");
+  ul.textContent = "";
+  MENU_STATE.forEach((item, i) => {
+    const locked = MENU_LOCKED.includes(item.id);
+    ul.appendChild(layoutRow(
+      MENU_LABELS[item.id] || item.id,
+      locked,
+      item.hidden,
+      () => { if (i > 0) { const t = MENU_STATE[i - 1]; MENU_STATE[i - 1] = item; MENU_STATE[i] = t; afterMenuChange(); } },
+      () => { if (i < MENU_STATE.length - 1) { const t = MENU_STATE[i + 1]; MENU_STATE[i + 1] = item; MENU_STATE[i] = t; afterMenuChange(); } },
+      () => { if (!locked) { item.hidden = !item.hidden; afterMenuChange(); } }
+    ));
+  });
+}
+function afterMenuChange() {
+  renderMenuLayout();
+  applyMenuLayout(MENU_STATE);
+  saveLayout(true);
+}
+function renderDashLayout() {
+  const ul = $("#dash-layout-list");
+  ul.textContent = "";
+  DASH_STATE.order.forEach((id, i) => {
+    const hidden = DASH_STATE.hidden.includes(id);
+    ul.appendChild(layoutRow(
+      DASH_LABELS[id] || id,
+      false,
+      hidden,
+      () => {
+        if (i > 0) {
+          const o = DASH_STATE.order.slice();
+          const t = o[i - 1]; o[i - 1] = o[i]; o[i] = t;
+          DASH_STATE.order = o;
+          afterDashChange();
+        }
+      },
+      () => {
+        if (i < DASH_STATE.order.length - 1) {
+          const o = DASH_STATE.order.slice();
+          const t = o[i + 1]; o[i + 1] = o[i]; o[i] = t;
+          DASH_STATE.order = o;
+          afterDashChange();
+        }
+      },
+      () => {
+        const h = DASH_STATE.hidden.slice();
+        const k = h.indexOf(id);
+        if (k >= 0) h.splice(k, 1); else h.push(id);
+        DASH_STATE.hidden = h;
+        afterDashChange();
+      }
+    ));
+  });
+}
+function afterDashChange() {
+  renderDashLayout();
+  saveLayout(true);
+}
 async function loadAppearance() {
   try {
     const a = await api("/api/appearance");
@@ -596,22 +756,16 @@ async function loadAppearance() {
     $("#ap-brand").value = a.brand_name === "ZEFIRA" ? "" : (a.brand_name || "");
     $("#ap-note").value = a.dash_note || "";
     applyBrand(a.brand_name);
+    MENU_STATE = normalizeMenu(a.menu_layout);
+    DASH_STATE = normalizeDash(a.dash_layout);
+    renderMenuLayout();
+    renderDashLayout();
+    applyMenuLayout(MENU_STATE);
   } catch (_) {}
 }
 $("#ap-save-btn").addEventListener("click", async () => {
   try {
-    const r = await api("/api/appearance", {
-      method: "PUT",
-      body: {
-        theme_accent: $("#ap-accent").value,
-        theme_bg: $("#ap-bg").value,
-        theme_card: $("#ap-card").value,
-        theme_text: $("#ap-text").value,
-        theme_muted: $("#ap-muted").value,
-        brand_name: $("#ap-brand").value.trim(),
-        dash_note: $("#ap-note").value.trim()
-      }
-    });
+    const r = await api("/api/appearance", { method: "PUT", body: collectAppearance() });
     applyBrand(r.brand_name);
     toast("Appearance saved");
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -619,10 +773,11 @@ $("#ap-save-btn").addEventListener("click", async () => {
 $("#ap-reset-btn").addEventListener("click", async () => {
   if (!confirm("Reset colors, brand and dashboard message to defaults?")) return;
   try {
-    const r = await api("/api/appearance", {
-      method: "PUT",
-      body: { theme_accent: "", theme_bg: "", theme_card: "", theme_text: "", theme_muted: "", brand_name: "", dash_note: "" }
-    });
+    const body = collectAppearance();
+    body.theme_accent = ""; body.theme_bg = ""; body.theme_card = "";
+    body.theme_text = ""; body.theme_muted = "";
+    body.brand_name = ""; body.dash_note = "";
+    const r = await api("/api/appearance", { method: "PUT", body });
     applyBrand(r.brand_name);
     loadAppearance();
     toast("Appearance reset");
