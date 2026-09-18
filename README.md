@@ -92,9 +92,9 @@ MIT - see [LICENSE](LICENSE). Do what you want, just keep the notice.
 If Zefira helps you, consider supporting it: full details (wallets + contact) on the [donate page](https://mrlurix.github.io/zefira-panel/donate.html).
 
 ```text
-TRX (Tron):      YOUR_TRX_ADDRESS_HERE
-TON:             YOUR_TON_ADDRESS_HERE
-USDT (TRC-20):   YOUR_USDT_TRC20_ADDRESS_HERE
+TRX (BEP-20):   0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
+ETH (BEP-20):   0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
+SOL (BEP-20):   0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
 ```
 
 ---
