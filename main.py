@@ -1362,6 +1362,18 @@ def api_node_regen_token(node_id: int, request: Request, admin: Admin = Depends(
     return {"token": token_plain}
 
 
+@app.delete("/api/nodes/{node_id}")
+def api_node_delete(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        node = _get_node_or_404(s, node_id)
+        name = node.name
+        s.delete(node)
+        audit(s, "NODE_DELETE", f"{name} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("Tunnel deleted %s by %s", name, admin.username)
+    return {"ok": True}
+
+
 @app.get("/api/nodes/{node_id}/guide")
 def api_node_guide(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
