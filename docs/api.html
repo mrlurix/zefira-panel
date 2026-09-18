@@ -44,12 +44,14 @@
 <p class="subtitle">Cookie-authenticated JSON API for bots and dashboards.</p>
 
 <div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
+<p><b>Bots &amp; integrations:</b> create a long-lived token under <b>Settings → API Tokens</b> and send it as <code>Authorization: Bearer zfp_…</code> — no CSRF header needed then. Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime.</p>
 
 <h2 id="auth-account">Auth &amp; account</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password}</code></td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td>Invalidates the session server-side</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/api-tokens…</code></td><td>Bot tokens: list, create (once-only secret), revoke</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td>Strong-password enforced, kills other sessions</td></tr>
 </table>

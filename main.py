@@ -1,4 +1,5 @@
-﻿import ipaddress
+﻿import hashlib
+import ipaddress
 import json
 import logging
 import math
@@ -30,6 +31,7 @@ import protocols
 from config import BASE_DIR, SESSION_TTL
 from database import (
     Admin,
+    ApiToken,
     AuditLog,
     BlockedSite,
     Database,
@@ -44,6 +46,7 @@ from database import (
 from schemas import (
     AiChatIn,
     AiSettingsIn,
+    ApiTokenCreateIn,
     AppearanceIn,
     BlockedSiteIn,
     BlockToggleIn,
@@ -475,7 +478,12 @@ async def csrf_and_size_middleware(request: Request, call_next):
         except ValueError:
             return JSONResponse({"detail": "bad request"}, status_code=400)
     if request.url.path.startswith("/api") and request.method not in {"GET", "HEAD", "OPTIONS"}:
-        if request.headers.get("x-requested-with") != "XMLHttpRequest":
+        # Custom Authorization headers cannot be sent cross-origin without a
+        # CORS preflight (which this panel never passes), so a present Bearer
+        # credential proves a non-browser client: CSRF does not apply to it.
+        auth_h = request.headers.get("authorization", "")
+        bearer = auth_h[:7].lower() == "bearer " and len(auth_h) > 7
+        if not bearer and request.headers.get("x-requested-with") != "XMLHttpRequest":
             return JSONResponse({"detail": "forbidden"}, status_code=403)
     return await call_next(request)
 
@@ -501,21 +509,41 @@ def client_ip(request: Request) -> str:
 
 async def require_admin(request: Request) -> Admin:
     token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        raise HTTPException(status_code=401, detail="Session expired")
-    payload = decode_session(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Session expired")
-    try:
-        admin_pk = int(payload.get("sub", 0))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Session expired")
-    with db.s() as s:
-        admin = s.get(Admin, admin_pk)
-        if not admin or payload.get("ver") != admin.token_version:
+    if token:
+        payload = decode_session(token)
+        if not payload:
             raise HTTPException(status_code=401, detail="Session expired")
-        request.state.admin_id = admin.id
-        return admin
+        try:
+            admin_pk = int(payload.get("sub", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=401, detail="Session expired")
+        with db.s() as s:
+            admin = s.get(Admin, admin_pk)
+            if not admin or payload.get("ver") != admin.token_version:
+                raise HTTPException(status_code=401, detail="Session expired")
+            request.state.admin_id = admin.id
+            return admin
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() == "bearer " and len(auth.strip()) > 7:
+        raw = auth[7:].strip()
+        if len(raw) <= 200:
+            digest = hashlib.sha256(raw.encode()).hexdigest()
+            with db.s() as s:
+                row = s.scalar(select(ApiToken).where(ApiToken.token_sha == digest))
+                tok = (row.id, row.name, row.admin_id) if row else None
+            if tok is not None:
+                with db.s() as s:
+                    admin = s.get(Admin, tok[2]) if tok[2] else None
+                    if admin:
+                        touch = s.get(ApiToken, tok[0])
+                        if touch is not None:
+                            touch.last_used_at = utcnow()
+                            s.commit()
+                        request.state.admin_id = admin.id
+                        request.state.token_id = tok[0]
+                        request.state.token_name = tok[1]
+                        return admin
+    raise HTTPException(status_code=401, detail="Session expired")
 
 
 def set_session_cookie(response: Response, request: Request, admin_id: int, version: int) -> None:
@@ -952,12 +980,60 @@ def api_tunnel_put(data: TunnelSettingsIn, request: Request, admin: Admin = Depe
     return {"ok": True}
 
 
+@app.get("/api/api-tokens")
+def api_tokens_list(admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        return [t.to_dict() for t in s.scalars(select(ApiToken).order_by(ApiToken.id)).all()]
+
+
+@app.post("/api/api-tokens")
+def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = Depends(require_admin)):
+    raw = "zfp_" + secrets.token_urlsafe(32)
+    digest = hashlib.sha256(raw.encode()).hexdigest()
+    with db.s() as s:
+        if s.scalar(select(ApiToken.id).where(ApiToken.name == data.name)):
+            raise HTTPException(status_code=409, detail="A token with this name already exists")
+        if s.scalar(select(ApiToken.id).where(ApiToken.token_sha == digest)):
+            raise HTTPException(status_code=409, detail="Token collision, try again")
+        row = ApiToken(
+            name=data.name,
+            prefix=raw[:12],
+            token_sha=digest,
+            admin_id=admin.id,
+        )
+        s.add(row)
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+            raise HTTPException(status_code=409, detail="A token with this name already exists")
+        out = row.to_dict()
+        out["token_once"] = raw
+        audit(s, "APITOKEN_CREATE", f"{data.name} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("API token created %s by %s", data.name, admin.username)
+    return out
+
+
+@app.delete("/api/api-tokens/{token_id}")
+def api_tokens_delete(token_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        row = s.get(ApiToken, token_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Token not found")
+        name = row.name
+        s.delete(row)
+        audit(s, "APITOKEN_DELETE", f"{name} by {admin.username}", client_ip(request))
+        s.commit()
+    log.info("API token revoked %s by %s", name, admin.username)
+    return {"ok": True}
+
+
 @app.get("/api/appearance")
 def api_appearance_get():
     # Public by design: only display values (colors, brand, notice).
     # Nothing secret ever lives under these keys.
     return load_appearance()
-
 
 @app.put("/api/appearance")
 def api_appearance_put(data: AppearanceIn, request: Request, admin: Admin = Depends(require_admin)):
@@ -1623,6 +1699,8 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
         ]
         blocked_rows = s.scalars(select(BlockedSite)).all()
         blocked_out = [b.to_dict() for b in blocked_rows]
+        token_rows = s.scalars(select(ApiToken)).all()
+        tokens_out = [t.to_backup_dict() for t in token_rows]
     payload = {
         "zefira_backup": True,
         "version": 6,
@@ -1632,6 +1710,7 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
         "users": users,
         "templates": templates_out,
         "blocked_sites": blocked_out,
+        "api_tokens": tokens_out,
     }
     body = json.dumps(payload, indent=2)
     with db.s() as s:
@@ -1656,7 +1735,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             s.commit()
         raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     now = utcnow()
-    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = 0
+    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = 0
     prepared_users = []
     for ru in data.users:
         try:
@@ -1862,6 +1941,52 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 except (TypeError, ValueError):
                     skipped += 1
                     continue
+        if data.api_tokens is not None:
+            for rt in data.api_tokens:
+                try:
+                    if not isinstance(rt, dict):
+                        skipped += 1
+                        continue
+                    tname = str(rt.get("name", "")).strip()[:40]
+                    tsha = str(rt.get("token_sha", "")).strip().lower()
+                    if not tname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", tname):
+                        skipped += 1
+                        continue
+                    if not re.fullmatch(r"[a-f0-9]{64}", tsha):
+                        skipped += 1
+                        continue
+                    if s.scalar(select(ApiToken).where(
+                        (ApiToken.name == tname) | (ApiToken.token_sha == tsha)
+                    )):
+                        skipped += 1
+                        continue
+                    prefix = str(rt.get("prefix", ""))[:12]
+                    created = None
+                    if rt.get("created_at"):
+                        try:
+                            created = datetime.fromisoformat(
+                                str(rt["created_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
+                        except ValueError:
+                            created = None
+                    last_used = None
+                    if rt.get("last_used_at"):
+                        try:
+                            last_used = datetime.fromisoformat(
+                                str(rt["last_used_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
+                        except ValueError:
+                            last_used = None
+                    s.add(ApiToken(
+                        name=tname,
+                        prefix=prefix,
+                        token_sha=tsha,
+                        admin_id=admin.id,
+                        created_at=created or now,
+                        last_used_at=last_used,
+                    ))
+                    restored_tokens += 1
+                except (TypeError, ValueError, AttributeError):
+                    skipped += 1
+                    continue
         if data.admins:
             for ra in data.admins:
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
@@ -1883,7 +2008,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -1897,6 +2022,7 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
             "restored_admins": restored_admins,
             "restored_blocked": restored_blocked,
             "restored_templates": restored_templates,
+            "restored_tokens": restored_tokens,
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)

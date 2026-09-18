@@ -75,6 +75,9 @@
 <h2 id="ai-assistant">AI assistant</h2>
 <p>The <b>?</b> bubble (bottom-right of every panel page) chats with an assistant that knows this panel inside-out and answers <b>panel questions only</b> — great for beginners. Configure it under <b>Settings → AI Assistant</b>: pick a provider (<b>OpenAI-compatible</b> covers OpenAI, DeepSeek, OpenRouter, Groq, Ollama and any <code>/v1</code> API; plus native <b>Anthropic</b> and <b>Gemini</b>), model, base URL and API key (stored encrypted, never shown back). The assistant gets a built-in JSON manual of the whole panel plus your optional extra instructions. Chats are rate-limited (30/hour) and time-boxed; the key stays server-side.</p>
 
+<h2 id="bots-integrations">Bots &amp; integrations</h2>
+<p><b>Settings → API Tokens</b> issues <code>zfp_…</code> bearer tokens for Telegram bots, reseller dashboards and scripts. Use <code>Authorization: Bearer …</code> instead of cookies (then no CSRF header is needed either). Tokens have full admin power except password-gated actions, so guard them like passwords: they are shown once and can be revoked instantly. Included in backups.</p>
+
 <h2 id="panel-updates">Panel updates</h2>
 <p><b>Update</b> (left menu, above Settings) compares this server with GitHub: current vs latest commit, and the exact incoming changes. <b>Update now</b> asks for your password, then pulls the code, reinstalls dependencies and restarts the panel — watch it poll until it reports the new version. Updates are refused if you have local code changes, and every step is audit-logged.</p>
 

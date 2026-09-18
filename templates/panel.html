@@ -401,6 +401,16 @@
           <button type="button" id="ai-save-btn" class="btn btn-primary">Save AI Settings</button>
         </div>
 
+        <div class="card form-card">
+          <div class="card-head"><h2>API Tokens</h2></div>
+          <p class="hint mt-0">Long-lived <code>zfp_…</code> tokens for bots and dashboards. Send as <code>Authorization: Bearer …</code> header — no CSRF header needed. Shown once, revoke anytime.</p>
+          <div class="field-row">
+            <label class="field"><span>Token name</span><input type="text" id="apitoken-name" maxlength="40" placeholder="telegram-bot"></label>
+            <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block">Create Token</button></div>
+          </div>
+          <ul class="audit-list" id="apitoken-list"></ul>
+        </div>
+
         <form id="pw-form" class="card form-card">
           <div class="card-head"><h2>Change Admin Password</h2></div>
           <label class="field"><span>Current password</span><input type="password" name="current" minlength="8" maxlength="128" required></label>

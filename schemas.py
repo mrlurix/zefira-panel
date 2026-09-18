@@ -163,6 +163,12 @@ class SslIssueIn(BaseModel):
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+class ApiTokenCreateIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+
+
 class TemplateCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -325,3 +331,4 @@ class RestoreIn(RestoreConfirmIn):
     settings: Optional[dict] = None
     templates: Optional[List[dict]] = Field(default=None, max_length=500)
     blocked_sites: Optional[List[dict]] = Field(default=None, max_length=600)
+    api_tokens: Optional[List[dict]] = Field(default=None, max_length=100)

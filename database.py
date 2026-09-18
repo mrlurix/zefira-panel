@@ -296,6 +296,42 @@ class AuditLog(Base):
         }
 
 
+class ApiToken(Base):
+    __tablename__ = "api_tokens"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(40), unique=True, nullable=False)
+    prefix = Column(String(12), nullable=False, default="")
+    # SHA-256 of the raw token (256-bit random: unbrute-forceable even if the
+    # DB leaks). The raw value is shown once at creation and never stored.
+    token_sha = Column(String(64), unique=True, nullable=False, index=True)
+    admin_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "prefix": self.prefix,
+            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            "last_used_at": (
+                self.last_used_at.isoformat(timespec="seconds") + "Z" if self.last_used_at else None
+            ),
+        }
+
+    def to_backup_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "prefix": self.prefix,
+            "token_sha": self.token_sha,
+            "created_at": self.created_at.isoformat(timespec="seconds"),
+            "last_used_at": (
+                self.last_used_at.isoformat(timespec="seconds") if self.last_used_at else None
+            ),
+        }
+
+
 class Database:
     def __init__(self, path: Path):
         import os
