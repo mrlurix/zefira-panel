@@ -291,6 +291,9 @@ if stmk == 200:
     dash_esc = "&lt;script&gt;" in html and "<script>alert" not in html
     stc, hdrc, _ = req("GET", f"/sub/{tok}", headers=V2RAY_UA)
     dash_client = stc == 200 and "text/html" not in hget(hdrc, "Content-Type")
+    stcf, _, cfb = req("GET", f"/sub/{tok}?format=%20Clash%20", headers=V2RAY_UA)
+    cfb = cfb.decode("utf-8", "replace") if isinstance(cfb, bytes) else cfb
+    dash_client = dash_client and stcf == 200 and cfb.startswith("mixed-port:")
     lst = json.loads(req("GET", "/api/users?q=dashtest1", headers=AUTH)[2])
     for u2 in lst["items"]:
         req("DELETE", f"/api/users/{u2['id']}", headers=AUTH)
