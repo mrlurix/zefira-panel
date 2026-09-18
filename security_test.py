@@ -689,6 +689,12 @@ if stmk2 == 200:
     req("DELETE", f"/api/users/{uid}", headers=AUTH2)
 check("extending expired account starts from today", ext_ok, f"created={stmk2}")
 
+# ---- 35b. Developer reset-usage endpoint ----
+stru, _, _ = req("POST", "/api/users/999999/reset-usage", None, AUTH2)
+check("reset-usage requires existing user", stru == 404, f"got {stru}")
+stru2, _, _ = req("POST", "/api/users/999999/reset-usage")
+check("reset-usage requires auth", stru2 in (401, 403), f"got {stru2}")
+
 # ---- 35b. API tokens lifecycle (bots & integrations) ----
 stmk3, _, mkb3 = req("POST", "/api/api-tokens", json.dumps({"name": "pentest-bot"}), AUTH2)
 tok_once = ""

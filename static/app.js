@@ -20,7 +20,7 @@ const EVENT_EN = {
   USER_PATCH: "User updated",
   USER_DELETE: "User deleted",
   TOKEN_RESET: "Token reset",
-  PW_CHANGE: "Password changed",
+  USAGE_RESET: "Usage reset",  PW_CHANGE: "Password changed",
   SETTINGS_UPDATE: "Server settings updated",
   BACKUP_DL: "Backup downloaded",
   RESTORE: "Backup restored",
