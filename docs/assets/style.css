@@ -447,7 +447,7 @@ table { display: block; width: 100%; overflow-x: auto; }
   .brand b { font-size: 13px; letter-spacing: 1px; }
   .ver { display: none; }
   .topbar a.gh { font-size: 12px; padding: 3px 8px; white-space: nowrap; }
-  .topbar a.gh[href="installation.html"], .topbar a.gh[href="changelog.html"] { display: none; }
+  .topbar a.gh[href="installation.html"], .topbar a.gh[href="changelog.html"], .topbar a.gh[href="donate.html"] { display: none; }
   .sp-trigger { padding: 3px 8px; font-size: 12px; }
   .sp-trigger kbd { display: none; }
   .content h1 { font-size: 25px; }
