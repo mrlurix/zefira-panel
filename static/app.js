@@ -334,7 +334,8 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = btn.dataset.title;
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
-    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAppearance(); loadAi(); loadApiTokens(); }
+    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); loadApiTokens(); }
+    if (btn.dataset.section === "customize") { loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "nodes") loadSrvNodes();
@@ -589,15 +590,37 @@ function applyBrand(name) {
 const MENU_LABELS = {
   dashboard: "Dashboard", users: "Users", inbounds: "Inbounds",
   tunnels: "Tunnels", nodes: "Nodes", reality: "Anti-Censorship",
-  blocker: "Site Blocker", update: "Update", settings: "Settings"
+  blocker: "Site Blocker", update: "Update", customize: "Personalize", settings: "Settings"
 };
 const MENU_IDS = Object.keys(MENU_LABELS);
-const MENU_LOCKED = ["dashboard", "users", "inbounds", "settings"];
+const MENU_LOCKED = ["dashboard", "users", "inbounds", "customize", "settings"];
 const DASH_LABELS = { usage: "Usage ring", link: "Subscription link", groups: "Config groups", apps: "Apps" };
 const DASH_IDS = Object.keys(DASH_LABELS);
 let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));
 let DASH_STATE = { order: DASH_IDS.slice(), hidden: [] };
 
+function slotMissing(ordered, canonical) {
+  const res = ordered.slice();
+  const idx = {};
+  canonical.forEach((c, i) => { idx[c] = i; });
+  const present = new Set(res);
+  const original = new Set(res);
+  for (const m of canonical) {
+    if (present.has(m)) continue;
+    const earlier = canonical.slice(0, idx[m]);
+    if (earlier.length && earlier.every((c) => original.has(c))) {
+      let pos = res.length;
+      for (let k = 0; k < res.length; k++) {
+        if ((idx[res[k]] !== undefined ? idx[res[k]] : 1e9) > idx[m]) { pos = k; break; }
+      }
+      res.splice(pos, 0, m);
+    } else {
+      res.push(m);
+    }
+    present.add(m);
+  }
+  return res;
+}
 function normalizeMenu(v) {
   const out = [], seen = new Set();
   const arr = Array.isArray(v) ? v : [];
@@ -607,10 +630,10 @@ function normalizeMenu(v) {
       out.push({ id: it.id, hidden: !!it.hidden && !MENU_LOCKED.includes(it.id) });
     }
   }
-  for (const id of MENU_IDS) {
-    if (!seen.has(id)) out.push({ id, hidden: false });
-  }
-  return out;
+  const ordered = slotMissing(out.map((x) => x.id), MENU_IDS);
+  const byId = {};
+  out.forEach((x) => { byId[x.id] = x; });
+  return ordered.map((id) => byId[id] || { id, hidden: false });
 }
 function normalizeDash(v) {
   const src = (v && typeof v === "object") ? v : {};
@@ -618,11 +641,8 @@ function normalizeDash(v) {
   for (const id of Array.isArray(src.order) ? src.order : []) {
     if (DASH_IDS.includes(id) && !seen.has(id)) { seen.add(id); order.push(id); }
   }
-  for (const id of DASH_IDS) {
-    if (!seen.has(id)) order.push(id);
-  }
   const hidden = Array.isArray(src.hidden) ? src.hidden.filter((id) => DASH_IDS.includes(id)) : [];
-  return { order, hidden };
+  return { order: slotMissing(order, DASH_IDS), hidden };
 }
 function collectAppearance() {
   return {

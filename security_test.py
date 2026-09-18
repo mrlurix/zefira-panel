@@ -678,7 +678,7 @@ try:
           stlay == 200 and ml[0].get("id") == "users"
           and all(not (m.get("id") == "settings" and m.get("hidden")) for m in ml)
           and not any(m.get("id") == "nope" for m in ml)
-          and len(ml) == 9, f"got {stlay}")
+          and len(ml) == 10, f"got {stlay}")
     check("dash layout canonicalized",
           dl.get("order", [])[0] == "apps" and "link" in dl.get("hidden", [])
           and "bogus" not in dl.get("hidden", []), f"got {stlay}")
