@@ -291,10 +291,10 @@ footer a { color: var(--red); text-decoration: none; }
 .feat b { font-size: 16px; }
 .feat b::before { content: "▸ "; color: var(--red); }
 .feat p { color: var(--muted); font-size: 14px; margin: 6px 0 0; }
-.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
-.shots figure { margin: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.shots img { width: 100%; display: block; }
-.shots figcaption { padding: 10px 16px; color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--border); }
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; align-items: stretch; }
+.shots figure { margin: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.shots img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top center; display: block; background: #000; }
+.shots figcaption { padding: 10px 16px; color: var(--muted); font-size: 13.5px; border-top: 1px solid var(--border); margin-top: auto; }
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 30px; }
 .step {
   background: var(--card);
