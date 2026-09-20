@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mrlurix.github.io/zefira-panel/)
-[![Pentest](https://img.shields.io/badge/pentest-95%2F95-success)](https://github.com/mrlurix/zefira-panel/blob/main/security_test.py)
+[![Pentest](https://img.shields.io/badge/pentest-117%2F117-success)](https://github.com/mrlurix/zefira-panel/blob/main/security_test.py)
 
 > 📚 **Documentation: [mrlurix.github.io/zefira-panel](https://mrlurix.github.io/zefira-panel/)** — install guide, user manual, API reference, FAQ.
 
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
 
-Works with VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and OpenVPN. You can also enable VLESS-REALITY for anti-filter setups. One user can have multiple protocols at once and gets a single subscription link.
+Works with VLESS, VLESS-REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect and SOCKS5. One user can have multiple protocols at once and gets a single subscription link.
 
 Built with FastAPI + SQLite. No Docker required, just Python.
 
@@ -56,10 +56,11 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - QR codes for every subscription, ZIP download for configs.
 - AI assistant bubble: panel-only helper (OpenAI/Anthropic/Gemini/Ollama) for beginners.
 - One-click updates from GitHub with changelog preview, right inside the panel.
-- API tokens (`zfp_…` bearer) for Telegram bots and dashboards — no CSRF header needed.
+- API tokens (`zfp_…` bearer) for Telegram bots and dashboards — no CSRF header needed. Scopes: `full` or least-privilege `bot` (list/create users only).
 - Full personalization: theme colors, brand name, dashboard message.
 - Strong password gate on sensitive actions, full audit log, system stats, Telegram notifications if you want.
-- JSON backup / restore (both password confirmed). Also imports/exports all settings.
+- JSON backup / restore (both password confirmed), optional encrypted backups. Also imports/exports all settings.
+- Runs as an unprivileged `zefira` systemd user (never root); volume quota enforced on subscriptions.
 
 Full guides live on the docs site (link at the top).
 
@@ -73,7 +74,7 @@ If you prefer env files, copy `.env.example` to `.env`. Env vars are only used a
 
 I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login, CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, encrypted secrets at rest, and audit logging. 
 
-There is a test suite with 81 checks that hits the running panel from the outside:
+There is a test suite with 117 checks that hits the running panel from the outside:
 
 ```bash
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
