@@ -10,7 +10,10 @@ const PROTO_LABEL = {
   ss: "Shadowsocks",
   hysteria2: "Hysteria2",
   wireguard: "WireGuard",
-  openvpn: "OpenVPN"
+  openvpn: "OpenVPN",
+  l2tp: "L2TP/IPsec",
+  cisco: "Cisco AnyConnect",
+  socks5: "SOCKS5"
 };
 const EVENT_EN = {
   LOGIN_OK: "Successful login",
@@ -836,6 +839,9 @@ async function saveAllSettings() {
   body.hy2_port = parseInt(f.hy2_port.value, 10);
   body.wg_port = parseInt(f.wg_port.value, 10);
   body.ovpn_port = parseInt(f.ovpn_port.value, 10);
+  body.l2tp_port = parseInt(f.l2tp_port.value, 10) || 1701;
+  body.cisco_port = parseInt(f.cisco_port.value, 10) || 443;
+  body.socks5_port = parseInt(f.socks5_port.value, 10) || 1080;
   body.dns = f.dns.value.trim() || "1.1.1.1";
   body.ovpn_proto = f.ovpn_proto.value;
   body.wg_pub = f.wg_pub.value.trim();

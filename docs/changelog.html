@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=11">
+<link rel="stylesheet" href="assets/style.css?v=12">
 </head>
 <body>
 <header class="topbar">
@@ -42,6 +42,13 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v160">v1.6.0 — L2TP, Cisco AnyConnect, SOCKS5</h2>
+<ul>
+  <li><b>3 new protocols:</b> L2TP/IPsec (per-user password + IPsec PSK, setup guides for Windows/Android/iOS/strongSwan), Cisco AnyConnect / OpenConnect (one-command connect string), SOCKS5 proxy (<code>socks5://</code> links, Clash <code>socks5</code> entries, dashboard card).</li>
+  <li><b>New server settings:</b> L2TP port (1701), Cisco port (443), SOCKS5 port (1080) — live, backed up, validated like all ports. Inbounds stay relay-protocol-only (VLESS/REALITY/VMess/Trojan/SS/Hysteria2); the new protocols are single-endpoint like WireGuard/OpenVPN.</li>
+  <li>Secrets rotate with Reset-token exactly like existing protocols; quota, restore validation, bot scopes and encrypted backups cover the new types automatically.</li>
+</ul>
 
 <h2 id="v150">v1.5.0 — White-hat hardening round</h2>
 <ul>
@@ -117,6 +124,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=11"></script>
+<script src="assets/docs.js?v=12"></script>
 </body>
 </html>

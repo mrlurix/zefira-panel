@@ -310,7 +310,7 @@ except Exception:
     check("update status shape", False, f"got {st}")
 
 # ---- user full lifecycle (ALL protocols) ----
-ALL = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn"]
+ALL = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn", "l2tp", "cisco", "socks5"]
 st, _, cub = req("POST", "/api/users", json.dumps({
     "username": "fte_full", "protocols": ALL, "volume_gb": 10, "days": 30, "note": "func test"}), AUTH)
 try:

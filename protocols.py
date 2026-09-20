@@ -15,8 +15,11 @@ from cryptography.x509.oid import NameOID
 
 from config import INSTANCE_DIR
 
-PROTOCOLS = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn"]
+PROTOCOLS = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn", "l2tp", "cisco", "socks5"]
 V2RAY_FAMILY = {"vless", "vmess", "trojan", "ss"}
+# Protocols served without per-inbound endpoints (single server-wide
+# endpoint, like WireGuard/OpenVPN): no inbound variants are generated.
+SINGLE_ENDPOINT = {"wireguard", "openvpn", "l2tp", "cisco", "socks5"}
 PENDING_SENTINEL = datetime(2099, 1, 1)
 
 CA_CERT_PATH = INSTANCE_DIR / "ca.crt"
@@ -32,6 +35,9 @@ DEFAULT_SRV = {
     "dns": "1.1.1.1",
     "ovpn_port": 1194,
     "ovpn_proto": "udp",
+    "l2tp_port": 1701,
+    "cisco_port": 443,
+    "socks5_port": 1080,
     "reality_port": 443,
     "reality_sni": "www.yahoo.com,www.samsung.com,www.microsoft.com",
     "reality_pub": "",
@@ -148,6 +154,18 @@ def provision_map(protocols: list, username: str) -> dict:
         elif p == "openvpn":
             cert_pem, key_pem = _issue_client_cert(username)
             out[p] = f"<ZEFIRA-CERT>{cert_pem}<ZEFIRA-KEY>{key_pem}"
+        elif p == "l2tp":
+            # L2TP/IPsec needs a user password plus an IPsec pre-shared
+            # key. Stored as one JSON blob so reset-token rotates both.
+            out[p] = json.dumps({
+                "password": pysecrets.token_urlsafe(16),
+                "psk": pysecrets.token_urlsafe(24),
+            }, separators=(",", ":"))
+        elif p == "cisco":
+            # Cisco AnyConnect / OpenConnect password auth.
+            out[p] = pysecrets.token_urlsafe(16)
+        elif p == "socks5":
+            out[p] = pysecrets.token_urlsafe(16)
         else:
             raise ValueError(p)
     return out
@@ -215,6 +233,81 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
         f"&sni={sni}&fp=chrome&type=tcp&flow=xtls-rprx-vision"
         f"&headerType=none#{name}"
     )
+
+
+def _socks5_link(username: str, password: str, srv: dict) -> str | None:
+    from urllib.parse import quote as _q
+
+    host = _effective_host(password, srv)
+    if not host:
+        return None
+    try:
+        port = int(srv.get("socks5_port", 1080))
+    except (TypeError, ValueError):
+        port = 1080
+    user = _q(username, safe="")
+    pw = _q(password, safe="")
+    return f"socks5://{user}:{pw}@{host}:{port}#{_q(username, safe='')}"
+
+
+def _parse_l2tp_secret(blob: str) -> tuple:
+    try:
+        data = json.loads(blob)
+        pw, psk = data.get("password", ""), data.get("psk", "")
+    except (ValueError, AttributeError):
+        raise ValueError("invalid l2tp secret")
+    if not pw or not psk or len(pw) > 200 or len(psk) > 200:
+        raise ValueError("invalid l2tp secret")
+    return pw, psk
+
+
+def _l2tp_config(u: dict, srv: dict, blob: str) -> str:
+    password, psk = _parse_l2tp_secret(blob)
+    host = _effective_host(psk, srv)
+    try:
+        port = int(srv.get("l2tp_port", 1701))
+    except (TypeError, ValueError):
+        port = 1701
+    username = u.get("username", "")
+    return "\n".join([
+        f"# Zefira L2TP/IPsec - user: {username}",
+        f"Server (L2TP): {host}:{port}",
+        "IPsec: pre-shared key (PSK) mode, UDP 500/4500 must reach the server",
+        f"Username: {username}",
+        f"Password: {password}",
+        f"IPsec PSK: {psk}",
+        "",
+        "Windows: Settings > Network > VPN > Add (L2TP/IPsec with pre-shared key).",
+        "Android: Settings > Network > VPN > Add L2TP/IPsec PSK profile.",
+        "iOS: Settings > General > VPN > Add L2TP (enter server, account, password, shared secret).",
+        "Linux (strongSwan): right=<server> rightauth=psk, leftauth=xauth with the credentials above.",
+        "",
+        "# Ask the server operator to create the matching L2TP user entry",
+        "# (username/password) and IPsec PSK before connecting.",
+        "",
+    ])
+
+
+def _cisco_config(u: dict, srv: dict, password: str) -> str:
+    if not password or len(password) > 200:
+        raise ValueError("invalid cisco secret")
+    host = _effective_host(password, srv)
+    try:
+        port = int(srv.get("cisco_port", 443))
+    except (TypeError, ValueError):
+        port = 443
+    username = u.get("username", "")
+    server = f"{host}:{port}" if port != 443 else host
+    return "\n".join([
+        f"# Zefira Cisco AnyConnect / OpenConnect - user: {username}",
+        f"Server: {server}",
+        f"Username: {username}",
+        f"Password: {password}",
+        "",
+        f"OpenConnect:  openconnect --user={username} {server}",
+        "AnyConnect app: add the server above, sign in with username + password.",
+        "",
+    ])
 
 
 def _json_scalar(v) -> str:
@@ -303,6 +396,15 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
             "name": n, "type": "hysteria2", "server": host_eff, "port": int(srv["hy2_port"]),
             "password": sec, "sni": sni_eff,
         })
+    if "socks5" in protos and secrets_map.get("socks5"):
+        sec = secrets_map["socks5"]
+        host_eff = _effective_host(sec, srv)
+        n = f"Zefira-{u['username']}-SOCKS5"
+        names.append(n)
+        proxies.append({
+            "name": n, "type": "socks5", "server": host_eff, "port": int(srv.get("socks5_port", 1080)),
+            "username": u["username"], "password": sec, "udp": True,
+        })
 
     lines = [
         "mixed-port: 7890",
@@ -336,6 +438,7 @@ def true_val():
 FILE_EXT = {
     "vless": ".txt", "reality": ".txt", "vmess": ".txt", "trojan": ".txt", "ss": ".txt",
     "hysteria2": ".txt", "wireguard": ".conf", "openvpn": ".ovpn",
+    "l2tp": ".txt", "cisco": ".txt", "socks5": ".txt",
 }
 def _valid_wg_pubkey(v: str | None) -> str:
     try:
@@ -504,7 +607,7 @@ def _variant_srv(srv: dict, inbound: dict) -> dict:
 
 
 def _srvs_for(proto: str, srv: dict, inbounds: list) -> list:
-    if proto in ("wireguard", "openvpn"):
+    if proto in SINGLE_ENDPOINT:
         return [(srv, "")]
     out = [(srv, "")]
     for i in (inbounds or []):
@@ -559,6 +662,20 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
                 files.append((f"{u['username']}.ovpn", _ovpn_config(u, srv, sec)))
             except ValueError:
                 continue
+        elif p == "l2tp":
+            try:
+                files.append((f"{u['username']}-l2tp.txt", _l2tp_config(u, srv, sec)))
+            except ValueError:
+                continue
+        elif p == "cisco":
+            try:
+                files.append((f"{u['username']}-cisco.txt", _cisco_config(u, srv, sec)))
+            except ValueError:
+                continue
+        elif p == "socks5":
+            link = _socks5_link(u["username"], sec, srv)
+            if link:
+                links.append(link)
     if links:
         files.insert(0, (f"{u['username']}-subscription.txt", "\n".join(links) + "\n"))
     return files
@@ -568,6 +685,7 @@ PROTO_LABELS = {
     "vless": "VLESS", "reality": "REALITY", "vmess": "VMess",
     "trojan": "Trojan", "ss": "Shadowsocks", "hysteria2": "Hysteria2",
     "wireguard": "WireGuard", "openvpn": "OpenVPN",
+    "l2tp": "L2TP/IPsec", "cisco": "Cisco AnyConnect", "socks5": "SOCKS5",
 }
 
 
@@ -625,6 +743,20 @@ def user_links(u: dict, srv: dict, inbounds: list = None) -> dict:
                 out[label] = {"links": [], "config": _ovpn_config(u, srv, sec)}
             except ValueError:
                 continue
+        elif p == "l2tp":
+            try:
+                out[label] = {"links": [], "config": _l2tp_config(u, srv, sec)}
+            except ValueError:
+                continue
+        elif p == "cisco":
+            try:
+                out[label] = {"links": [], "config": _cisco_config(u, srv, sec)}
+            except ValueError:
+                continue
+        elif p == "socks5":
+            link = _socks5_link(u["username"], sec, srv)
+            if link:
+                out[label] = {"links": [link], "config": None}
     return out
 
 
@@ -668,6 +800,20 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
                 extras.append("### OpenVPN ###\n" + _ovpn_config(u, srv, sec))
             except ValueError:
                 continue
+        elif p == "l2tp":
+            try:
+                extras.append("### L2TP/IPsec ###\n" + _l2tp_config(u, srv, sec))
+            except ValueError:
+                continue
+        elif p == "cisco":
+            try:
+                extras.append("### Cisco AnyConnect ###\n" + _cisco_config(u, srv, sec))
+            except ValueError:
+                continue
+        elif p == "socks5":
+            link = _socks5_link(u.get("username", ""), sec, srv)
+            if link:
+                links.append(link)
     only_links = bool(links) and not extras
     if only_links:
         encoded = base64.b64encode("\n".join(links).encode()).decode()

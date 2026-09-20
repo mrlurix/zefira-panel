@@ -4,7 +4,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}$"
 Protocol = Literal[
-    "vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn"
+    "vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn",
+    "l2tp", "cisco", "socks5",
+]
+# Inbounds only exist for relay-style protocols with per-port endpoints.
+# Single-endpoint protocols (WireGuard/OpenVPN/L2TP/Cisco/SOCKS5) are
+# served from global server settings and reject inbound assignment.
+InboundProtocol = Literal[
+    "vless", "reality", "vmess", "trojan", "ss", "hysteria2",
 ]
 HOST_RE = r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"
 HOST_CORE = r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?"
@@ -22,7 +29,7 @@ class UserCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     username: str = Field(pattern=USERNAME_RE)
-    protocols: List[Protocol] = Field(min_length=1, max_length=8)
+    protocols: List[Protocol] = Field(min_length=1, max_length=11)
     note: str = Field(default="", max_length=200)
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
@@ -175,6 +182,9 @@ class SettingsIn(BaseModel):
     dns: str = Field(default="1.1.1.1", max_length=100, pattern=HOST_RE)
     ovpn_port: int = Field(ge=1, le=65535)
     ovpn_proto: Literal["udp", "tcp"] = "udp"
+    l2tp_port: int = Field(ge=1, le=65535, default=1701)
+    cisco_port: int = Field(ge=1, le=65535, default=443)
+    socks5_port: int = Field(ge=1, le=65535, default=1080)
     reality_port: int = Field(ge=1, le=65535, default=443)
     reality_sni: str = Field(
         default="www.yahoo.com,www.samsung.com,www.microsoft.com",
@@ -207,7 +217,7 @@ class TemplateCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
-    protocols: List[Protocol] = Field(min_length=1, max_length=8)
+    protocols: List[Protocol] = Field(min_length=1, max_length=11)
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
     start_on_first_use: bool = False
@@ -279,7 +289,7 @@ class InboundIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_\-]+$")
-    protocol: Protocol
+    protocol: InboundProtocol
     port: int = Field(ge=1, le=65535)
     host: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
     enabled: bool = True

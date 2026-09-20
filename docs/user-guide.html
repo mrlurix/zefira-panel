@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=11">
+<link rel="stylesheet" href="assets/style.css?v=12">
 </head>
 <body>
 <header class="topbar">
@@ -47,11 +47,11 @@
 <ol>
   <li>Open <b>Users → New user</b>.</li>
   <li>Pick a username (English letters, digits, <code>_</code>, 3–32 chars).</li>
-  <li>Select one or more protocols — any mix of VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN.</li>
+  <li>Select one or more protocols — any mix of VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5.</li>
   <li>Set <b>volume</b> (GB) and <b>duration</b> (days).</li>
   <li>Optional: note, device limit, start-on-first-use. Save.</li>
 </ol>
-<p>The panel generates all secrets instantly (UUIDs, X25519 keys, OpenVPN certificates from its own CA) and shows the subscription link + QR.</p>
+<p>The panel generates all secrets instantly (UUIDs, X25519 keys, OpenVPN certificates from its own CA, L2TP passwords + IPsec PSKs, Cisco/SOCKS5 passwords) and shows the subscription link + QR.</p>
 
 <h2 id="plan-mechanics">Plan mechanics</h2>
 <table>
@@ -124,6 +124,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=11"></script>
+<script src="assets/docs.js?v=12"></script>
 </body>
 </html>

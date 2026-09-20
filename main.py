@@ -108,6 +108,7 @@ STRONG_PW_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{10,128}$")
 SRV_KEYS = {
     "domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns",
     "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "reality_pub",
+    "l2tp_port", "cisco_port", "socks5_port",
     "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip",
 }
 PENDING_YEAR = 2098
@@ -1142,7 +1143,7 @@ def api_settings_get(admin: Admin = Depends(require_admin)):
 @app.put("/api/settings")
 def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
+        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
             v = getattr(data, k)
             if k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
                 v = "1" if v else "0"
@@ -1153,7 +1154,7 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
                 row.value = str(v)
         audit(s, "SETTINGS_UPDATE", f"by {admin.username}", client_ip(request))
         s.commit()
-    for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
+    for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
         _settings_cache.pop(k, None)
     log.info("Server settings updated by %s", admin.username)
     srv = load_srv()

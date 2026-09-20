@@ -461,7 +461,14 @@
             <label class="field"><span>OpenVPN port</span><input type="number" name="ovpn_port" min="1" max="65535" required></label>
           </div>
           <div class="field-row">
+            <label class="field"><span>L2TP port</span><input type="number" name="l2tp_port" min="1" max="65535" required></label>
+            <label class="field"><span>Cisco AnyConnect port</span><input type="number" name="cisco_port" min="1" max="65535" required></label>
+          </div>
+          <div class="field-row">
+            <label class="field"><span>SOCKS5 port</span><input type="number" name="socks5_port" min="1" max="65535" required></label>
             <label class="field"><span>Tunnel DNS</span><input type="text" name="dns" placeholder="1.1.1.1"></label>
+          </div>
+          <div class="field-row">
             <label class="field"><span>OpenVPN protocol</span>
               <select name="ovpn_proto"><option value="udp">UDP</option><option value="tcp">TCP</option></select>
             </label>
@@ -546,6 +553,9 @@
         <label class="proto-check"><input type="checkbox" name="proto" value="hysteria2"><span>Hysteria2</span></label>
         <label class="proto-check"><input type="checkbox" name="proto" value="wireguard"><span>WireGuard</span></label>
         <label class="proto-check"><input type="checkbox" name="proto" value="openvpn"><span>OpenVPN</span></label>
+        <label class="proto-check"><input type="checkbox" name="proto" value="l2tp"><span>L2TP/IPsec</span></label>
+        <label class="proto-check"><input type="checkbox" name="proto" value="cisco"><span>Cisco AnyConnect</span></label>
+        <label class="proto-check"><input type="checkbox" name="proto" value="socks5"><span>SOCKS5</span></label>
       </div>
     </div>
     <label class="proto-check wide">

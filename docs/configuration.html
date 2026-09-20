@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Configuration — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=11">
+<link rel="stylesheet" href="assets/style.css?v=12">
 </head>
 <body>
 <header class="topbar">
@@ -66,7 +66,7 @@
 </table>
 
 <h2 id="panel-settings">Panel settings</h2>
-<p><b>Settings → Server / Hosts</b> edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart). <b>Settings → Tunnel</b> sets the public URL and trusted proxies — the latter decides whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs.</p>
+<p><b>Settings → Server / Hosts</b> edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart). L2TP/IPsec, Cisco AnyConnect and SOCKS5 each have their own port field; their credentials are generated per user (L2TP also gets a per-user IPsec PSK) and delivered as config text files plus dashboard cards — SOCKS5 additionally ships as <code>socks5://</code> links and a Clash proxy. <b>Settings → Tunnel</b> sets the public URL and trusted proxies — the latter decides whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs.</p>
 
 <h2 id="https-ssl">HTTPS / SSL</h2>
 <ul>
@@ -87,6 +87,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=11"></script>
+<script src="assets/docs.js?v=12"></script>
 </body>
 </html>

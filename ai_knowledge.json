@@ -10,7 +10,10 @@
       "Shadowsocks",
       "Hysteria2",
       "WireGuard",
-      "OpenVPN"
+      "OpenVPN",
+      "L2TP/IPsec",
+      "Cisco AnyConnect",
+      "SOCKS5"
     ],
     "notes": "One user can mix several protocols. Subscription link remarks show the plain username."
   },
@@ -32,12 +35,12 @@
   },
   "subscription": {
     "link": "http://SERVER:PORT/sub/TOKEN (or custom path). 32-hex unguessable token.",
-    "browser": "Opened in a browser shows a personal dashboard: status, usage ring, days left, last-active time+IP, import buttons, per-protocol links, WireGuard/OpenVPN configs, QR, app downloads.",
+    "browser": "Opened in a browser shows a personal dashboard: status, usage ring, days left, last-active time+IP, import buttons, per-protocol links, WireGuard/OpenVPN/L2TP/Cisco configs, SOCKS5 link, QR, app downloads.",
     "clients": "VPN apps get raw bytes (base64 links) or Clash YAML (?format=clash). Expired/disabled/limited users get 404 without revealing why. subscription-userinfo header carries quota for client progress bars.",
     "leak": "If a link leaks, Reset token kills it instantly and issues a new one."
   },
   "settings": {
-    "server_hosts": "Domain/IP, VLESS/VMess/Trojan/SS port, Hysteria2 port, WireGuard port, OpenVPN port+proto, DNS, WireGuard server public key, obfuscated host, per-user subdomains, block-direct-IP. Baked into newly generated links.",
+    "server_hosts": "Domain/IP, VLESS/VMess/Trojan/SS port, Hysteria2 port, WireGuard port, OpenVPN port+proto, L2TP port, Cisco port, SOCKS5 port, DNS, WireGuard server public key, obfuscated host, per-user subdomains, block-direct-IP. Baked into newly generated links.",
     "tunnel": "Public base URL (fixes links/QR behind proxy/tunnel) + trusted proxies (only these may send X-Forwarded-For).",
     "ssl": "One-click Let's Encrypt issue/renew for domain or sub.domain. Needs DNS->server, free port 80, certbot installed.",
     "telegram": "Bot token (encrypted) + chat id. Notifies on user create/delete and brute-force lockouts. Send the bot a message once before testing.",
