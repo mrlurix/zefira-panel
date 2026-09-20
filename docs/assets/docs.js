@@ -110,14 +110,14 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var resultsBox = overlay.querySelector("#sp-results");
 
   var index = null, items = [], sel = 0, lastQ = "";
-  fetch("assets/search-index.json?v=3").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
+  fetch("assets/search-index.json?v=12").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
 
   function render() {
     resultsBox.innerHTML = "";
     if (!items.length) {
       var empty = document.createElement("div");
       empty.className = "sp-empty";
-      empty.textContent = index === null ? "Loading index…" : (lastQ ? "No results for “" + lastQ + "”" : "Type to search 45 doc sections…");
+      empty.textContent = index === null ? "Loading index…" : (lastQ ? "No results for “" + lastQ + "”" : "Type to search " + (index ? index.length : 69) + " doc sections…");
       resultsBox.appendChild(empty);
       return;
     }

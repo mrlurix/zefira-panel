@@ -4,6 +4,7 @@ import io
 import json
 import secrets as pysecrets
 import uuid as uuidlib
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import qrcode
@@ -888,7 +889,7 @@ NOTES
 
 def zip_files(files: list) -> bytes:
     buf = io.BytesIO()
-    with __import__("zipfile").ZipFile(buf, "w", __import__("zipfile").ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for name, content in files:
             z.writestr(name, content)
     return buf.getvalue()

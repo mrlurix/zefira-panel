@@ -1,4 +1,5 @@
-﻿import hashlib
+﻿import base64
+import hashlib
 import ipaddress
 import json
 import logging
@@ -267,6 +268,50 @@ def _is_strong_scrypt_hash(h: str | None) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+def _valid_restore_secret(proto: str, value: object) -> bool:
+    """Per-protocol secret shape guard for backup restores.
+
+    secret_data rides inside backups (up to 40k chars, admin-supplied on
+    restore). The V2RAY link builders interpolate secrets straight into
+    subscription URLs, so a crafted value with newlines/control chars
+    would corrupt subscription output. Only accept exactly what
+    provision_map() generates; anything else skips the row.
+    """
+    if not isinstance(value, str) or not value or len(value) > 20000:
+        return False
+    if proto in ("vless", "reality", "vmess", "trojan"):
+        return bool(re.fullmatch(r"[a-f0-9-]{36}", value))
+    if proto in ("ss", "hysteria2", "cisco", "socks5"):
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", value))
+    if proto == "wireguard":
+        try:
+            return len(base64.b64decode(value, validate=True)) == 32
+        except Exception:
+            return False
+    if proto == "openvpn":
+        return (
+            "<ZEFIRA-CERT>" in value
+            and "<ZEFIRA-KEY>" in value
+            and "-----BEGIN CERTIFICATE-----" in value
+            and "-----BEGIN PRIVATE KEY-----" in value
+        )
+    if proto == "l2tp":
+        try:
+            data = json.loads(value)
+        except (ValueError, AttributeError):
+            return False
+        if not isinstance(data, dict):
+            return False
+        pw, psk = data.get("password"), data.get("psk")
+        return (
+            isinstance(pw, str)
+            and isinstance(psk, str)
+            and bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", pw))
+            and bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", psk))
+        )
+    return False
 
 
 def _scrub_env_password() -> None:
@@ -2289,6 +2334,28 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
         clean_protos = [p for p in (ru.protocols or "").split(",") if p in protocols.PROTOCOLS]
         if not clean_protos:
             clean_protos = [ru.protocol if ru.protocol in protocols.PROTOCOLS else "vless"]
+        # secrets ride inside backups: every secret for every restored
+        # protocol must match exactly what provision_map() generates
+        # (per-protocol shape, no control chars). V2RAY builders splice
+        # secrets straight into subscription URLs, so anything else would
+        # corrupt client output. Missing/forged secrets are never imported:
+        # the row gets freshly provisioned server-side credentials instead.
+        try:
+            sec_map = json.loads(ru.secret_data) if (ru.secret_data or "") else None
+        except (ValueError, AttributeError):
+            sec_map = None
+        if isinstance(sec_map, dict) and all(
+            _valid_restore_secret(p, sec_map.get(p)) for p in clean_protos
+        ):
+            secret_json = ru.secret_data
+        else:
+            try:
+                secret_json = protocols.serialize_secrets(
+                    protocols.provision_map(clean_protos, ru.username)
+                )
+            except ValueError:
+                skipped += 1
+                continue
         prepared_users.append(
             VpnUser(
                 username=ru.username,
@@ -2299,7 +2366,7 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
                 device_limit=ru.device_limit,
                 used_gb=ru.used_gb,
                 token=ru.token,
-                secret_data=ru.secret_data or "",
+                secret_data=secret_json,
                 is_active=ru.is_active,
                 created_at=created,
                 expires_at=expires,

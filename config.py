@@ -44,9 +44,23 @@ def _session_ttl() -> int:
 
 SESSION_TTL = _session_ttl()
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-SUBSCRIPTION_PATH = os.environ.get("SUBSCRIPTION_PATH", "/sub").strip() or "/sub"
-if not SUBSCRIPTION_PATH.startswith("/"):
-    SUBSCRIPTION_PATH = "/" + SUBSCRIPTION_PATH
+_SUB_RAW = (os.environ.get("SUBSCRIPTION_PATH", "/sub") or "").strip() or "/sub"
+if not _SUB_RAW.startswith("/"):
+    _SUB_RAW = "/" + _SUB_RAW
+# Route patterns are operator-controlled env: a crafted value (e.g. with
+# "..", "{token}" tricks or absurd length) must never alter routing.
+# Fall back to /sub on anything but a plain path prefix.
+import re as _re
+
+if (
+    _SUB_RAW == "/"
+    or ".." in _SUB_RAW
+    or len(_SUB_RAW) > 64
+    or not _re.fullmatch(r"/[a-zA-Z0-9/_-]*", _SUB_RAW)
+):
+    SUBSCRIPTION_PATH = "/sub"
+else:
+    SUBSCRIPTION_PATH = _SUB_RAW.rstrip("/") or "/sub"
 DOMAIN = os.environ.get("ZEFIRA_DOMAIN", "zefira.example.com").strip() or "zefira.example.com"
 SUB_PORT = os.environ.get("ZEFIRA_SUB_PORT", "443")
 WG_PORT = os.environ.get("ZEFIRA_WG_PORT", "51820")

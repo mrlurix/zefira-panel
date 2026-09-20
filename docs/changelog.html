@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=12">
+<link rel="stylesheet" href="assets/style.css?v=13">
 </head>
 <body>
 <header class="topbar">
@@ -42,6 +42,14 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v161">v1.6.1 — White-hat audit round 2</h2>
+<ul>
+  <li><b>Restore secret validation:</b> every imported <code>secret_data</code> must match exactly what the panel generates (UUID / token / WireGuard-key / OpenVPN-bundle / L2TP-JSON shapes, no control chars). Missing or forged secrets are re-provisioned server-side instead of imported — crafted backups can no longer corrupt subscription output.</li>
+  <li><b>Subscription path guard:</b> <code>SUBSCRIPTION_PATH</code> env falls back to <code>/sub</code> on anything but a plain path prefix (no <code>..</code>, no <code>/</code>-only, 64 chars max).</li>
+  <li><b>Installer:</b> sudoers rule resolves the real <code>systemctl</code> path instead of assuming <code>/bin</code>.</li>
+  <li><b>Site:</b> search-index fetch re-versioned, stale hardcoded section count made dynamic; full panel + docs rescan (subprocess list-form only, no <code>|safe</code>, no inline handlers, escaped search highlights, <code>rel=noopener</code> everywhere) — suites still <b>117/117 + 60/60</b>.</li>
+</ul>
 
 <h2 id="v160">v1.6.0 — L2TP, Cisco AnyConnect, SOCKS5</h2>
 <ul>
@@ -124,6 +132,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=12"></script>
+<script src="assets/docs.js?v=13"></script>
 </body>
 </html>

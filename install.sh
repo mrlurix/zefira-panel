@@ -279,7 +279,10 @@ chmod 600 "$TARGET/instance/zefira.db" 2>/dev/null || true
 chmod 600 "$ENV_FILE"
 # Allow the unprivileged service to restart ONLY itself after an update.
 # No other sudo rights: `sudo -n systemctl restart zefira` from main.py.
-echo "zefira ALL=(root) NOPASSWD: /bin/systemctl restart $SERVICE, /bin/systemctl reload $SERVICE" > /etc/sudoers.d/zefira
+# Resolve the binary path (merged-/usr systems keep /bin as a symlink,
+# but never assume it): the rule names one exact binary + unit.
+_SYSCTL="$(command -v systemctl 2>/dev/null || echo /bin/systemctl)"
+echo "zefira ALL=(root) NOPASSWD: $_SYSCTL restart $SERVICE, $_SYSCTL reload $SERVICE" > /etc/sudoers.d/zefira
 chmod 440 /etc/sudoers.d/zefira
 visudo -c >/dev/null 2>&1 || { rm -f /etc/sudoers.d/zefira; warn "sudoers check failed, update restart will need manual systemctl restart"; }
 
