@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=14">
+<link rel="stylesheet" href="assets/style.css?v=15">
 </head>
 <body>
 <header class="topbar">
@@ -82,7 +82,7 @@
 <p><b>Settings → API Tokens</b> issues <code>zfp_…</code> bearer tokens for Telegram bots, reseller dashboards and scripts. Send <code>Authorization: Bearer …</code> instead of cookies (then no CSRF header is needed either). Pick a scope at creation:</p>
 <table>
 <tr><th>Scope</th><th>Can</th><th>Use for</th></tr>
-<tr><td><code>bot</code></td><td>List/search users, create users (incl. start-on-first-use), read stats &amp; templates, own subscription links</td><td>Reseller bots — least privilege, safe to ship</td></tr>
+<tr><td><code>bot</code></td><td>List/search users, lookup by username, create users (incl. start-on-first-use), read stats &amp; templates, own subscription links, QR, <b>developer resets</b> (usage + token renewal)</td><td>Reseller bots — least privilege, safe to ship</td></tr>
 <tr><td><code>full</code> (default)</td><td>Everything the creating admin can do (except password-gated actions, which still need the password)</td><td>Your own dashboards &amp; scripts only</td></tr>
 </table>
 <p>Tokens are shown <b>once</b>, can be revoked instantly, are included in backups, and a <code>bot</code> token gets <code>403</code> on deletes, patches, backup/restore, settings, tokens and updates. Guard them like passwords.</p>
@@ -134,6 +134,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=14"></script>
+<script src="assets/docs.js?v=15"></script>
 </body>
 </html>

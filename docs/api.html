@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=14">
+<link rel="stylesheet" href="assets/style.css?v=15">
 </head>
 <body>
 <header class="topbar">
@@ -63,11 +63,13 @@
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td>Counters: active, expired, expiring-soon, limited…</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/users?q=…</code></td><td>Up to 500, username/note search</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users/by-username/{username}</code></td><td>Exact lookup — bots know usernames, not IDs</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td>Create (protocols, volume, days, first-use, device limit)</td></tr>
 <tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td>Extend, top-up, note, expiry, active flag</td></tr>
 <tr><td><span class="badge del">DELETE</span></td><td><code>/api/users/{id}</code></td><td>—</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td>Rotates token + all secrets</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-usage</code></td><td>Zeroes used traffic (for developers/bots)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset</code></td><td>Developer combo: <code>{"reset_usage": true, "reset_token": false}</code> — one call for renew/top-up flows (token rotation kills the old link)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td>Sub URL + QR / config file or ZIP</td></tr>
 </table>
 
@@ -116,6 +118,6 @@ curl -b jar.txt -H 'Content-Type: application/json' \
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=14"></script>
+<script src="assets/docs.js?v=15"></script>
 </body>
 </html>

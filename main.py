@@ -71,6 +71,7 @@ from schemas import (
     TunnelSettingsIn,
     UserCreateIn,
     UserPatchIn,
+    UserResetIn,
 )
 from security import (
     COOKIE_NAME,
@@ -375,7 +376,8 @@ def _validate_trusted_proxies_strict(raw: str) -> None:
 # Bot-safe API scopes. "full" = everything (default, backward compat).
 # "bot" = reseller-bot least-privilege: read self/stats, list users,
 # create users (including start_on_first_use, which is safe: expiry is
-# server-computed now+days, activation is single-commit on first fetch).
+# server-computed now+days, activation is single-commit on first fetch),
+# username lookup, and the developer reset API (usage/token renewal).
 BOT_ALLOWED_EXACT = {
     ("GET", "/api/me"),
     ("GET", "/api/stats"),
@@ -383,13 +385,25 @@ BOT_ALLOWED_EXACT = {
     ("POST", "/api/users"),
     ("GET", "/api/templates"),
 }
+# Regex rules for bot tokens on ID/username-addressed developer endpoints.
+# Full match against "METHOD path". Numeric IDs only, no traversal.
+BOT_ALLOWED_RE = [
+    ("GET", re.compile(r"^/api/users/by-username/[A-Za-z0-9_]{3,32}$")),
+    ("POST", re.compile(r"^/api/users/[0-9]{1,10}/reset-usage$")),
+    ("POST", re.compile(r"^/api/users/[0-9]{1,10}/reset$")),
+    ("GET", re.compile(r"^/api/users/[0-9]{1,10}/qr$")),
+]
 
 
 def _token_scope_allowed(scopes: str | None, method: str, path: str) -> bool:
     if not scopes or scopes == "full":
         return True
     if scopes == "bot":
-        return (method.upper(), path) in BOT_ALLOWED_EXACT
+        if (method.upper(), path) in BOT_ALLOWED_EXACT:
+            return True
+        return any(
+            method.upper() == m and rx.match(path) for m, rx in BOT_ALLOWED_RE
+        )
     return False
 
 
@@ -3417,6 +3431,68 @@ def api_user_qr(user_id: int, request: Request, admin: Admin = Depends(require_a
     base = public_base_url(request)
     sub_url = f"{base}/sub/{token}"
     return {"url": sub_url, "qr_b64": protocols.qr_svg_b64(sub_url)}
+
+
+@app.get("/api/users/by-username/{username}")
+def api_user_by_username(username: str, admin: Admin = Depends(require_admin)):
+    """Developer lookup: fetch one user by exact username.
+
+    Bots know usernames (e.g. tg123), not numeric IDs: this avoids a
+    list-and-filter round trip for every renew/reset call.
+    """
+    name = (username or "").strip()
+    if not USERNAME_RE.match(name):
+        raise HTTPException(status_code=400, detail="Invalid username")
+    with db.s() as s:
+        user = s.scalar(select(VpnUser).where(VpnUser.username == name))
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user.to_dict()
+
+
+@app.post("/api/users/{user_id}/reset")
+def api_reset_user(
+    user_id: int, data: UserResetIn, request: Request, admin: Admin = Depends(require_admin)
+):
+    """Developer combo reset: zero usage and/or rotate token+secrets.
+
+    One call for renew/top-up flows: {"reset_usage": true} only clears the
+    meter, {"reset_token": true} additionally kills the old subscription
+    link and issues fresh secrets. At least one flag must be true.
+    """
+    if not data.reset_usage and not data.reset_token:
+        raise HTTPException(status_code=400, detail="Nothing to reset: enable reset_usage and/or reset_token")
+    with db.s() as s:
+        user = _get_user_or_404(s, user_id)
+        changes = []
+        if data.reset_usage:
+            user.used_gb = 0.0
+            changes.append("used=0")
+        if data.reset_token:
+            user.token = secrets.token_hex(16)
+            proto_list = user.protocols_list()
+            try:
+                user.secret_data = protocols.serialize_secrets(
+                    protocols.provision_map(proto_list, user.username)
+                )
+            except ValueError:
+                log.warning("Combo reset refused (bad protocols=%s) id=%s", proto_list, user_id)
+                raise HTTPException(
+                    status_code=422,
+                    detail="User has unknown protocols; delete and recreate it",
+                )
+            changes.append("token+secrets rotated")
+        s.commit()
+        out = user.to_dict()
+        audit(
+            s,
+            "USER_RESET",
+            f"{user.username} ({', '.join(changes)}) by {admin.username}",
+            client_ip(request),
+        )
+        s.commit()
+    log.info("User reset id=%s (%s) by %s", user_id, ",".join(changes), admin.username)
+    return out
 
 
 @app.get("/api/users/{user_id}/config")

@@ -65,6 +65,19 @@ class UserPatchIn(BaseModel):
         return v
 
 
+class UserResetIn(BaseModel):
+    """Developer reset: one call zeroes usage and/or rotates token+secrets.
+
+    At least one flag must be true, otherwise there is nothing to do (400).
+    Bots use it for renew/top-up flows without juggling two endpoints.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reset_usage: bool = True
+    reset_token: bool = False
+
+
 class TelegramSettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

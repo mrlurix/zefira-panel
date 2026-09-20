@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=14">
+<link rel="stylesheet" href="assets/style.css?v=15">
 </head>
 <body>
 <header class="topbar">
@@ -55,7 +55,7 @@
 <tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore) enforced on <b>actual streamed bytes</b> — chunked bodies without <code>Content-Length</code> cannot bypass it</td></tr>
 <tr><td>SSRF</td><td>AI <code>base_url</code> rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; node probes filter link-local/metadata dials; create/patch reject metadata addresses</td></tr>
 <tr><td>Quota</td><td>Subscriptions with <code>used_gb &gt;= volume_gb</code> 404 like expired/disabled (raw, Clash and dashboard). <code>device_limit</code> is advisory only — shown in panel + Clash comment, never blocks</td></tr>
-<tr><td>Tokens</td><td>API tokens are <code>full</code> (default) or <code>bot</code> least-privilege (<code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code>). Bot tokens can create users including <code>start_on_first_use</code> (server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</td></tr>
+<tr><td>Tokens</td><td>API tokens are <code>full</code> (default) or <code>bot</code> least-privilege (<code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, username lookup, <code>POST /api/users</code>, <code>GET /api/templates</code>, QR, developer resets). Bot tokens can create and renew users including <code>start_on_first_use</code> (server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</td></tr>
 <tr><td>Restore</td><td>Admin hashes must be scrypt with <code>N&gt;=2^14</code> (weak/forged hashes skipped); zero-volume users skipped; <code>trusted_proxies</code> and AI URL re-validated strictly on import; token scopes preserved</td></tr>
 <tr><td>Secrets</td><td>Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key. <code>ZEFIRA_ADMIN_PASSWORD</code> is one-time: scrubbed from <code>.env</code> on first boot</td></tr>
 <tr><td>Sensitive exports</td><td>Backup download is POST-only with password confirm (no GET, so no CSRF-able download); <code>{"encrypt": true}</code> returns a scrypt + Fernet blob restorable via <code>POST /api/restore-encrypted</code>; access logs omit subscription tokens</td></tr>
@@ -83,6 +83,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=14"></script>
+<script src="assets/docs.js?v=15"></script>
 </body>
 </html>

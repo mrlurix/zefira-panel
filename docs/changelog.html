@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=14">
+<link rel="stylesheet" href="assets/style.css?v=15">
 </head>
 <body>
 <header class="topbar">
@@ -43,6 +43,12 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v180">v1.8.0 — Developer reset API</h2>
+<ul>
+  <li><b>New endpoints for integrations:</b> <code>GET /api/users/by-username/{username}</code> (bots know usernames, not IDs) and <code>POST /api/users/{id}/reset</code> combo (<code>reset_usage</code> and/or <code>reset_token</code> in one call — renew/top-up flows, empty flags 400).</li>
+  <li><b>Bot scope widened for renewals:</b> <code>bot</code> tokens can now lookup, QR, <code>reset-usage</code> and combo <code>reset</code>; deletes, patches, backup/restore, settings and tokens stay <code>403</code>.</li>
+</ul>
 
 <h2 id="v170">v1.7.0 — AI that acts + complete docs</h2>
 <ul>
@@ -140,6 +146,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=14"></script>
+<script src="assets/docs.js?v=15"></script>
 </body>
 </html>
