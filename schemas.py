@@ -134,6 +134,35 @@ class AiSettingsIn(BaseModel):
             return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
         return v
 
+    @field_validator("base_url", mode="after")
+    @classmethod
+    def _reject_url_userinfo(cls, v):
+        # SSRF hardening at the schema layer: reject userinfo
+        # (http://user:pass@host) which urllib would otherwise honor,
+        # plus explicit cloud-metadata targets. Deeper checks
+        # (DNS-resolved IP filtering, no-redirect fetch) live in main.py.
+        if not v:
+            return v
+        try:
+            from urllib.parse import urlparse as _up
+
+            p = _up(v)
+            if p.username or p.password or "@" in (p.netloc or ""):
+                raise ValueError("userinfo not allowed in base URL")
+            host = (p.hostname or "").lower()
+            if host in (
+                "metadata.google.internal", "metadata.google",
+                "instance-data", "instance-data-compute",
+            ):
+                raise ValueError("metadata host blocked")
+            if host in ("0.0.0.0", "::", "[::]"):
+                raise ValueError("invalid host")
+        except ValueError:
+            raise
+        except Exception:
+            pass
+        return v
+
 
 class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -171,6 +200,7 @@ class ApiTokenCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+    scopes: Literal["full", "bot"] = "full"
 
 
 class TemplateCreateIn(BaseModel):
@@ -333,6 +363,24 @@ class RestoreAdminIn(BaseModel):
 
 class RestoreConfirmIn(BaseModel):
     password_confirm: str = Field(min_length=8, max_length=128)
+
+
+class BackupIn(RestoreConfirmIn):
+    # encrypt=True returns a Fernet-encrypted blob (key derived from
+    # password_confirm via scrypt) instead of plaintext JSON. Use it when
+    # storing backups off-server: the file then reveals nothing without
+    # the admin password that created it.
+    encrypt: bool = False
+
+
+class RestoreEncryptedIn(RestoreConfirmIn):
+    # Encrypted backup produced by POST /api/backup {"encrypt": true}.
+    salt: str = Field(min_length=16, max_length=64, pattern=r"^[a-f0-9]+$")
+    payload: str = Field(min_length=10, max_length=100000000)
+    # Password that encrypted the backup. Defaults to password_confirm
+    # (common case: same admin password). Provide separately when the
+    # backup was made under an older password.
+    backup_password: str = Field(default="", max_length=128)
 
 
 class RestoreIn(RestoreConfirmIn):

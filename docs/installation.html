@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Installation — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -71,8 +71,9 @@
   <li>Installs Python, Nginx and Certbot</li>
   <li>Clones Zefira to <code>/opt/zefira</code></li>
   <li>Creates a virtualenv and installs dependencies</li>
-  <li>Writes a locked-down <code>.env</code> (mode 600)</li>
-  <li>Registers a <code>systemd</code> service (<code>zefira.service</code>)</li>
+  <li>Writes a locked-down <code>.env</code> (mode 600, admin password one-time — auto-scrubbed on first boot)</li>
+  <li>Creates a <code>zefira</code> system user, chowns <code>/opt/zefira</code>, installs a passwordless sudoers rule scoped to <code>systemctl restart zefira</code> only</li>
+  <li>Registers a non-root <code>systemd</code> service (<code>zefira.service</code>: <code>User=zefira</code>, <code>ProtectSystem=strict</code>, <code>PrivateDevices</code>, <code>UMask=0077</code>)</li>
   <li>Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
 </ol>
 
@@ -99,6 +100,6 @@ bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=10"></script>
+<script src="assets/docs.js?v=11"></script>
 </body>
 </html>

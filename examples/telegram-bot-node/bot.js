@@ -6,11 +6,14 @@
  *   npm install
  *   set TELEGRAM_BOT_TOKEN=...      (from @BotFather; Linux: export)
  *   set ZEFIRA_URL=https://panel.example.com
- *   set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens)
+ *   set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens -> scope "bot")
  *   node bot.js
  *
  * Flow: /buy -> pick a plan -> bot creates the VPN user -> replies with the
  * subscription link. /my shows your existing account.
+ *
+ * Security: use a "bot"-scoped token (least privilege). A "full" token can
+ * delete users, restore backups and manage settings: never ship it in a bot.
  */
 const TelegramBot = require("node-telegram-bot-api");
 

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Configuration — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -48,7 +48,7 @@
 <table>
 <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
 <tr><td><code>ZEFIRA_ADMIN_USERNAME</code></td><td><code>admin</code></td><td>First-run admin (lowercased, validated)</td></tr>
-<tr><td><code>ZEFIRA_ADMIN_PASSWORD</code></td><td>random</td><td>First-run password (random if empty)</td></tr>
+<tr><td><code>ZEFIRA_ADMIN_PASSWORD</code></td><td>random</td><td>First-run password, <b>one-time</b>: auto-scrubbed from <code>.env</code> on first boot (random if empty)</td></tr>
 <tr><td><code>ZEFIRA_DOMAIN</code></td><td>—</td><td>Public domain baked into configs &amp; links</td></tr>
 <tr><td><code>ZEFIRA_PORT</code></td><td><code>8000</code></td><td>Panel listen port (systemd unit)</td></tr>
 <tr><td><code>ZEFIRA_SUB_PORT</code></td><td><code>443</code></td><td>Port in VLESS/VMess/Trojan/SS links</td></tr>
@@ -59,7 +59,9 @@
 <tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> or <code>postgresql+psycopg2://…</code> (MySQL: use <code>utf8mb4</code> charset, or emoji notes break inserts)</td></tr>
 <tr><td><code>SUBSCRIPTION_PATH</code></td><td><code>/sub</code></td><td>Subscription URL prefix</td></tr>
 <tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td>Login session lifetime, seconds (clamped to 5 min – 7 days, default 8h)</td></tr>
-<tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td>empty</td><td>CIDRs allowed to send <code>X-Forwarded-For</code></td></tr>
+<tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td>empty</td><td>CIDRs allowed to send <code>X-Forwarded-For</code>. <code>0.0.0.0/0</code>, multicast and overly-broad ranges (&lt; /8 v4, &lt; /32 v6) are refused/ignored. Example: <code>127.0.0.1</code></td></tr>
+<tr><td><code>ZEFIRA_ALLOW_UPDATE</code></td><td><code>1</code></td><td><code>0</code> disables the in-panel updater entirely</td></tr>
+<tr><td><code>ZEFIRA_ALLOW_CUSTOM_REPO</code></td><td><code>0</code></td><td><code>1</code> allows <code>ZEFIRA_UPDATE_REPO/BRANCH</code> overrides (default: pinned to <code>mrlurix/zefira-panel@main</code>)</td></tr>
 <tr><td><code>TG_BOT_TOKEN</code> / <code>TG_CHAT_ID</code></td><td>empty</td><td>Telegram notifications</td></tr>
 </table>
 
@@ -85,6 +87,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=10"></script>
+<script src="assets/docs.js?v=11"></script>
 </body>
 </html>

@@ -5,11 +5,15 @@ Setup:
     pip install -r requirements.txt
     set TELEGRAM_BOT_TOKEN=...      (from @BotFather)
     set ZEFIRA_URL=https://panel.example.com
-    set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens)
+    set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens -> Create with scope "bot")
     python bot.py
 
 Flow: /buy -> pick a plan -> bot creates the VPN user -> replies with the
 subscription link. /my shows your existing account.
+
+Security: use a "bot"-scoped token (least privilege: can only list/create
+users + read stats/templates). A "full" token works but can delete users,
+restore backups, and manage settings: never ship it in a bot.
 """
 import logging
 import os

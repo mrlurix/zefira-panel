@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -46,14 +46,20 @@
 <h2 id="built-in-defenses">Built-in defenses</h2>
 <table>
 <tr><th>Layer</th><th>Implementation</th></tr>
-<tr><td>Passwords</td><td>scrypt hashing, 10+ chars with letters + digits enforced on change</td></tr>
+<tr><td>Passwords</td><td>scrypt hashing (N=2^14), 10+ chars with letters + digits enforced on change</td></tr>
 <tr><td>Sessions</td><td>JWT in HttpOnly + SameSite=Strict cookies, <code>Secure</code> behind HTTPS, versioned (logout / password change kills all sessions)</td></tr>
 <tr><td>Brute force</td><td>8 tries / 15 min per IP+user, plus a loose global per-user bucket (lockout-DoS resistant); identical 401s + dummy-hash timing for unknown users</td></tr>
-<tr><td>CSRF</td><td>Mutating <code>/api</code> calls require <code>X-Requested-With: XMLHttpRequest</code></td></tr>
+<tr><td>CSRF</td><td>Mutating <code>/api</code> calls require <code>X-Requested-With: XMLHttpRequest</code> (Bearer tokens exempt: they cannot be sent cross-origin without a preflight the panel never passes)</td></tr>
 <tr><td>Headers</td><td>CSP, <code>frame-ancestors 'none'</code>, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</td></tr>
-<tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore), LIKE-escape on search</td></tr>
-<tr><td>Secrets</td><td>Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key</td></tr>
-<tr><td>Sensitive exports</td><td>Backup download is POST-only with password confirm (no GET, so no CSRF-able download); access logs omit subscription tokens</td></tr>
+<tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore) enforced on <b>actual streamed bytes</b> — chunked bodies without <code>Content-Length</code> cannot bypass it</td></tr>
+<tr><td>SSRF</td><td>AI <code>base_url</code> rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; node probes filter link-local/metadata dials; create/patch reject metadata addresses</td></tr>
+<tr><td>Quota</td><td>Subscriptions with <code>used_gb &gt;= volume_gb</code> 404 like expired/disabled (raw, Clash and dashboard). <code>device_limit</code> is advisory only — shown in panel + Clash comment, never blocks</td></tr>
+<tr><td>Tokens</td><td>API tokens are <code>full</code> (default) or <code>bot</code> least-privilege (<code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code>). Bot tokens can create users including <code>start_on_first_use</code> (server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</td></tr>
+<tr><td>Restore</td><td>Admin hashes must be scrypt with <code>N&gt;=2^14</code> (weak/forged hashes skipped); zero-volume users skipped; <code>trusted_proxies</code> and AI URL re-validated strictly on import; token scopes preserved</td></tr>
+<tr><td>Secrets</td><td>Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key. <code>ZEFIRA_ADMIN_PASSWORD</code> is one-time: scrubbed from <code>.env</code> on first boot</td></tr>
+<tr><td>Sensitive exports</td><td>Backup download is POST-only with password confirm (no GET, so no CSRF-able download); <code>{"encrypt": true}</code> returns a scrypt + Fernet blob restorable via <code>POST /api/restore-encrypted</code>; access logs omit subscription tokens</td></tr>
+<tr><td>Service</td><td>Non-root systemd (<code>User=zefira</code>, <code>ProtectSystem=strict</code>, <code>UMask=0077</code>); updater pinned to <code>mrlurix/zefira-panel@main</code>, fixed service name, <code>ZEFIRA_ALLOW_UPDATE=0</code> kill-switch</td></tr>
+<tr><td>Proxies</td><td><code>trusted_proxies</code> refuses <code>0.0.0.0/0</code>, multicast and overly-broad ranges at input and ignores them at runtime (XFF spoofing = rate-limit bypass)</td></tr>
 <tr><td>Visibility</td><td>Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
 </table>
 
@@ -64,16 +70,18 @@
 
 <h2 id="operator-checklist">Operator checklist</h2>
 <ul>
-  <li>Change the password right after first login.</li>
+  <li>Change the password right after first login (the installer password is auto-scrubbed from <code>.env</code> on first boot, but rotate it anyway).</li>
   <li>Serve the panel over HTTPS (installer step 7 or Settings → SSL).</li>
   <li>Keep <code>/opt/zefira/instance/secret.key</code> backed up <b>offline</b> — without it, encrypted data is unrecoverable.</li>
-  <li>Behind a proxy, set <code>trusted_proxies</code> so rate limits and audit IPs see real clients.</li>
-  <li>Never share backup JSON files — they hold password hashes and secrets.</li>
+  <li>Behind a proxy, set <code>trusted_proxies</code> to specific IPs (e.g. <code>127.0.0.1</code>) — never <code>0.0.0.0/0</code> (refused) — so rate limits and audit IPs see real clients.</li>
+  <li>Never share backup JSON files — they hold password hashes and secrets. Use <code>{"encrypt": true}</code> for off-server storage.</li>
+  <li>Give reseller bots <code>bot</code>-scoped tokens, never <code>full</code>.</li>
+  <li>Service runs as user <code>zefira</code> (non-root). Verify with <code>systemctl show zefira -p User</code>.</li>
 </ul>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=10"></script>
+<script src="assets/docs.js?v=11"></script>
 </body>
 </html>

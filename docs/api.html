@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -44,7 +44,7 @@
 <p class="subtitle">Cookie-authenticated JSON API for bots and dashboards.</p>
 
 <div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
-<p><b>Bots &amp; integrations:</b> create a long-lived token under <b>Settings → API Tokens</b> and send it as <code>Authorization: Bearer zfp_…</code> — no CSRF header needed then. Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime.</p>
+<p><b>Bots &amp; integrations:</b> create a long-lived token under <b>Settings → API Tokens</b> with scope <code>full</code> (default, everything) or <code>bot</code> (least-privilege for resellers: <code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code>) and send it as <code>Authorization: Bearer zfp_…</code> — no CSRF header needed then. Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime. Bot tokens can create users including <code>start_on_first_use</code> (bot-safe: expiry is server-computed) but get <code>403</code> on deletes, patches, backup/restore, settings, tokens and updates.</p>
 <p>Ready-made reseller bots: <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node">Node.js</a> — plans keyboard, account creation, subscription link.</p>
 
 <h2 id="auth-account">Auth &amp; account</h2>
@@ -89,15 +89,16 @@
 <tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol (optional node pin)</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/templates…</code> · <code>/api/nodes…</code> · <code>/api/blocklist…</code></td><td>Plans, tunnels, blocked sites</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/nodes/{id}/check</code> · <code>/guide</code> · <code>/reveal-token</code> · <code>/regen-token</code></td><td>Tunnel ops</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/backup</code></td><td>Full JSON export, password-confirmed (download)</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/restore</code></td><td>Password-confirmed re-import</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/backup</code></td><td>Full JSON export, password-confirmed (download). <code>{"encrypt": true}</code> returns a scrypt + Fernet blob instead of plaintext</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/restore</code></td><td>Password-confirmed re-import (weak admin hashes / zero-volume users skipped, scopes preserved)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/restore-encrypted</code></td><td><code>{password_confirm, salt, payload, backup_password?}</code> — restores an encrypted backup</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code></td><td>Logs, CPU/RAM/disk, notifications</td></tr>
 </table>
 
 <h2 id="public">Public</h2>
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Browsers get the user dashboard; clients get Base64 sub, or Clash YAML with <code>?format=clash</code></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Browsers get the user dashboard; clients get Base64 sub, or Clash YAML with <code>?format=clash</code>. Expired, disabled <b>and out-of-volume</b> (<code>used_gb &gt;= volume_gb</code>) users 404 in all modes; <code>device_limit</code> is advisory only</td></tr>
 </table>
 
 <h2 id="example-create-a-user">Example: create a user</h2>
@@ -114,6 +115,6 @@ curl -b jar.txt -H 'Content-Type: application/json' \
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=10"></script>
+<script src="assets/docs.js?v=11"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 </head>
 <body>
 <header class="topbar">
@@ -42,6 +42,18 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v150">v1.5.0 — White-hat hardening round</h2>
+<ul>
+  <li><b>Non-root systemd:</b> installer creates a <code>zefira</code> system user, owns <code>/opt/zefira</code>, runs with <code>User=zefira</code> + <code>ProtectSystem=strict</code>, <code>PrivateDevices</code>, <code>UMask=0077</code>. Update restarts via a passwordless sudoers rule scoped to <code>systemctl restart zefira</code> only. Updater repo/branch pinned to <code>mrlurix/zefira-panel@main</code> (custom mirrors need <code>ZEFIRA_ALLOW_CUSTOM_REPO=1</code>), service name fixed, kill-switch <code>ZEFIRA_ALLOW_UPDATE=0</code>.</li>
+  <li><b>Quota enforced:</b> subscriptions with <code>used_gb &gt;= volume_gb</code> now 404 like expired/disabled (same for Clash/raw/dashboard). <code>device_limit</code> is officially advisory (shown in panel + Clash comment, never blocks) until reliable device counting exists.</li>
+  <li><b>Real body limits:</b> size gate now counts actual streamed bytes (chunked bodies without <code>Content-Length</code> can no longer bypass the 1 MiB / 64 MiB restore caps).</li>
+  <li><b>SSRF blocked:</b> AI <code>base_url</code> rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects. Node probes (<code>probe_host</code> + tunnel check) filter link-local/metadata dials; create/patch reject metadata addresses.</li>
+  <li><b>Restore hardened:</b> admin <code>password_hash</code> must be scrypt with <code>N&gt;=2^14</code> (power-of-two, sane r/p/salt/dk) or the row is skipped; zero-volume users skipped; <code>trusted_proxies</code> and AI URL re-validated strictly on import; token <code>scopes</code> preserved.</li>
+  <li><b>Token scopes:</b> <code>full</code> (default) vs <code>bot</code> (least-privilege: <code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code>). Bot tokens can create users including <code>start_on_first_use</code> (server-computed expiry, single-commit activation = bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens. Reseller bot examples updated to request <code>bot</code> scope.</li>
+  <li><b>Backups + secrets:</b> <code>POST /api/backup {"encrypt": true}</code> returns a scrypt+ Fernet blob (needs the admin password to decrypt) via <code>POST /api/restore-encrypted</code>. <code>ZEFIRA_ADMIN_PASSWORD</code> is one-time: scrubbed from <code>.env</code> on first boot. <code>trusted_proxies</code> refuses <code>0.0.0.0/0</code>, multicast, and overly-broad ranges at input and ignores them at runtime.</li>
+  <li>Suites still green: <b>117/117</b> pentest + <b>60/60</b> functional, plus new quota/scope/SSRF/encrypted-backup/chunked checks.</li>
+</ul>
 
 <h2 id="unreleased-nodes">Latest — Server nodes with auto-failover</h2>
 <ul>
@@ -105,6 +117,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=10"></script>
+<script src="assets/docs.js?v=11"></script>
 </body>
 </html>

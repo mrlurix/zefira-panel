@@ -19,9 +19,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "/etc/systemd/system/$SERVICE.service"
     rm -f "/etc/nginx/sites-enabled/zefira" "/etc/nginx/sites-available/zefira"
     rm -f /etc/cron.d/zefira-ssl-renew
+    rm -f /etc/sudoers.d/zefira
     systemctl daemon-reload 2>/dev/null || true
     rm -rf "$TARGET"
-    echo "[zefira] uninstalled."
+    echo "[zefira] uninstalled (system user 'zefira' kept for safety; userdel zefira to remove)."
     exit 0
 fi
 
@@ -185,7 +186,7 @@ if [[ $INTERACTIVE -eq 1 ]]; then
 else
     SUB_PATH="${SUBSCRIPTION_PATH:-/sub}"
 fi
-if ! is_valid_subpath "$SUB_PATH"; then echo "[!] Invalid subscription path (use /sub or /my-path, a-z 0-9 / _ -)"; exit 1; fi
+if ! is_valid_subpath "$SUB_PATH" || [[ "$SUB_PATH" == "/" ]]; then echo "[!] Invalid subscription path (use /sub or /my-path, a-z 0-9 / _ -)"; exit 1; fi
 if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username"; exit 1; fi
 
 # ---------- Step 6/7 · Telegram ----------
@@ -259,24 +260,62 @@ if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base6
     [[ -n "$DB_URL" ]] && echo "DATABASE_URL=$(env_escape "$DB_URL")"
     [[ -n "$TG_TOKEN" ]] && echo "TG_BOT_TOKEN=$(env_escape "$TG_TOKEN")"
     [[ -n "$TG_CHAT" ]] && echo "TG_CHAT_ID=$(env_escape "$TG_CHAT")"
+    echo "# NOTE: ZEFIRA_ADMIN_PASSWORD is one-time: the panel scrubs it from"
+    echo "# this file on first boot (lifespan _scrub_env_password). Keep 0600."
 } > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
+# ---------- unprivileged service user ----------
+# The panel never runs as root: a compromised GitHub upstream (via
+# /api/update/apply) or RCE would otherwise mean instant root.
+if ! id zefira >/dev/null 2>&1; then
+    useradd --system --no-log-init --home-dir "$TARGET" --no-create-home --shell /usr/sbin/nologin zefira 2>/dev/null || \
+    useradd --system --home-dir "$TARGET" --no-create-home --shell /usr/sbin/nologin zefira
+    ok "Created system user 'zefira'"
+fi
+chown -R zefira:zefira "$TARGET"
+chmod 700 "$TARGET/instance" 2>/dev/null || true
+chmod 600 "$TARGET/instance/zefira.db" 2>/dev/null || true
+chmod 600 "$ENV_FILE"
+# Allow the unprivileged service to restart ONLY itself after an update.
+# No other sudo rights: `sudo -n systemctl restart zefira` from main.py.
+echo "zefira ALL=(root) NOPASSWD: /bin/systemctl restart $SERVICE, /bin/systemctl reload $SERVICE" > /etc/sudoers.d/zefira
+chmod 440 /etc/sudoers.d/zefira
+visudo -c >/dev/null 2>&1 || { rm -f /etc/sudoers.d/zefira; warn "sudoers check failed, update restart will need manual systemctl restart"; }
+
 # ---------- systemd ----------
-echo "==> [5/6] systemd service..."
+echo "==> [5/6] systemd service (non-root)..."
 cat > "/etc/systemd/system/$SERVICE.service" <<EOF
 [Unit]
 Description=Zefira Proxy Sales Panel
 After=network.target
 
 [Service]
+Type=simple
+User=zefira
+Group=zefira
 WorkingDirectory=$TARGET
 EnvironmentFile=-$ENV_FILE
 ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers --no-access-log
 Restart=always
 RestartSec=3
+# Least privilege + filesystem lockdown (update still works: /opt/zefira
+# is owned by zefira, pip installs into its own .venv).
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+ReadWritePaths=$TARGET/instance $TARGET/.venv
+# Network is required (panel + probes + AI). No extra caps.
+AmbientCapabilities=
+CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target

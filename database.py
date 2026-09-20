@@ -306,6 +306,12 @@ class ApiToken(Base):
     # DB leaks). The raw value is shown once at creation and never stored.
     token_sha = Column(String(64), unique=True, nullable=False, index=True)
     admin_id = Column(Integer, nullable=True)
+    # Scope: "full" (all endpoints) or "bot" (reseller-bot safe subset:
+    # GET /api/me, GET /api/stats, GET /api/users, POST /api/users,
+    # GET /api/templates). Bot tokens can create users (including
+    # start_on_first_use) but can never delete, patch, backup/restore,
+    # change settings, or manage tokens/update.
+    scopes = Column(String(16), nullable=False, default="full")
     created_at = Column(DateTime, nullable=False, default=utcnow)
     last_used_at = Column(DateTime, nullable=True)
 
@@ -314,6 +320,7 @@ class ApiToken(Base):
             "id": self.id,
             "name": self.name,
             "prefix": self.prefix,
+            "scopes": self.scopes or "full",
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
             "last_used_at": (
                 self.last_used_at.isoformat(timespec="seconds") + "Z" if self.last_used_at else None
@@ -325,6 +332,7 @@ class ApiToken(Base):
             "name": self.name,
             "prefix": self.prefix,
             "token_sha": self.token_sha,
+            "scopes": self.scopes or "full",
             "created_at": self.created_at.isoformat(timespec="seconds"),
             "last_used_at": (
                 self.last_used_at.isoformat(timespec="seconds") if self.last_used_at else None
@@ -382,6 +390,11 @@ class Database:
             self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
             self._add_column(conn, "inbounds", "node_id", "node_id INTEGER")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
+            self._add_column(conn, "api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'")
+            try:
+                conn.execute(text("UPDATE api_tokens SET scopes='full' WHERE scopes IS NULL OR scopes=''"))
+            except Exception:
+                pass
             conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
 
     @staticmethod

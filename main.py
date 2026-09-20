@@ -48,6 +48,7 @@ from schemas import (
     AiSettingsIn,
     ApiTokenCreateIn,
     AppearanceIn,
+    BackupIn,
     BlockedSiteIn,
     BlockToggleIn,
     ChangePasswordIn,
@@ -55,6 +56,7 @@ from schemas import (
     InboundPatchIn,
     LoginIn,
     RestoreConfirmIn,
+    RestoreEncryptedIn,
     RestoreIn,
     ServerNodeIn,
     ServerNodePatchIn,
@@ -116,6 +118,7 @@ probe_limiter = SlidingWindowLimiter(max_events=20, window_seconds=60)
 ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
 lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
 ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
+sensitive_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
@@ -130,6 +133,258 @@ APPEARANCE_DEFAULTS = {
     "brand_name": "ZEFIRA",
     "dash_note": "",
 }
+
+# ---- White-hat hardening helpers (SSRF / scopes / restore) ----
+SSRF_METADATA_IPS = {
+    "169.254.169.254", "169.254.169.253", "169.254.169.123",
+    "100.100.100.200", "192.0.0.192",
+    "fd00:ec2::254", "fe80::a9fe:a9fe",
+}
+SSRF_METADATA_HOSTS = {
+    "metadata.google.internal", "metadata.google",
+    "instance-data", "instance-data-compute",
+    "169.254.169.254",
+}
+
+
+def _ip_is_ssrf_blocked(ip_str: str) -> bool:
+    """True for probe/AI targets that must never be fetched.
+
+    Allows loopback (local Ollama on 127.0.0.1:11434) and RFC1918 private
+    nodes (legit monitoring), but blocks link-local (covers
+    169.254.169.254 cloud metadata), multicast, unspecified (0.0.0.0),
+    and explicit metadata IPs. This stops an admin-session hijack from
+    turning AI base_url or node health-checks into a cloud-metadata
+    exfiltration / intranet port-scan oracle.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    if ip.is_multicast or ip.is_unspecified or ip.is_link_local:
+        return True
+    if str(ip).lower() in SSRF_METADATA_IPS:
+        return True
+    # 100.100.100.200 (Alibaba) and 192.0.0.192 are not link-local
+    # on all Python versions: belt-and-braces explicit block.
+    return False
+
+
+def _hostname_is_ssrf_blocked(host: str) -> bool:
+    h = (host or "").strip().lower().rstrip(".")
+    if not h:
+        return True
+    if h in SSRF_METADATA_HOSTS:
+        return True
+    # userinfo smuggling is rejected at schema layer, but double-check
+    # here for hand-edited DB values that bypass Pydantic.
+    if "@" in h:
+        return True
+    try:
+        # Literal IP: check directly without DNS.
+        return _ip_is_ssrf_blocked(h)
+    except Exception:
+        return False
+
+
+def _resolved_ips_blocked(host: str) -> bool:
+    """DNS-rebinding guard: True if ANY resolved A/AAAA is SSRF-blocked.
+
+    A hostname that resolves to both public and metadata/private-link
+    addresses must be rejected outright: urllib/socket may pick the
+    blocked one after validation (TOCTOU).
+    """
+    import socket as _sock
+
+    try:
+        infos = _sock.getaddrinfo(host, None, 0, _sock.SOCK_STREAM)
+    except OSError:
+        # Unresolvable at check time: fail-open for save-time UX, but
+        # request-time callers treat failure as unreachable (no fetch).
+        return False
+    found = False
+    for _fam, _typ, _proto, _canon, sa in infos[:8]:
+        ip_str = sa[0] if isinstance(sa, tuple) else str(sa)
+        found = True
+        if _ip_is_ssrf_blocked(ip_str):
+            return True
+    return False if found else False
+
+
+def _ai_base_url_blocked(base_url: str) -> str | None:
+    """Return a reason string if an AI base_url must be refused, else None."""
+    if not base_url:
+        return None
+    try:
+        p = urlparse(base_url)
+    except Exception:
+        return "invalid URL"
+    if p.scheme not in ("http", "https"):
+        return "only http/https allowed"
+    if p.username or p.password or "@" in (p.netloc or ""):
+        return "userinfo not allowed in URL"
+    host = (p.hostname or "").lower()
+    if not host:
+        return "invalid host"
+    if _hostname_is_ssrf_blocked(host):
+        return "metadata/link-local targets blocked"
+    try:
+        port = p.port
+    except ValueError:
+        return "invalid port"
+    if port is not None and not 1 <= port <= 65535:
+        return "port out of range"
+    if _resolved_ips_blocked(host):
+        return "host resolves to a blocked (metadata/link-local) address"
+    return None
+
+
+def _is_strong_scrypt_hash(h: str | None) -> bool:
+    """Restore guard: only accept scrypt hashes with production-grade cost.
+
+    A hand-crafted backup could otherwise smuggle a weak hash
+    (e.g. scrypt$1024$... of a known password) that is trivially
+    brute-forced, or a non-scrypt string that permanently locks the
+    account (verify_password would always fail). Require N>=2**14,
+    power-of-two N, sane r/p, and sane salt/dk lengths.
+    """
+    try:
+        if not h or len(h) > 256:
+            return False
+        parts = h.split("$")
+        if len(parts) != 6 or parts[0] != "scrypt":
+            return False
+        n, r, p = int(parts[1]), int(parts[2]), int(parts[3])
+        if n < 2**14 or n > 2**20 or (n & (n - 1)) != 0:
+            return False
+        if not 1 <= r <= 32 or not 1 <= p <= 32:
+            return False
+        salt = bytes.fromhex(parts[4])
+        dk = bytes.fromhex(parts[5])
+        if not 8 <= len(salt) <= 64 or not 16 <= len(dk) <= 64:
+            return False
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _scrub_env_password() -> None:
+    """Delete ZEFIRA_ADMIN_PASSWORD from .env after first-run use.
+
+    The installer writes the initial password so systemd can create the
+    first admin. Keeping it forever means any .env backup/leak yields a
+    (possibly still-valid) password. After the admin row exists the env
+    value is never needed again: remove the line, keep 0600 perms.
+    """
+    try:
+        env_path = BASE_DIR / ".env"
+        if not env_path.exists():
+            return
+        text = env_path.read_text(encoding="utf-8")
+        if "ZEFIRA_ADMIN_PASSWORD" not in text:
+            return
+        lines = [
+            ln for ln in text.splitlines()
+            if not ln.strip().startswith("ZEFIRA_ADMIN_PASSWORD=")
+        ]
+        env_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        try:
+            os.chmod(env_path, 0o600)
+        except OSError:
+            pass
+        log.warning("Scrubbed ZEFIRA_ADMIN_PASSWORD from .env (one-time use)")
+    except OSError as exc:
+        log.debug("env scrub failed: %s", exc)
+
+
+def _validate_trusted_proxies_strict(raw: str) -> None:
+    """Reject dangerous trusted_proxies values (XFF spoofing)."""
+    if not raw:
+        return
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if len(parts) > 32:
+        raise HTTPException(status_code=400, detail="Too many trusted proxies (32 max)")
+    for part in parts:
+        try:
+            net = ipaddress.ip_network(part, strict=False)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid IP/CIDR in trusted proxies: {part}")
+        # 0.0.0.0/0 or ::/0 would trust ANY X-Forwarded-For: full IP spoofing,
+        # login rate-limit bypass, and audit-log poisoning. Refuse outright.
+        if net.prefixlen == 0:
+            raise HTTPException(status_code=400, detail="0.0.0.0/0 (trust-all) is not allowed")
+        if net.is_multicast or net.is_unspecified:
+            raise HTTPException(status_code=400, detail=f"Invalid trusted proxy network: {part}")
+        if net.version == 4 and net.prefixlen < 8:
+            raise HTTPException(status_code=400, detail=f"Trusted proxy {part} is too broad (min /8)")
+        if net.version == 6 and net.prefixlen < 32:
+            raise HTTPException(status_code=400, detail=f"Trusted proxy {part} is too broad (min /32)")
+        if net.num_addresses > 2**24 and str(net.network_address) == "10.0.0.0":
+            # 10/8 is the broadest sane private trust; anything bigger
+            # was already rejected above, this is just explicit.
+            pass
+
+
+# Bot-safe API scopes. "full" = everything (default, backward compat).
+# "bot" = reseller-bot least-privilege: read self/stats, list users,
+# create users (including start_on_first_use, which is safe: expiry is
+# server-computed now+days, activation is single-commit on first fetch).
+BOT_ALLOWED_EXACT = {
+    ("GET", "/api/me"),
+    ("GET", "/api/stats"),
+    ("GET", "/api/users"),
+    ("POST", "/api/users"),
+    ("GET", "/api/templates"),
+}
+
+
+def _token_scope_allowed(scopes: str | None, method: str, path: str) -> bool:
+    if not scopes or scopes == "full":
+        return True
+    if scopes == "bot":
+        return (method.upper(), path) in BOT_ALLOWED_EXACT
+    return False
+
+
+def _derive_backup_key(password: str, salt: bytes) -> bytes:
+    import base64 as _b64
+    import hashlib as _hl
+
+    dk = _hl.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return _b64.urlsafe_b64encode(dk)
+
+
+def _encrypt_backup_json(payload: dict, password: str) -> dict:
+    from cryptography.fernet import Fernet as _Fernet
+
+    salt = os.urandom(16)
+    f = _Fernet(_derive_backup_key(password, salt))
+    token = f.encrypt(json.dumps(payload).encode())
+    return {"encrypted": True, "salt": salt.hex(), "payload": token.decode()}
+
+
+def _decrypt_backup_json(salt_hex: str, payload: str, password: str) -> dict:
+    from cryptography.fernet import Fernet as _Fernet
+    from cryptography.fernet import InvalidToken as _Invalid
+
+    try:
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (salt)")
+    if not 8 <= len(salt) <= 64:
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (salt)")
+    f = _Fernet(_derive_backup_key(password, salt))
+    try:
+        raw = f.decrypt(payload.encode())
+    except (_Invalid, ValueError):
+        raise HTTPException(status_code=400, detail="Wrong backup password (decrypt failed)")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (corrupt)")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (shape)")
+    return data
 
 
 def load_appearance() -> dict:
@@ -276,9 +531,20 @@ def trusted_networks() -> list:
         if not part:
             continue
         try:
-            nets.append(ipaddress.ip_network(part, strict=False))
+            net = ipaddress.ip_network(part, strict=False)
         except ValueError:
             continue
+        # Runtime defense-in-depth: even if a broad value was hand-edited
+        # into the DB before strict validation existed, never honor
+        # trust-all / overly-broad ranges (XFF spoofing = rate-limit
+        # bypass + audit poisoning). Input layer rejects these too.
+        if net.prefixlen == 0 or net.is_multicast or net.is_unspecified:
+            continue
+        if net.version == 4 and net.prefixlen < 8:
+            continue
+        if net.version == 6 and net.prefixlen < 32:
+            continue
+        nets.append(net)
     return nets
 
 
@@ -346,15 +612,33 @@ def load_inbounds() -> list:
 
 
 def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
-    """TCP probe used by node health checks. Returns (online, latency_ms)."""
+    """TCP probe used by node health checks. Returns (online, latency_ms).
+
+    SSRF-guarded: link-local (cloud metadata 169.254.169.254), multicast
+    and unspecified targets are never dialed. Private + loopback ARE
+    allowed (operators legitimately monitor 10/8 nodes and functional
+    tests probe 127.0.0.1), but metadata hostnames are refused outright.
+    """
     import socket
 
+    if _hostname_is_ssrf_blocked(host):
+        return False, None
     online, latency = False, None
     try:
         addrinfos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
     except socket.gaierror:
         return False, None
-    for family, socktype, proto, _canon, sa in addrinfos[:3]:
+    # Filter blocked resolved IPs (DNS-rebinding guard): skip metadata /
+    # link-local / multicast / unspecified dial targets.
+    filtered = []
+    for family, socktype, proto, _canon, sa in addrinfos[:6]:
+        ip_str = sa[0] if isinstance(sa, tuple) and sa else ""
+        if ip_str and _ip_is_ssrf_blocked(ip_str):
+            continue
+        filtered.append((family, socktype, proto, _canon, sa))
+    if not filtered:
+        return False, None
+    for family, socktype, proto, _canon, sa in filtered[:3]:
         conn = socket.socket(family, socktype, proto)
         conn.settimeout(timeout)
         try:
@@ -403,7 +687,10 @@ def notify_async(text: str) -> None:
         except Exception as e:
             log.debug("telegram notify failed: %s", e)
 
-    threading.Thread(target=_send, daemon=True).start()
+    try:
+        threading.Thread(target=_send, daemon=True).start()
+    except Exception as e:
+        log.debug("notify thread spawn failed: %s", e)
 
 
 @asynccontextmanager
@@ -419,6 +706,11 @@ async def lifespan(_: FastAPI):
                 log.warning("Invalid ZEFIRA_ADMIN_USERNAME, falling back to 'admin'")
                 username = "admin"
             password = (os.environ.get("ZEFIRA_ADMIN_PASSWORD") or "").strip() or secrets.token_urlsafe(14)
+            if not STRONG_PW_RE.match(password):
+                # Never lock the operator out with a weak env password: fall
+                # back to a printed random one (same policy as the installer).
+                log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one (printed below)")
+                password = secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
             s.commit()
             print("=" * 58)
@@ -429,6 +721,20 @@ async def lifespan(_: FastAPI):
             print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
             print("=" * 58)
             log.warning("First-run admin created. Password printed above.")
+            # One-time use: the installer wrote the password to .env for
+            # systemd. Scrub it now so a later .env leak cannot replay it.
+            try:
+                _scrub_env_password()
+            except Exception:
+                pass
+        else:
+            # Even when the admin already exists (e.g. upgraded installs),
+            # a stale ZEFIRA_ADMIN_PASSWORD lingering in .env is pure risk
+            # with zero benefit: remove it opportunistically.
+            try:
+                _scrub_env_password()
+            except Exception:
+                pass
         # Heal legacy rows: login lowercases+strips, so a stored " Admin "
         # could never match and would lock the operator out mysteriously.
         with db.s() as s:
@@ -545,18 +851,60 @@ async def block_direct_ip_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def csrf_and_size_middleware(request: Request, call_next):
-    content_length = request.headers.get("content-length")
-    if content_length:
+    # Backup restores are legitimately large (up to 10k users + encrypted
+    # blobs); everything else stays under a strict 1 MiB cap.
+    is_restore = request.url.path in ("/api/restore", "/api/restore-encrypted") and request.method == "POST"
+    limit = 64 * 1048576 if is_restore else 1048576
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length.strip()) > limit:
+                    return JSONResponse({"detail": "payload too large"}, status_code=413)
+            except ValueError:
+                return JSONResponse({"detail": "bad request"}, status_code=400)
+        # Real-body enforcement (not just Content-Length): chunked bodies
+        # with no/mismatched length would otherwise bypass the gate and
+        # OOM the JSON parser. Stream-count up to limit+1, replay for
+        # downstream. Max buffered = limit (1 MiB, or 64 MiB for restore).
         try:
-            # Backup restores are legitimately large (up to 10k users);
-            # everything else stays under a strict 1 MiB cap.
-            limit = 64 * 1048576 if (
-                request.url.path == "/api/restore" and request.method == "POST"
-            ) else 1048576
-            if int(content_length) > limit:
-                return JSONResponse({"detail": "payload too large"}, status_code=413)
-        except ValueError:
-            return JSONResponse({"detail": "bad request"}, status_code=400)
+            orig_receive = request._receive
+            chunks: list = []
+            total = 0
+            while True:
+                try:
+                    msg = await orig_receive()
+                except Exception:
+                    break
+                mtype = msg.get("type")
+                if mtype == "http.disconnect":
+                    async def _disc(msg=msg):
+                        return msg
+
+                    request._receive = _disc  # type: ignore
+                    break
+                if mtype != "http.request":
+                    continue
+                chunk = msg.get("body", b"") or b""
+                total += len(chunk)
+                if total > limit:
+                    return JSONResponse({"detail": "payload too large"}, status_code=413)
+                if chunk:
+                    chunks.append(chunk)
+                if not msg.get("more_body"):
+                    break
+            body = b"".join(chunks) if chunks else b""
+
+            async def _replay(body=body):
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = _replay  # type: ignore
+            try:
+                request._body = body  # type: ignore
+            except Exception:
+                pass
+        except Exception as exc:
+            log.debug("body-limit pre-read failed: %s", exc)
     if request.url.path.startswith("/api") and request.method not in {"GET", "HEAD", "OPTIONS"}:
         # Custom Authorization headers cannot be sent cross-origin without a
         # CORS preflight (which this panel never passes), so a present Bearer
@@ -610,8 +958,12 @@ async def require_admin(request: Request) -> Admin:
             digest = hashlib.sha256(raw.encode()).hexdigest()
             with db.s() as s:
                 row = s.scalar(select(ApiToken).where(ApiToken.token_sha == digest))
-                tok = (row.id, row.name, row.admin_id) if row else None
+                tok = (row.id, row.name, row.admin_id, (row.scopes or "full")) if row else None
             if tok is not None:
+                # Least-privilege scopes: bot tokens are limited to the
+                # reseller-safe subset. Cookie sessions are always full.
+                if not _token_scope_allowed(tok[3], request.method, request.url.path):
+                    raise HTTPException(status_code=403, detail="Token scope does not allow this endpoint")
                 with db.s() as s:
                     admin = s.get(Admin, tok[2]) if tok[2] else None
                     if admin:
@@ -622,6 +974,7 @@ async def require_admin(request: Request) -> Admin:
                         request.state.admin_id = admin.id
                         request.state.token_id = tok[0]
                         request.state.token_name = tok[1]
+                        request.state.token_scopes = tok[3]
                         return admin
     raise HTTPException(status_code=401, detail="Session expired")
 
@@ -1030,14 +1383,7 @@ def api_tunnel_get(admin: Admin = Depends(require_admin)):
 
 @app.put("/api/tunnel-settings")
 def api_tunnel_put(data: TunnelSettingsIn, request: Request, admin: Admin = Depends(require_admin)):
-    for part in (data.trusted_proxies or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            ipaddress.ip_network(part, strict=False)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid IP/CIDR in trusted proxies: {part}")
+    _validate_trusted_proxies_strict(data.trusted_proxies or "")
     if data.public_url:
         m = re.search(r":([0-9]{1,5})$", data.public_url)
         if m and int(m.group(1)) > 65535:
@@ -1070,6 +1416,7 @@ def api_tokens_list(admin: Admin = Depends(require_admin)):
 def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = Depends(require_admin)):
     raw = "zfp_" + secrets.token_urlsafe(32)
     digest = hashlib.sha256(raw.encode()).hexdigest()
+    scopes = data.scopes if data.scopes in ("full", "bot") else "full"
     with db.s() as s:
         if s.scalar(select(ApiToken.id).where(ApiToken.name == data.name)):
             raise HTTPException(status_code=409, detail="A token with this name already exists")
@@ -1080,6 +1427,7 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
             prefix=raw[:12],
             token_sha=digest,
             admin_id=admin.id,
+            scopes=scopes,
         )
         s.add(row)
         try:
@@ -1089,9 +1437,9 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
             raise HTTPException(status_code=409, detail="A token with this name already exists")
         out = row.to_dict()
         out["token_once"] = raw
-        audit(s, "APITOKEN_CREATE", f"{data.name} by {admin.username}", client_ip(request))
+        audit(s, "APITOKEN_CREATE", f"{data.name} [{scopes}] by {admin.username}", client_ip(request))
         s.commit()
-    log.info("API token created %s by %s", data.name, admin.username)
+    log.info("API token created %s [%s] by %s", data.name, scopes, admin.username)
     return out
 
 
@@ -1189,6 +1537,7 @@ def _safe_ai_error(exc: Exception, *secrets: str) -> str:
 
 
 def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system: str, history: list) -> tuple:
+    import urllib.error
     import urllib.parse
     import urllib.request
 
@@ -1224,9 +1573,35 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
                 "max_tokens": 800,
             }
             headers["Authorization"] = f"Bearer {api_key}"
+        # SSRF guard (request-time, after save-time validation): resolve the
+        # effective host and refuse metadata/link-local/multicast targets.
+        # Custom base_url is admin-controlled, but a hijacked admin session
+        # must not become a metadata-exfil oracle. Defaults are public APIs.
+        eff_base = base_url or (
+            "https://api.anthropic.com" if provider == "anthropic"
+            else "https://generativelanguage.googleapis.com" if provider == "gemini"
+            else "https://api.openai.com/v1"
+        )
+        blocked_reason = _ai_base_url_blocked(eff_base)
+        if blocked_reason:
+            return False, f"AI base URL blocked ({blocked_reason})"
+        # No-redirect fetch: urllib follows 301/302 by default, so a public
+        # URL that 302s to 169.254.169.254 would bypass the check above.
+        # Refuse redirects outright (AI APIs never legitimately redirect).
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        opener = urllib.request.build_opener(_NoRedirect)
         req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
+        try:
+            with opener.open(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as he:
+            # _NoRedirect surfaces redirects here: never follow to SSRF.
+            if he.code in (301, 302, 303, 307, 308):
+                return False, "AI provider returned a redirect (blocked)"
+            raise
     except Exception as exc:
         return False, f"AI provider unreachable ({_safe_ai_error(exc, api_key)})"
     try:
@@ -1262,6 +1637,11 @@ def api_ai_settings_put(data: AiSettingsIn, request: Request, admin: Admin = Dep
         m = re.search(r":([0-9]{1,5})(/|$)", data.base_url)
         if m and int(m.group(1)) > 65535:
             raise HTTPException(status_code=400, detail="Port out of range in base URL")
+        # Defense-in-depth beyond Pydantic (covers hand-edited DB + older
+        # clients): refuse userinfo/metadata/link-local targets here too.
+        reason = _ai_base_url_blocked(data.base_url)
+        if reason:
+            raise HTTPException(status_code=400, detail=f"AI base URL blocked ({reason})")
     with db.s() as s:
         _save_settings(s, {
             "ai_enabled": "1" if data.enabled else "0",
@@ -1306,16 +1686,33 @@ _update_lock = threading.Lock()
 
 
 def _update_conf() -> tuple:
-    repo = (os.environ.get("ZEFIRA_UPDATE_REPO", "") or "mrlurix/zefira-panel").strip()
-    if not UPDATE_REPO_RE.fullmatch(repo) or ".." in repo:
-        repo = "mrlurix/zefira-panel"
-    branch = (os.environ.get("ZEFIRA_UPDATE_BRANCH", "") or "main").strip() or "main"
-    if not re.fullmatch(r"[A-Za-z0-9_./-]{1,64}", branch) or ".." in branch or branch.startswith("-"):
-        branch = "main"
-    service = (os.environ.get("ZEFIRA_SERVICE_NAME", "") or "zefira").strip()
-    if not SERVICE_RE.fullmatch(service) or service.startswith("-"):
-        service = "zefira"
+    # Hardened: the panel must never restart an arbitrary systemd unit.
+    # Service name is FIXED to "zefira" (env override removed: an
+    # authenticated admin triggering /api/update/apply must not be able
+    # to pivot to `systemctl restart <anything>` even if the operator
+    # once exported a weird ZEFIRA_SERVICE_NAME).
+    service = "zefira"
+    # Repo/branch are pinned to the official source. Custom mirrors are
+    # only honored with an explicit operator opt-in, so a stray env file
+    # cannot silently repoint updates to an attacker repo.
+    allow_custom = (os.environ.get("ZEFIRA_ALLOW_CUSTOM_REPO", "") or "").strip() == "1"
+    if allow_custom:
+        repo = (os.environ.get("ZEFIRA_UPDATE_REPO", "") or "mrlurix/zefira-panel").strip()
+        if not UPDATE_REPO_RE.fullmatch(repo) or ".." in repo:
+            repo = "mrlurix/zefira-panel"
+        branch = (os.environ.get("ZEFIRA_UPDATE_BRANCH", "") or "main").strip() or "main"
+        if not re.fullmatch(r"[A-Za-z0-9_./-]{1,64}", branch) or ".." in branch or branch.startswith("-"):
+            branch = "main"
+    else:
+        repo, branch = "mrlurix/zefira-panel", "main"
     return repo, branch, service
+
+
+def _update_allowed() -> str | None:
+    """Kill-switch for hardened installs. Returns a reason if disabled."""
+    if (os.environ.get("ZEFIRA_ALLOW_UPDATE", "") or "").strip() == "0":
+        return "updates are disabled on this server (ZEFIRA_ALLOW_UPDATE=0)"
+    return None
 
 
 def _git(*args: str, timeout: int = 60) -> tuple:
@@ -1471,10 +1868,38 @@ def _do_update(admin_name: str, ip: str) -> None:
             audit(s, "UPDATE_DONE", f"{repo}@{branch} by {admin_name}, restarting", ip)
             s.commit()
         log.warning("Panel updated, restarting service %s", service)
+        # Non-root systemd: the service runs as user `zefira` (see
+        # install.sh). Root can restart directly; non-root uses a
+        # passwordless sudoers allowance installed by install.sh
+        # (`zefira ALL=(root) NOPASSWD: /bin/systemctl restart zefira`).
+        # Never pass an operator-controlled unit name here: service is
+        # fixed to "zefira" by _update_conf.
+        restarted = False
+        try:
+            euid = os.geteuid() if hasattr(os, "geteuid") else 0
+        except OSError:
+            euid = 0
         if shutil.which("systemctl"):
-            subprocess.run(["systemctl", "restart", service], capture_output=True, timeout=60)
+            try:
+                if euid == 0:
+                    proc_r = subprocess.run(
+                        ["systemctl", "restart", service], capture_output=True, timeout=60
+                    )
+                    restarted = proc_r.returncode == 0
+                else:
+                    sudo = shutil.which("sudo")
+                    if sudo:
+                        proc_r = subprocess.run(
+                            [sudo, "-n", "systemctl", "restart", service],
+                            capture_output=True, timeout=60,
+                        )
+                        restarted = proc_r.returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                restarted = False
+        if not restarted:
+            log.warning("Update applied but service restart needs operator action (systemctl restart %s)", service)
         else:
-            log.warning("No systemctl found — restart the panel manually")
+            log.warning("Service %s restarted after update", service)
     except Exception as exc:
         log.error("Panel update failed: %s", exc)
         try:
@@ -1491,6 +1916,11 @@ def _do_update(admin_name: str, ip: str) -> None:
 @app.post("/api/update/apply")
 def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
     ip = client_ip(request)
+    reason = _update_allowed()
+    if reason:
+        raise HTTPException(status_code=403, detail=reason)
+    if not sensitive_limiter.hit(f"update|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     if not verify_password(data.password_confirm, admin.password_hash):
         with db.s() as s:
             audit(s, "UPDATE_FAIL", f"wrong confirm password by {admin.username}", ip, ok=False)
@@ -1529,6 +1959,11 @@ def api_nodes_list(admin: Admin = Depends(require_admin)):
 
 @app.post("/api/nodes")
 def api_nodes_create(data: TunnelNodeIn, request: Request, admin: Admin = Depends(require_admin)):
+    # SSRF guard: tunnel IPs become probe targets (/check dials iran_ip).
+    # Metadata/link-local would turn health-checks into an oracle.
+    for label, host in (("iran_ip", data.iran_ip), ("kharej_ip", data.kharej_ip)):
+        if _hostname_is_ssrf_blocked(host):
+            raise HTTPException(status_code=400, detail=f"{label}: metadata/link-local targets blocked")
     token_plain = secrets.token_urlsafe(24)
     with db.s() as s:
         exists = s.scalar(select(TunnelNode.id).where(TunnelNode.name == data.name))
@@ -1625,8 +2060,6 @@ def api_node_guide(node_id: int, request: Request, admin: Admin = Depends(requir
 
 @app.post("/api/nodes/{node_id}/check")
 def api_node_check(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
-    import socket
-
     if not probe_limiter.hit(f"probe|{admin.id}"):
         raise HTTPException(status_code=429, detail="Too many checks, wait a minute")
     with db.s() as s:
@@ -1634,23 +2067,8 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
         host = node.iran_ip
         port = node.tunnel_port
         node_id_val = node.id
-    online = False
-    try:
-        addrinfos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
-    except socket.gaierror:
-        addrinfos = []
-    for family, socktype, proto, _canonname, sa in addrinfos[:3]:
-        conn = socket.socket(family, socktype, proto)
-        conn.settimeout(3.0)
-        try:
-            conn.connect(sa)
-            online = True
-        except OSError:
-            pass
-        finally:
-            conn.close()
-        if online:
-            break
+    # Reuse the SSRF-guarded prober (blocks metadata/link-local dials).
+    online, _lat = probe_host(host, port, timeout=3.0)
     with db.s() as s:
         node = s.get(TunnelNode, node_id_val)
         node.status = "online" if online else "offline"
@@ -1686,6 +2104,8 @@ def api_srvnodes_list(admin: Admin = Depends(require_admin)):
 
 @app.post("/api/server-nodes")
 def api_srvnodes_create(data: ServerNodeIn, request: Request, admin: Admin = Depends(require_admin)):
+    if _hostname_is_ssrf_blocked(data.address):
+        raise HTTPException(status_code=400, detail="address: metadata/link-local targets blocked")
     with db.s() as s:
         if s.scalar(select(ServerNode.id).where(ServerNode.name == data.name)):
             raise HTTPException(status_code=409, detail="A server node with this name already exists")
@@ -1710,6 +2130,8 @@ def api_srvnodes_create(data: ServerNodeIn, request: Request, admin: Admin = Dep
 
 @app.patch("/api/server-nodes/{node_id}")
 def api_srvnodes_patch(node_id: int, data: ServerNodePatchIn, request: Request, admin: Admin = Depends(require_admin)):
+    if data.address is not None and _hostname_is_ssrf_blocked(data.address):
+        raise HTTPException(status_code=400, detail="address: metadata/link-local targets blocked")
     with db.s() as s:
         node = _get_srvnode_or_404(s, node_id)
         if data.enabled is not None:
@@ -1762,7 +2184,9 @@ def api_srvnodes_check(node_id: int, request: Request, admin: Admin = Depends(re
 
 
 @app.post("/api/backup")
-def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
+def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"backup|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     if not verify_password(data.password_confirm, admin.password_hash):
         with db.s() as s:
             audit(s, "BACKUP_FAIL", f"wrong confirm password by {admin.username}", client_ip(request), ok=False)
@@ -1788,7 +2212,7 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
         tokens_out = [t.to_backup_dict() for t in token_rows]
     payload = {
         "zefira_backup": True,
-        "version": 6,
+        "version": 7,
         "exported_at": utcnow().isoformat(timespec="seconds") + "Z",
         "settings": settings,
         "admins": admins,
@@ -1797,11 +2221,26 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
         "blocked_sites": blocked_out,
         "api_tokens": tokens_out,
     }
-    body = json.dumps(payload, indent=2)
     with db.s() as s:
-        audit(s, "BACKUP_DL", f"{len(users)} users by {admin.username}", client_ip(request))
+        audit(s, "BACKUP_DL", f"{len(users)} users enc={bool(data.encrypt)} by {admin.username}", client_ip(request))
         s.commit()
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+    if data.encrypt:
+        # Encrypted at rest: scrypt(password_confirm) -> Fernet. The file
+        # alone reveals nothing (no hashes, tokens, or VPN secrets) without
+        # the admin password that created it. Restore via
+        # POST /api/restore-encrypted.
+        enc = _encrypt_backup_json(payload, data.password_confirm)
+        body = json.dumps(enc, indent=2)
+        return PlainTextResponse(
+            body,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="zefira-backup-{stamp}.enc.json"',
+                "Cache-Control": "no-store",
+            },
+        )
+    body = json.dumps(payload, indent=2)
     return PlainTextResponse(
         body,
         media_type="application/json",
@@ -1812,13 +2251,13 @@ def api_backup(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(
     )
 
 
-@app.post("/api/restore")
-def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(require_admin)):
-    if not verify_password(data.password_confirm, admin.password_hash):
-        with db.s() as s:
-            audit(s, "RESTORE_FAIL", f"wrong confirm password by {admin.username}", client_ip(request), ok=False)
-            s.commit()
-        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
+def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
+    """Shared restore transaction (plaintext + encrypted paths).
+
+    Caller must already have rate-limited and verified password_confirm.
+    All hardening lives here: volume sanity, scrypt-strong admin hashes,
+    strict trusted_proxies, SSRF-blocked AI URLs, and bot/full token scopes.
+    """
     now = utcnow()
     added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = 0
     prepared_users = []
@@ -1831,6 +2270,17 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 else now
             )
         except ValueError:
+            skipped += 1
+            continue
+        # Quota sanity: zero/negative volumes would be instantly-limited
+        # (and bypass plan logic). Skip rather than import dead rows.
+        try:
+            _vol = float(ru.volume_gb)
+            _used = float(ru.used_gb)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        if not 0 < _vol <= 100000 or not 0 <= _used <= 1000000:
             skipped += 1
             continue
         # protocols is free-form in backups: intersect with known protocols so a
@@ -1917,6 +2367,8 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                 elif k == "ai_base_url":
                     if sval and not re.fullmatch(r"https?://[^/\s]+(:[0-9]{1,5})?(/.*)?", sval):
                         ok = False
+                    elif sval and _ai_base_url_blocked(sval):
+                        ok = False
                 elif k == "ai_model":
                     if sval and not re.fullmatch(r"[A-Za-z0-9_.\-/:]{1,100}", sval):
                         ok = False
@@ -1954,8 +2406,18 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                             if not part:
                                 continue
                             try:
-                                ipaddress.ip_network(part, strict=False)
+                                net = ipaddress.ip_network(part, strict=False)
                             except ValueError:
+                                ok = False
+                                break
+                            # Same strictness as live input: refuse trust-all
+                            # and overly-broad ranges (XFF spoofing).
+                            if net.prefixlen == 0 or net.is_multicast or net.is_unspecified:
+                                ok = False
+                                break
+                            if (net.version == 4 and net.prefixlen < 8) or (
+                                net.version == 6 and net.prefixlen < 32
+                            ):
                                 ok = False
                                 break
                 if not ok:
@@ -2068,11 +2530,15 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                                 str(rt["last_used_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
                         except ValueError:
                             last_used = None
+                    tscopes = str(rt.get("scopes", "full") or "full").strip().lower()
+                    if tscopes not in ("full", "bot"):
+                        tscopes = "full"
                     s.add(ApiToken(
                         name=tname,
                         prefix=prefix,
                         token_sha=tsha,
                         admin_id=admin.id,
+                        scopes=tscopes,
                         created_at=created or now,
                         last_used_at=last_used,
                     ))
@@ -2082,6 +2548,12 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
                     continue
         if data.admins:
             for ra in data.admins:
+                # scrypt-hardening: reject weak/forged hashes (low-cost
+                # scrypt or non-scrypt strings). A crafted backup must not
+                # plant a brute-forceable admin or lock the account.
+                if not _is_strong_scrypt_hash(ra.password_hash):
+                    skipped += 1
+                    continue
                 existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
                 if existing:
                     existing.password_hash = ra.password_hash
@@ -2121,6 +2593,55 @@ def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(requir
     set_session_cookie(response, request, admin.id, fresh_version)
     log.info("Restore done +%s users by %s", added_users, admin.username)
     return response
+
+
+@app.post("/api/restore")
+def api_restore(data: RestoreIn, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"restore|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    if not verify_password(data.password_confirm, admin.password_hash):
+        with db.s() as s:
+            audit(s, "RESTORE_FAIL", f"wrong confirm password by {admin.username}", client_ip(request), ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
+    return _apply_restore_tx(data, request, admin)
+
+
+@app.post("/api/restore-encrypted")
+def api_restore_encrypted(data: RestoreEncryptedIn, request: Request, admin: Admin = Depends(require_admin)):
+    """Restore an encrypted backup (POST /api/backup {"encrypt": true}).
+
+    Auth uses password_confirm (current admin password). Decryption uses
+    backup_password when provided, else password_confirm (common case:
+    backup made under the same password). Wrong passwords 400, never 500.
+    """
+    if not sensitive_limiter.hit(f"restore|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    if not verify_password(data.password_confirm, admin.password_hash):
+        with db.s() as s:
+            audit(s, "RESTORE_FAIL", f"wrong confirm password by {admin.username}", client_ip(request), ok=False)
+            s.commit()
+        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
+    enc_pw = (data.backup_password or data.password_confirm or "").strip()
+    if len(enc_pw) < 8:
+        raise HTTPException(status_code=400, detail="Backup password is required to decrypt")
+    inner = _decrypt_backup_json(data.salt, data.payload, enc_pw)
+    if not inner.get("zefira_backup"):
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (not a Zefira backup)")
+    try:
+        parsed = RestoreIn(
+            password_confirm=data.password_confirm,
+            zefira_backup=True,
+            users=inner.get("users", []),
+            admins=inner.get("admins"),
+            settings=inner.get("settings"),
+            templates=inner.get("templates"),
+            blocked_sites=inner.get("blocked_sites"),
+            api_tokens=inner.get("api_tokens"),
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (schema)")
+    return _apply_restore_tx(parsed, request, admin)
 
 
 @app.get("/api/inbounds")
@@ -2757,6 +3278,19 @@ def subscription(token: str, request: Request):
             s.commit()
         if user.expires_at <= utcnow():
             raise HTTPException(status_code=404, detail="Not Found")
+        # Quota enforcement (fail-closed, same 404 as expired/disabled to
+        # avoid oracle): exhausted volume serves nothing, not even the
+        # dashboard links. Dashboard status still shows "Out of volume"
+        # via /api/users for the seller; the client just stops working.
+        # device_limit stays ADVISORY (no reliable device counting without
+        # client cooperation; shown in panel + Clash comment, never blocks).
+        try:
+            _vol = float(user.volume_gb or 0)
+            _used = float(user.used_gb or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=404, detail="Not Found")
+        if _vol <= 0 or _used >= _vol:
+            raise HTTPException(status_code=404, detail="Not Found")
         # Presence signal: every client poll refreshes "last seen" (throttled
         # to one write per minute). This is how the dashboard shows whether
         # the config is actually in use — and from which IP.
@@ -2787,8 +3321,9 @@ def subscription(token: str, request: Request):
 
 try:
     from config import SUBSCRIPTION_PATH
-    if SUBSCRIPTION_PATH != "/sub":
-        app.add_api_route(SUBSCRIPTION_PATH.rstrip("/") + "/{token}", subscription, methods=["GET"])
+    _sp = (SUBSCRIPTION_PATH or "/sub").rstrip("/") or "/sub"
+    if _sp not in ("/sub", "/"):
+        app.add_api_route(_sp + "/{token}", subscription, methods=["GET"])
 except ImportError:
     pass
 
