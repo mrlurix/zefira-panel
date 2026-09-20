@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=13">
+<link rel="stylesheet" href="assets/style.css?v=14">
 </head>
 <body>
 <header class="topbar">
@@ -28,6 +28,7 @@
   <div class="nav-group">Panel Guide</div>
   <a href="user-guide.html">Users &amp; Plans</a>
   <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html">Setup guides</a>
   <div class="nav-group">Server</div>
   <a href="configuration.html">Configuration</a>
   <a href="security.html">Security</a>
@@ -79,7 +80,7 @@
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td>Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td>Generated theme overrides, text/css</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td>Provider, model, key state (key never returned)</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> → scoped assistant reply (30/hr)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> → scoped assistant reply (30/hr). The assistant can also <b>act</b>: create/extend/top-up/reset/pause users, find users, stats, sub links (max 3 ops/turn, audit-logged; delete/reset/backup/update/settings/tokens never)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/update/status</code></td><td>Current vs latest commit + incoming changelog</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td>Password-confirmed pull + pip + restart</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>
@@ -115,6 +116,6 @@ curl -b jar.txt -H 'Content-Type: application/json' \
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=13"></script>
+<script src="assets/docs.js?v=14"></script>
 </body>
 </html>

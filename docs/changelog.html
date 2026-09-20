@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=13">
+<link rel="stylesheet" href="assets/style.css?v=14">
 </head>
 <body>
 <header class="topbar">
@@ -28,6 +28,7 @@
   <div class="nav-group">Panel Guide</div>
   <a href="user-guide.html">Users &amp; Plans</a>
   <a href="subscription.html">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html">Setup guides</a>
   <div class="nav-group">Server</div>
   <a href="configuration.html">Configuration</a>
   <a href="security.html">Security</a>
@@ -42,6 +43,13 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v170">v1.7.0 — AI that acts + complete docs</h2>
+<ul>
+  <li><b>Agentic AI assistant:</b> the <b>?</b> bubble now executes operations — create users, extend days, add volume, reset usage, pause/enable, find users, stats, subscription links. Provider-agnostic <code>```action</code> protocol (same on OpenAI/Anthropic/Gemini), max 3 ops per turn, same validation as the panel buttons, audit-logged (<code>AI_CREATE</code>/<code>AI_PATCH</code>). Destructive jobs (delete, token reset, backup/restore, update, settings, tokens, passwords) stay click-guided, never executed.</li>
+  <li><b>Docs cover everything:</b> expanded AI + Telegram bot guides (scopes, 5-minute reseller setup, examples), new <b>Setup guides</b> page (per-protocol client setup incl. L2TP/Cisco/SOCKS5, BackPack tunnel walkthrough, anti-filter cookbook), sidebar links everywhere.</li>
+  <li><b>Smarter knowledge:</b> AI manual grew with client setup, tunnel steps, anti-filter recipes and action rules.</li>
+</ul>
 
 <h2 id="v161">v1.6.1 — White-hat audit round 2</h2>
 <ul>
@@ -132,6 +140,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=13"></script>
+<script src="assets/docs.js?v=14"></script>
 </body>
 </html>

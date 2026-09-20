@@ -1483,7 +1483,7 @@ $("#ai-fab").addEventListener("click", () => {
   $("#ai-chat").classList.toggle("hidden");
   if (!$("#ai-chat").classList.contains("hidden")) {
     if (!$("#ai-msgs").children.length) {
-      aiAddMsg("Hi! I know this panel inside-out. Ask me anything about users, protocols, settings or errors.", "bot");
+      aiAddMsg("Hi! I know this panel inside-out — and I can act: create users, top up volume, extend days, reset usage, pause accounts. Just ask.", "bot");
     }
     $("#ai-input").focus();
   }

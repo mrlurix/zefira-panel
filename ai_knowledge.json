@@ -31,7 +31,31 @@
     "create": "Users section: username (English letters/digits/underscore, 3-32), protocols, volume GB, days. Optional: note, device limit, start-on-first-use.",
     "plans": "Volume quota stops service at 100% until topped up or reset. Duration counts from creation unless start-on-first-use is on (countdown starts at first subscription fetch). Device limit is shown to clients as informational cap.",
     "manage": "Pencil edits note/volume/expiry/device-limit/usage. Extend adds days (expired accounts extend from today). Reset token rotates token AND all secrets. Deleting is permanent.",
-    "states": "Active, Expired, Disabled (paused), Limited (out of volume), Pending (not started yet)."
+    "states": "Active, Expired, Disabled (paused), Limited (out of volume), Pending (not started yet).",
+    "protocols_detail": "VLESS/VMess/Trojan/Shadowsocks/Hysteria2: share links (3 endpoints each, SS 1). REALITY: VLESS+reality links with rotated SNI. WireGuard: .conf file (needs server public key in Settings). OpenVPN: .ovpn file (panel CA). L2TP/IPsec: server+username+password+IPsec PSK text guide (Windows/Android/iOS/strongSwan). Cisco AnyConnect: server+username+password, OpenConnect one-liner. SOCKS5: socks5:// user:pass link + Clash entry."
+  },
+  "ai_actions": {
+    "what": "The chat bubble can DO things, not just answer: create users, extend days, add volume, reset usage, pause/enable accounts, find users, show stats, hand over subscription links. Just ask, e.g. 'make user ali with 50 gig 30 days vless', 'extend sara 15 days', 'top up reza 20 gig', 'reset usage of omid', 'pause karim', 'link of mina?', 'how many users?'",
+    "rules": "I ask for missing pieces instead of guessing (username, volume, days). Destructive or sensitive jobs are NOT mine: deleting users, resetting tokens, backup/restore, updates, settings, API tokens, password changes — for those I explain exactly which button to press.",
+    "limits": "Max 3 operations per chat turn, 30 chats/hour. Every action is audit-logged as AI_CREATE/AI_PATCH with the admin's name; created users trigger the usual Telegram notification."
+  },
+  "client_setup": {
+    "v2ray_family": "Copy a vless/vmess/trojan/ss link, paste into v2rayNG (Android), Streisand/FoXray (iOS), NekoRay/NekoBox (desktop), or import the subscription URL (one link carries ALL protocols). Clash users import the ?format=clash URL.",
+    "wireguard": "Download the -wg.conf from the user dashboard or panel Download button, import into the WireGuard app. If it won't handshake, the server public key is missing: Settings → Server/Hosts → WireGuard server public key (from `wg show` on the server).",
+    "openvpn": "Download the .ovpn (CA+cert+key embedded), import into OpenVPN Connect / Tunnelblick. Match proto (UDP/TCP) and port with Settings.",
+    "l2tp": "Use the -l2tp.txt credentials. Windows: Settings → Network → VPN → Add VPN, type L2TP/IPsec with pre-shared key, enter server, username, password, PSK. Android: Settings → Network → VPN → L2TP/IPsec PSK. iOS: Settings → General → VPN → Add L2TP (server, account, password RSA SecurID off, shared secret = PSK). Needs UDP 500/4500/1701 open on the server; the operator must create the matching server-side user entry first.",
+    "cisco": "Install OpenConnect (or AnyConnect app). Command: openconnect --user=USERNAME SERVER. AnyConnect app: add server, sign in with the panel username+password. Default port 443 (Settings → Cisco port).",
+    "socks5": "Use the socks5:// link: Telegram → Settings → Data and Storage → Proxy → Add SOCKS5 (server, port 1080 default, username, password). Browsers via SwitchyOmega/FoxyProxy. Clash: included automatically as a socks5 proxy."
+  },
+  "tunnels_walkthrough": {
+    "backpack": "STEP 0: install BackPack on BOTH servers (Iran + Kharej) via its install script. STEP 1 Iran server: run backpack → Setup Iran → transport, tunnel port, tunnel name, TOKEN (from Zefira node create, same on both sides), exposed ports like 443:8000, UDP flag, Turbo preset. STEP 2 Kharej: backpack → Setup Kharej → same values + Iran address. STEP 3: Status on both, Health Check on errors, then Zefira Check-now probes Iran-ip:tunnel-port. Token secrecy = tunnel security.",
+    "transports": "Dirty routes: TCP+Stealth or WSS/WSS-Mux. UDP apps (WireGuard/DNS/games): enable Forward UDP + KCP/QUIC transports.",
+    "server_nodes": "Settings-free monitoring: Nodes section registers remote servers (address + check port). Health every 5 min (status/latency/uptime). Pin inbounds to a node; offline/disabled nodes are auto-excluded from all subscription links until recovery. Delete unpins to local."
+  },
+  "antifilter_cookbook": {
+    "reality": "Anti-Censorship section: Generate REALITY keypair (private stays encrypted, reveal is audit-logged), paste private key into the Xray server config. Links rotate SNI from the SNI list automatically (xtls-rprx-vision flow).",
+    "layers": "Stack for dirty networks: REALITY or Hysteria2 protocol + obfuscated host (a weird CDN URL hiding the real IP) + per-user subdomains (wildcard DNS *.host required, each user gets a random prefix) + CDN SNI spoofing + block-direct-IP (panel reachable only via domain).",
+    "diagnose": "Sub 404 for everyone: check user expiry/volume/active first, then domain/ports in Settings, then server firewall ports, then REALITY keys/WireGuard pubkey. Clients can't connect but sub loads: almost always server-side ports or keys."
   },
   "subscription": {
     "link": "http://SERVER:PORT/sub/TOKEN (or custom path). 32-hex unguessable token.",
