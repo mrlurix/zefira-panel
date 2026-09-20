@@ -1654,12 +1654,13 @@ $("#ssl-renew-btn").addEventListener("click", async () => {
 $("#backup-btn").addEventListener("click", async () => {
   const pw = prompt("Enter your admin password to download the backup:");
   if (!pw) return;
+  const enc = confirm("Download ENCRYPTED backup? (needs the password to restore — safe to store off-server)\nOK = encrypted, Cancel = plain JSON.");
   try {
     const res = await fetch("/api/backup", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
-      body: JSON.stringify({ password_confirm: pw })
+      body: JSON.stringify({ password_confirm: pw, encrypt: enc })
     });
     if (res.status === 401) { location.href = "/login"; return; }
     if (!res.ok) { toast("Backup failed — wrong password?", false); return; }
@@ -1667,10 +1668,10 @@ $("#backup-btn").addEventListener("click", async () => {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `zefira-backup-${stamp}.json`;
+    a.download = enc ? `zefira-backup-${stamp}.enc.json` : `zefira-backup-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast("Backup download started");
+    toast(enc ? "Encrypted backup download started" : "Backup download started");
   } catch (_) {
     toast("Backup failed", false);
   }
@@ -1691,13 +1692,34 @@ $("#restore-btn").addEventListener("click", async () => {
     toast("Invalid JSON file", false);
     return;
   }
-  if (!parsed || parsed.zefira_backup !== true) {
+  if (!parsed || (parsed.zefira_backup !== true && parsed.encrypted !== true)) {
     toast("This file is not a Zefira backup", false);
     return;
   }
-  if (!confirm(`Replace ALL current users and settings with ${parsed.users ? parsed.users.length : 0} restored users?\nThis cannot be undone.`)) return;
+  const isEnc = parsed.encrypted === true;
+  if (!confirm(isEnc
+    ? "Restore from ENCRYPTED backup? It replaces ALL current users and settings.\nThis cannot be undone."
+    : `Replace ALL current users and settings with ${parsed.users ? parsed.users.length : 0} restored users?\nThis cannot be undone.`)) return;
   const pw = prompt("Confirm your admin password to allow restore:");
   if (!pw) return;
+  if (isEnc) {
+    // Encrypted backups decrypt with the password that created them
+    // (usually the same admin password — the server falls back to it).
+    try {
+      const r = await api("/api/restore-encrypted", {
+        method: "POST",
+        body: { password_confirm: pw, salt: parsed.salt, payload: parsed.payload, backup_password: pw }
+      });
+      toast(`Restored ${r.added_users} users (${r.skipped} skipped)`);
+      restoreFile.value = "";
+      $("#restore-btn").disabled = true;
+      loadStats();
+      loadUsers();
+    } catch (err) {
+      if (err.message !== "auth") toast(err.message, false);
+    }
+    return;
+  }
   delete parsed.exported_at;
   parsed.zefira_backup = true;
   parsed.password_confirm = pw;

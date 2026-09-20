@@ -110,7 +110,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var resultsBox = overlay.querySelector("#sp-results");
 
   var index = null, items = [], sel = 0, lastQ = "";
-  fetch("assets/search-index.json?v=12").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
+  fetch("assets/search-index.json?v=16").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
 
   function render() {
     resultsBox.innerHTML = "";

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=15">
+<link rel="stylesheet" href="assets/style.css?v=16">
 </head>
 <body>
 <header class="topbar">
@@ -43,6 +43,12 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v181">v1.8.1 — Encrypted backup in the UI + docs API examples</h2>
+<ul>
+  <li><b>Backup button offers encryption:</b> one confirm downloads a scrypt+Fernet blob; the restore flow accepts <code>.enc.json</code> via <code>/api/restore-encrypted</code> (previously API-only — the UI rejected encrypted files).</li>
+  <li><b>Docs:</b> copy-paste bot renewal flow (lookup → combo reset) with scope notes.</li>
+</ul>
 
 <h2 id="v180">v1.8.0 — Developer reset API</h2>
 <ul>
@@ -146,6 +152,6 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=15"></script>
+<script src="assets/docs.js?v=16"></script>
 </body>
 </html>
