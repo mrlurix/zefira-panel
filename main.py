@@ -1843,7 +1843,8 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
                     raw = he.read().decode("utf-8", "replace")
                     detail = (json.loads(raw).get("error") or {}).get("message", "")
                     if isinstance(detail, str) and detail.strip():
-                        extra = ": " + " ".join(detail.replace(api_key, "***").split())[:150]
+                        clean = detail.replace(api_key, "***") if api_key else detail
+                        extra = ": " + " ".join(clean.split())[:150]
                 except (ValueError, AttributeError, TypeError):
                     extra = ""
                 return False, hint + extra

@@ -44,6 +44,12 @@
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
 
+<h2 id="v1111">v1.11.1 — White-hat round 3</h2>
+<ul>
+  <li><b>Scope matrix verified:</b> bot tokens probed with traversal, encoded slashes, trailing slashes, query strings and non-numeric IDs — all fail closed (403/404), AI chat stays bot-forbidden.</li>
+  <li><b>Fresh search index</b> (81 sections) + version-pinned index fetch; key-scrub guard hardened for empty keys.</li>
+</ul>
+
 <h2 id="v1110">v1.11.0 — Same-bug-class sweep (AI providers)</h2>
 <ul>
   <li><b>Anthropic/Gemini URL tolerance:</b> pasting a full <code>/v1/messages</code> or <code>:generateContent</code> endpoint no longer 404s — folded to the API root like Groq (Gemini key-bearing URLs are stripped, never logged).</li>
