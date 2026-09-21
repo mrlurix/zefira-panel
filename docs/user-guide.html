@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=18">
+<link rel="stylesheet" href="assets/style.css?v=19">
 </head>
 <body>
 <header class="topbar">
@@ -74,7 +74,7 @@
 </ul>
 
 <h2 id="ai-assistant">AI assistant</h2>
-<p>The <b>?</b> bubble (bottom-right of every panel page) chats with an assistant that knows this panel inside-out and answers <b>panel questions only</b> — great for beginners. Configure it under <b>Settings → AI Assistant</b>: pick a provider (<b>OpenAI-compatible</b> covers OpenAI, DeepSeek, OpenRouter, Groq, Ollama and any <code>/v1</code> API; plus native <b>Anthropic</b> and <b>Gemini</b>), model, base URL and API key (stored encrypted, never shown back). The assistant gets a built-in JSON manual of the whole panel plus your optional extra instructions. Chats are rate-limited (30/hour) and time-boxed; the key stays server-side.</p>
+<p>The <b>?</b> bubble (bottom-right of every panel page) chats with an assistant that knows this panel inside-out and answers <b>panel questions only</b> — great for beginners. <b>Groq is the default provider (free and fast):</b> sign up at <b>console.groq.com → API Keys</b>, create a key (<code>gsk_…</code>), then in Zefira go to <b>Settings → AI Assistant</b>, pick <b>Groq</b>, set model <code>qwen/qwen3.8-27b</code> (reliable default; <code>openai/gpt-oss-20b</code> also works for plain Q&amp;A but insists on native tool-calls, which the panel deliberately disables in favor of its provider-agnostic text protocol), paste the key and <b>leave the base URL empty</b> — the panel already knows Groq lives at <code>https://api.groq.com/openai/v1</code>. Enable, save, open the bubble and ask. (Pasting <code>api.groq.com</code> or <code>…/v1</code> by hand is auto-corrected; a bare wrong URL is what causes the classic provider <b>404</b>.) OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama still work via OpenAI-compatible / native modes. The key is stored encrypted and never shown back; chats are rate-limited (30/hour); Groq's free tier is rate-limited too, so a <b>429</b> means wait a bit.</p>
 <p><b>It can also act — just ask:</b> create users, extend days, add volume, reset usage, pause/enable accounts, find users, show stats, hand over subscription links. Examples: <i>“make user ali with 50 gig 30 days vless”</i>, <i>“extend sara 15 days”</i>, <i>“top up reza 20 gig”</i>, <i>“reset usage of omid”</i>, <i>“pause karim”</i>, <i>“link of mina?”</i>, <i>“how many users do I have?”</i> Missing details are asked, never guessed (max 3 operations per turn). Every action runs through the same validation as the panel buttons and is audit-logged (<code>AI_CREATE</code>/<code>AI_PATCH</code>) with your name; new users trigger the usual Telegram notification.</p>
 <p><b>Off-limits for the AI</b> (it explains which button to press instead): deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes.</p>
 
@@ -134,7 +134,7 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=18"></script>
+<script src="assets/docs.js?v=19"></script>
 <script src="assets/support-ai.js?v=2"></script>
 </body>
 </html>

@@ -123,7 +123,7 @@ class AppearanceIn(BaseModel):
         return v
 
 
-AI_PROVIDERS = ("openai", "anthropic", "gemini")
+AI_PROVIDERS = ("groq", "openai", "anthropic", "gemini")
 AI_URL_RE = r"^$|^https?://[^/\s]+(:[0-9]{1,5})?(/.*)?$"
 AI_MODEL_RE = r"^[A-Za-z0-9_.\-/:]{1,100}$"
 
@@ -141,7 +141,7 @@ class AiSettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     enabled: bool = False
-    provider: Literal["openai", "anthropic", "gemini"] = "openai"
+    provider: Literal["groq", "openai", "anthropic", "gemini"] = "groq"
     base_url: str = Field(default="", max_length=300, pattern=AI_URL_RE)
     model: str = Field(default="", max_length=100, pattern=r"^$|^[A-Za-z0-9_.\-/:]{1,100}$")
     api_key: str = Field(default="", max_length=500)

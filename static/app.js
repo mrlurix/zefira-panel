@@ -1449,7 +1449,7 @@ async function loadAi() {
   try {
     const a = await api("/api/ai/settings");
     $("#ai-enabled").checked = !!a.enabled;
-    $("#ai-provider").value = a.provider || "openai";
+    $("#ai-provider").value = a.provider || "groq";
     $("#ai-base").value = a.base_url || "";
     $("#ai-model").value = a.model || "";
     $("#ai-extra").value = a.extra || "";

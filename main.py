@@ -1602,16 +1602,31 @@ Available tools (args are JSON, all required unless marked optional):
 Rules: ONE action block per turn, valid JSON only. If args are missing/invalid, ask the user for the missing piece instead of guessing (never invent usernames). These are NEVER available as actions — guide the user to click instead: deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes. Action blocks are invisible protocol: your visible reply must never contain one.
 """
 
-AI_ACTION_RE = re.compile(r"```action\s*(\{.*?\})\s*```", re.S)
+AI_ACTION_RE = re.compile(r"```(?:action|json)\s*(\{.*?\})\s*```", re.S)
 AI_MAX_ACTIONS = 3
 AI_MAX_ROUNDS = 3
+
+# Tools the model may invoke. _parse_ai_action accepts ```action and
+# ```json fences (models drift between them), but ONLY names listed here
+# ever execute: anything else (e.g. a JSON example in a normal answer) is
+# treated as plain text and never runs.
+AI_TOOL_NAMES = {
+    "panel_stats",
+    "find_user",
+    "create_user",
+    "extend_user",
+    "add_volume",
+    "reset_usage",
+    "set_active",
+    "subscription_link",
+}
 
 
 def _ai_settings() -> dict:
     get = lambda k: (cached_setting(k) or "").strip()  # noqa: E731
     return {
         "enabled": get("ai_enabled") == "1",
-        "provider": get("ai_provider") or "openai",
+        "provider": get("ai_provider") or "groq",
         "base_url": get("ai_base_url"),
         "model": get("ai_model"),
         "extra": get("ai_extra"),
@@ -1624,6 +1639,59 @@ def _safe_ai_error(exc: Exception, *secrets: str) -> str:
         if s:
             msg = msg.replace(s, "***")
     return msg
+
+
+GROQ_DEFAULT_BASE = "https://api.groq.com/openai/v1"
+
+
+def _groq_base(base_url: str) -> str:
+    """Normalize a Groq base URL to the OpenAI-compatible root.
+
+    Groq serves the OpenAI API under /openai/v1 — NOT /v1 and NOT the
+    bare host. Every one of those is a 404 from Groq, which is exactly the
+    "provider 404" operators hit when pasting console URLs. Accept all
+    common forms (bare host, /v1, full /chat/completions endpoint) and
+    fold them to https://api.groq.com/openai/v1.
+    """
+    base = (base_url or GROQ_DEFAULT_BASE).rstrip("/") or GROQ_DEFAULT_BASE
+    if base.endswith("/chat/completions"):
+        base = base[: -len("/chat/completions")].rstrip("/") or GROQ_DEFAULT_BASE
+    try:
+        from urllib.parse import urlparse as _up
+
+        host = (_up(base).hostname or "").lower()
+        path = _up(base).path or ""
+    except Exception:
+        return base
+    if host in ("api.groq.com", "groq.com") or host.endswith(".groq.com"):
+        if "/openai" not in path:
+            if base.rstrip("/").endswith("/v1"):
+                base = base.rstrip("/")[: -len("/v1")].rstrip("/")
+            base = (base.rstrip("/") + "/openai/v1") or GROQ_DEFAULT_BASE
+    return base
+
+
+def _ai_http_hint(provider: str, code: int) -> str | None:
+    """Actionable hint for provider HTTP errors (key never included)."""
+    if code == 401:
+        return "API key rejected (401) — paste a fresh key (Groq keys start with gsk_) into Settings → AI Assistant"
+    if code == 404:
+        if provider == "groq":
+            return (
+                "endpoint not found (404) — leave base URL empty (default "
+                "https://api.groq.com/openai/v1) and use a current model "
+                "(e.g. openai/gpt-oss-20b)"
+            )
+        if provider == "gemini":
+            return "endpoint not found (404) — check the model name"
+        if provider == "anthropic":
+            return "endpoint not found (404) — check base URL and model"
+        return "endpoint not found (404) — base URL must end at …/v1 (not /chat/completions) and the model must exist"
+    if code == 429:
+        return "rate limited / out of quota (429) — wait a bit or check plan limits (Groq free tier is rate-limited)"
+    if code == 400:
+        return "request rejected (400) — usually an unknown model name"
+    return None
 
 
 def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system: str, history: list) -> tuple:
@@ -1650,6 +1718,26 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
                 "contents": gemini_msgs,
                 "generationConfig": {"maxOutputTokens": 800, "temperature": 0.3},
             }
+        elif provider == "groq":
+            base = _groq_base(base_url)
+            url = base + "/chat/completions"
+            payload = {
+                "model": model,
+                "messages": [{"role": "system", "content": system}, *msgs],
+                "temperature": 0.3,
+            }
+            # gpt-oss family rejects legacy max_tokens: budget completions
+            # the way those models expect.
+            if model.lstrip().lower().startswith(("gpt-oss", "openai/gpt-oss")):
+                payload["max_completion_tokens"] = 800
+            else:
+                payload["max_tokens"] = 800
+            # Never native function-calling: Zefira uses its own ```action
+            # text protocol (same on every provider). Without this, tool-
+            # aware models try native calls and Groq 400s ("tool choice is
+            # none, but model called a tool").
+            payload["tool_choice"] = "none"
+            headers["Authorization"] = f"Bearer {api_key}"
         else:
             base = (base_url or "https://api.openai.com/v1").rstrip("/")
             # Tolerate pasting the full endpoint URL instead of just the base.
@@ -1670,6 +1758,7 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
         eff_base = base_url or (
             "https://api.anthropic.com" if provider == "anthropic"
             else "https://generativelanguage.googleapis.com" if provider == "gemini"
+            else GROQ_DEFAULT_BASE if provider == "groq"
             else "https://api.openai.com/v1"
         )
         blocked_reason = _ai_base_url_blocked(eff_base)
@@ -1691,6 +1780,19 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
             # _NoRedirect surfaces redirects here: never follow to SSRF.
             if he.code in (301, 302, 303, 307, 308):
                 return False, "AI provider returned a redirect (blocked)"
+            hint = _ai_http_hint(provider, he.code)
+            if hint:
+                # Append the provider's own message when it is safe: JSON
+                # error bodies only, key scrubbed, capped. Never raw HTML.
+                extra = ""
+                try:
+                    raw = he.read().decode("utf-8", "replace")
+                    detail = (json.loads(raw).get("error") or {}).get("message", "")
+                    if isinstance(detail, str) and detail.strip():
+                        extra = ": " + " ".join(detail.replace(api_key, "***").split())[:150]
+                except (ValueError, AttributeError, TypeError):
+                    extra = ""
+                return False, hint + extra
             raise
     except Exception as exc:
         return False, f"AI provider unreachable ({_safe_ai_error(exc, api_key)})"
@@ -1989,6 +2091,11 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
         if not parsed:
             break
         tool, args = parsed
+        if tool not in AI_TOOL_NAMES:
+            # Not a real call (e.g. a JSON example inside a normal answer):
+            # stop the loop and show the cleaned reply instead of burning
+            # a round on an "unknown tool" rejection.
+            break
         if not isinstance(args, dict) or len(args) > 10:
             history += [
                 {"role": "assistant", "content": reply[:2000]},
@@ -2713,7 +2820,7 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
                     if len(sval) > 300:
                         ok = False
                 elif k == "ai_provider":
-                    ok = sval in ("openai", "anthropic", "gemini")
+                    ok = sval in ("groq", "openai", "anthropic", "gemini")
                 elif k == "ai_base_url":
                     if sval and not re.fullmatch(r"https?://[^/\s]+(:[0-9]{1,5})?(/.*)?", sval):
                         ok = False

@@ -411,20 +411,21 @@
 
         <div class="card form-card">
           <div class="card-head"><h2>AI Assistant</h2><span class="badge proto" id="ai-badge">off</span></div>
-          <p class="hint mt-0">Chat helper that knows this panel inside-out (answers panel questions only). Works with OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama — anything OpenAI-compatible.</p>
+          <p class="hint mt-0">Chat helper that knows this panel inside-out (answers panel questions only). <b>Groq</b> is the default (free, fast) — get a key at console.groq.com, pick a model like <code>llama-3.3-70b-versatile</code>, leave the base URL empty. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama also work.</p>
           <label class="proto-check wide"><input type="checkbox" id="ai-enabled"><span>Enable AI assistant</span></label>
           <div class="field-row">
             <label class="field"><span>Provider</span>
               <select id="ai-provider">
+                <option value="groq">Groq (free, recommended)</option>
                 <option value="openai">OpenAI-compatible (OpenAI / DeepSeek / OpenRouter / Ollama…)</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="gemini">Google (Gemini)</option>
               </select>
             </label>
-            <label class="field"><span>Model</span><input type="text" id="ai-model" maxlength="100" placeholder="gpt-4o-mini" spellcheck="false"></label>
+            <label class="field"><span>Model</span><input type="text" id="ai-model" maxlength="100" placeholder="qwen/qwen3.8-27b" spellcheck="false"></label>
           </div>
-          <label class="field"><span>API base URL (empty = provider default; e.g. http://127.0.0.1:11434/v1 for Ollama)</span><input type="text" id="ai-base" maxlength="300" placeholder="https://api.openai.com/v1" spellcheck="false"></label>
-          <label class="field"><span>API key (stored encrypted, empty = keep current)</span><input type="password" id="ai-key" maxlength="500" autocomplete="off" placeholder="sk-…"></label>
+          <label class="field"><span>API base URL (empty = Groq default https://api.groq.com/openai/v1; e.g. http://127.0.0.1:11434/v1 for Ollama)</span><input type="text" id="ai-base" maxlength="300" placeholder="https://api.groq.com/openai/v1" spellcheck="false"></label>
+          <label class="field"><span>API key (stored encrypted, empty = keep current)</span><input type="password" id="ai-key" maxlength="500" autocomplete="off" placeholder="gsk-…"></label>
           <label class="field"><span>Extra instructions (optional)</span><input type="text" id="ai-extra" maxlength="500" placeholder="e.g. Always answer in Persian"></label>
           <button type="button" id="ai-save-btn" class="btn btn-primary">Save AI Settings</button>
         </div>

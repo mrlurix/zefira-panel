@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=18">
+<link rel="stylesheet" href="assets/style.css?v=19">
 </head>
 <body>
 <header class="topbar">
@@ -43,6 +43,12 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v1100">v1.10.0 — Groq-first AI (goodbye provider 404)</h2>
+<ul>
+  <li><b>Groq is a first-class provider and the default:</b> pick Groq, paste a <code>gsk_…</code> key, leave base URL empty. The panel normalizes every pasted form (bare host, <code>/v1</code>, full endpoint) to <code>https://api.groq.com/openai/v1</code> — the classic misconfigured-URL 404 is gone.</li>
+  <li><b>Actionable provider errors:</b> 401/404/429/400 now say what to fix (key, URL/model, quota) instead of a bare unreachable message.</li>
+</ul>
 
 <h2 id="v190">v1.9.0 — Site support AI</h2>
 <ul>
@@ -158,7 +164,7 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=18"></script>
+<script src="assets/docs.js?v=19"></script>
 <script src="assets/support-ai.js?v=2"></script>
 </body>
 </html>
