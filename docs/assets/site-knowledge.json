@@ -1,0 +1,114 @@
+[
+  {
+    "id": "donate",
+    "title": "How to donate",
+    "keywords": "donate donation wallet wallets pay payment support money crypto trx tron eth ethereum usdc bnb bep20 bep-20 address copy send transfer کیف پول دونیت پرداخت کمک حمایت ترون اتریوم دلار",
+    "text": "Send any amount on BNB Smart Chain (BEP-20). All three currencies go to the same address:\n\nTRX, ETH and USDC → 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18\n\nAlways double-check the address AND the network before sending — crypto transfers cannot be reversed.",
+    "fa": "برای دونیت، روی شبکه BNB Smart Chain (BEP-20) به آدرس 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18 ارسال کن (TRX، ETH یا USDC). حتماً آدرس و شبکه را چک کن — برگشت ندارد.",
+    "wallets": [
+      {"label": "TRX (BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"},
+      {"label": "ETH (BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"},
+      {"label": "USDC (BNB BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"}
+    ],
+    "links": [{"label": "Full donate page", "href": "donate.html"}]
+  },
+  {
+    "id": "changelog",
+    "title": "Changelog — what is new",
+    "keywords": "changelog change log version versions new update updates release history news latest v1 تغییر نسخه جدید آپدیت",
+    "text": "Latest releases:\n\nv1.8.1 — encrypted backups from the panel button, bot renewal docs.\nv1.8.0 — developer reset API (lookup by username + combo reset) for bots.\nv1.7.0 — the panel AI assistant can act (create/top-up/extend users).\nv1.6.0 — L2TP/IPsec, Cisco AnyConnect and SOCKS5 protocols.\n\nThe panel itself shows incoming changes under Update before you upgrade.",
+    "fa": "آخرین نسخه‌ها: 1.8.1 (بکاپ رمزنگاری‌شده)، 1.8.0 (Reset API برای بات‌ها)، 1.7.0 (دستیار هوشمند اجراکننده)، 1.6.0 (پروتکل‌های L2TP/Cisco/SOCKS5). جزئیات کامل در صفحه changelog.",
+    "links": [{"label": "Full changelog", "href": "changelog.html"}]
+  },
+  {
+    "id": "github",
+    "title": "GitHub — repo and channels",
+    "keywords": "github repo repository source code star discussions discuss issues bug report security advisory vuln contribute گیت‌هاب سورس استار باگ گزارش",
+    "text": "Repo: mrlurix/zefira-panel (MIT). Community Q&A → Discussions. Something broken? Open an issue with steps to reproduce. Found a vulnerability? Report PRIVATELY via Security Advisories — never a public issue. A star helps more people find Zefira.",
+    "links": [
+      {"label": "Repository", "href": "https://github.com/mrlurix/zefira-panel"},
+      {"label": "Discussions", "href": "https://github.com/mrlurix/zefira-panel/discussions"},
+      {"label": "Issues", "href": "https://github.com/mrlurix/zefira-panel/issues"}
+    ]
+  },
+  {
+    "id": "panel",
+    "title": "What the Zefira panel is",
+    "keywords": "panel what is zefira about features protocols overview sell vpn proxy intro معرفی پنل چیست قابلیت پروتکل",
+    "text": "Zefira is a self-hosted VPN sales panel (FastAPI + SQLite, no Docker). Create users with traffic + time limits; each gets ONE subscription link. 11 protocols: VLESS, VLESS-REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5. Extras: AI assistant that acts, reseller bots, Clash subs, user dashboard, QR/ZIP bundles, BackPack tunnels, one-click updates, encrypted backups.",
+    "fa": "زفیرا پنل فروش VPN سلف‌هستد است (۱۱ پروتکل: VLESS، Reality، VMess، Trojan، شادوساکس، Hysteria2، وایرگارد، OpenVPN، L2TP، Cisco، SOCKS5). هر کاربر یک لینک ساب می‌گیرد.",
+    "links": [{"label": "User guide", "href": "user-guide.html"}]
+  },
+  {
+    "id": "install",
+    "title": "Installation",
+    "keywords": "install installation setup server deploy ubuntu debian requirements one-line installer steps install.sh نصب راه‌اندازی سرور",
+    "text": "Ubuntu 20.04+/Debian 11+, root, ~5 minutes. One line:\n\nbash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)\n\nGuided steps: port → domain → admin → database → subscription path → Telegram → Nginx+SSL. First login: change the password in Settings. Uninstall: sudo bash install.sh --uninstall.",
+    "fa": "روی اوبونتو/دبیان با دسترسی روت، حدود ۵ دقیقه. دستور نصب تک‌خطی در صفحه installation. بعد از اولین ورود حتماً پسورد را عوض کن.",
+    "links": [{"label": "Installation guide", "href": "installation.html"}]
+  },
+  {
+    "id": "subscription",
+    "title": "Subscription link and 404s",
+    "keywords": "subscription sub link token 404 expired disabled volume dashboard raw clash format clients connect لینک ساب اشتراک خراب کار نمی‌کند",
+    "text": "Every user has https://domain/sub/TOKEN. Browsers open a personal dashboard (usage, QR, imports); VPN apps get raw bytes or Clash YAML (?format=clash). Expired, disabled or out-of-volume users get 404 without saying why. Leaked link? Reset token kills it instantly.",
+    "links": [{"label": "Subscriptions & clients", "href": "subscription.html"}]
+  },
+  {
+    "id": "clients",
+    "title": "Client apps and protocol setup",
+    "keywords": "client clients app apps android ios windows v2rayng clash streisand wireguard openvpn l2tp cisco socks5 openconnect connect setup import conf ovpn کلاینت اپ اتصال تنظیم",
+    "text": "Android: v2rayNG/NekoBox. iOS: Streisand/FoXray/Shadowrocket. Desktop: NekoRay/Clash Verge/Hiddify. WireGuard: import the .conf. OpenVPN: import the .ovpn. L2TP: system VPN with server+username+password+PSK. Cisco: openconnect --user=NAME SERVER. SOCKS5: Telegram proxy settings or SwitchyOmega.",
+    "links": [{"label": "Setup guides", "href": "setup-guides.html"}]
+  },
+  {
+    "id": "users",
+    "title": "Users, plans and quota",
+    "keywords": "user users create plan plans volume quota expiry expire days first use device limit states active limited pending تمدید شارژ کاربر حجم",
+    "text": "Username (a-z 0-9 _), protocols, volume GB, days. Volume stops service at 100% until topped up/reset. Start-on-first-use counts from first fetch. Extend adds days (expired counts from today). Reset token rotates token AND secrets.",
+    "links": [{"label": "Users & plans", "href": "user-guide.html"}]
+  },
+  {
+    "id": "bots",
+    "title": "Telegram bots and API tokens",
+    "keywords": "bot bots telegram reseller api token tokens bearer integration script scope scopes full بات تلگرام فروش توکن",
+    "text": "Settings → API Tokens issues zfp_… bearer tokens. Scope bot = least privilege (list/create/renew users) for reseller bots; full = everything, your scripts only. Ready bots in examples/telegram-bot-python and -node: /buy plans keyboard, instant account + link, /my quota. Panel notifications (create/delete, lockouts) need any bot token + chat ID in Settings → Telegram.",
+    "links": [{"label": "Bots guide", "href": "user-guide.html#bots-integrations"}, {"label": "API reference", "href": "api.html"}]
+  },
+  {
+    "id": "panel-ai",
+    "title": "Panel AI assistant",
+    "keywords": "ai assistant artificial intelligence bubble act actions create top up help panel ai هوش مصنوعی دستیار",
+    "text": "The ? bubble in the panel chats AND acts: create users, extend days, add volume, reset usage, pause/enable, find users, stats, links (max 3 ops/turn, audit-logged). Setup: Settings → AI Assistant, provider (OpenAI-compatible/Anthropic/Gemini) + model + key (encrypted). It never deletes, resets tokens, or touches backup/update/settings.",
+    "links": [{"label": "AI guide", "href": "user-guide.html#ai-assistant"}]
+  },
+  {
+    "id": "tunnels",
+    "title": "Tunnels and server nodes",
+    "keywords": "tunnel tunnels backpack iran kharej node nodes server monitor health reality anti-filter censorship sni تانل نود سرور",
+    "text": "BackPack tunnels (Iran⇄Kharej): create node in Tunnels, run the same token on both servers (Setup Iran / Setup Kharej), verify with Check-now. Server Nodes: register remotes for 5-min health checks; pin inbounds to a node — offline nodes drop out of links automatically. Anti-filter stack: REALITY keys + SNI rotation + obfuscated host + per-user subdomains + CDN SNI.",
+    "links": [{"label": "Setup guides", "href": "setup-guides.html"}]
+  },
+  {
+    "id": "update",
+    "title": "Updates and backup",
+    "keywords": "update upgrade version backup restore encrypted download import export آپدیت بکاپ ریستور",
+    "text": "Update (left menu): compares with GitHub, shows incoming changes, password-confirmed pull + reinstall + restart; refused on local changes. Backup: password-confirmed download, encrypted option available; restore wipes users — both need the password.",
+    "links": [{"label": "Changelog", "href": "changelog.html"}]
+  },
+  {
+    "id": "troubleshoot",
+    "title": "Top problems",
+    "keywords": "problem error fail login lockout locked 404 ssl password lost down troubleshoot fix help مشکل خطا ورود قفل",
+    "text": "Locked out (too many attempts)? Wait 15 min or restart the panel. Sub 404 for everyone? Check expiry/volume/active, then domain/ports, then firewall. SSL fails? DNS must point here + port 80 free + certbot. Clients can't connect but sub loads? Server ports or REALITY/WireGuard keys. Lost password? Only via fresh DB + backup restore.",
+    "links": [{"label": "FAQ", "href": "faq.html"}]
+  },
+  {
+    "id": "support",
+    "title": "Where to get help",
+    "keywords": "support help contact ask question community human پشتیبانی کمک تماس سوال",
+    "text": "Fastest channels: FAQ first, then GitHub Discussions (usage), Issues (bugs with repro steps), Security Advisories (private vuln reports). Before asking: panel version, journalctl -u zefira lines, what you tried. Never post tokens, passwords, backups or secret.key.",
+    "fa": "اول FAQ، بعد Discussions (سوال)، Issues (باگ با steps)، آسیب‌پذیری فقط خصوصی. توکن/پسورد/بکاپ را هیچ‌جا پست نکن.",
+    "links": [{"label": "Support page", "href": "support.html"}]
+  }
+]

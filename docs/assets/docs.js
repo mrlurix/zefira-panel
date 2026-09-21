@@ -341,6 +341,10 @@ document.querySelectorAll("pre").forEach(function (pre) {
     }
     return el;
   }
+  links.appendChild(row("Ask AI assistant", "docs answers, offline", null, function () {
+    closePanel();
+    if (window.__zefiraSiteAI) window.__zefiraSiteAI.open();
+  }));
   links.appendChild(row("Search the docs", "Ctrl K", null, function () {
     closePanel();
     if (window.__zefiraSearch) window.__zefiraSearch.open();
