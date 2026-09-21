@@ -54,7 +54,7 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
 - BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable.
 - QR codes for every subscription, ZIP download for configs.
-- AI assistant bubble: panel-only helper (OpenAI/Anthropic/Gemini/Ollama) for beginners.
+- AI assistant bubble: panel-only helper (Groq-first, OpenAI/Anthropic/Gemini/Ollama) for beginners.
 - One-click updates from GitHub with changelog preview, right inside the panel.
 - API tokens (`zfp_…` bearer) for Telegram bots and dashboards — no CSRF header needed. Scopes: `full` or least-privilege `bot` (list/create users only).
 - Full personalization: theme colors, brand name, dashboard message.

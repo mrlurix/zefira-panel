@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=19">
+<link rel="stylesheet" href="assets/style.css?v=20">
 </head>
 <body>
 <header class="topbar">
@@ -43,6 +43,13 @@
 
 <h1><span class="z">C</span>hangelog</h1>
 <p class="subtitle">What changed recently. Full commit-by-commit history lives on <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> — and the panel itself shows incoming changes under <b>Update</b> before you upgrade.</p>
+
+<h2 id="v1110">v1.11.0 — Same-bug-class sweep (AI providers)</h2>
+<ul>
+  <li><b>Anthropic/Gemini URL tolerance:</b> pasting a full <code>/v1/messages</code> or <code>:generateContent</code> endpoint no longer 404s — folded to the API root like Groq (Gemini key-bearing URLs are stripped, never logged).</li>
+  <li><b>Reasoning models:</b> o-series / gpt-5 on OpenAI-compatible endpoints get <code>max_completion_tokens</code> and no custom temperature (their 400s are gone too).</li>
+  <li><b>Anti-drift guards:</b> restore validation uses the single <code>AI_PROVIDERS</code> source; providers, protocols and ports are cross-checked across backend, schemas, panel form and JS.</li>
+</ul>
 
 <h2 id="v1100">v1.10.0 — Groq-first AI (goodbye provider 404)</h2>
 <ul>
@@ -164,7 +171,7 @@
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=19"></script>
+<script src="assets/docs.js?v=20"></script>
 <script src="assets/support-ai.js?v=2"></script>
 </body>
 </html>

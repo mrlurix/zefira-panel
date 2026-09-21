@@ -48,6 +48,7 @@ from database import (
 from schemas import (
     AiChatIn,
     AiSettingsIn,
+    AI_PROVIDERS,
     ApiTokenCreateIn,
     AppearanceIn,
     BackupIn,
@@ -1694,6 +1695,54 @@ def _ai_http_hint(provider: str, code: int) -> str | None:
     return None
 
 
+def _anthropic_base(base_url: str) -> str:
+    """Normalize an Anthropic base URL to the API root.
+
+    Same bug class as Groq: pasting the full endpoint
+    (.../v1/messages) or a trailing /v1 doubles the path and 404s.
+    """
+    default = "https://api.anthropic.com"
+    base = (base_url or default).rstrip("/") or default
+    if base.endswith("/v1/messages"):
+        base = base[: -len("/v1/messages")].rstrip("/") or default
+    try:
+        from urllib.parse import urlparse as _up
+
+        host = (_up(base).hostname or "").lower()
+    except Exception:
+        return base
+    if host == "api.anthropic.com" and base.rstrip("/").endswith("/v1"):
+        base = base.rstrip("/")[: -len("/v1")].rstrip("/") or default
+    return base
+
+
+def _gemini_base(base_url: str) -> str:
+    """Normalize a Gemini base URL to the API root.
+
+    Same bug class: pasting a full .../v1beta/models/<m>:generateContent
+    URL (key included!) as the base would nest paths and leak the key
+    into logs. Strip model/endpoint suffixes, keep custom proxy prefixes.
+    """
+    default = "https://generativelanguage.googleapis.com"
+    base = (base_url or default).rstrip("/") or default
+    base = re.sub(r"/v1beta/models/[^/?]+:generateContent.*$", "", base).rstrip("/") or default
+    base = re.sub(r"/models/[^/?]+:generateContent.*$", "", base).rstrip("/") or default
+    if base.rstrip("/").endswith("/v1beta"):
+        base = base.rstrip("/")[: -len("/v1beta")].rstrip("/") or default
+    return base
+
+
+def _openai_reasoning(model: str) -> bool:
+    """True for reasoning models that reject temperature/max_tokens.
+
+    o-series and gpt-5 accept only default temperature and budget via
+    max_completion_tokens. Sending the standard payload 400s — same
+    "works in test, fails on real model" class as the gpt-oss issue.
+    """
+    m = (model or "").strip().lower().split("/")[-1]
+    return m.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
 def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system: str, history: list) -> tuple:
     import urllib.error
     import urllib.parse
@@ -1703,11 +1752,11 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
     headers = {"Content-Type": "application/json", "User-Agent": "zefira-panel"}
     try:
         if provider == "anthropic":
-            url = (base_url or "https://api.anthropic.com").rstrip("/") + "/v1/messages"
+            url = _anthropic_base(base_url) + "/v1/messages"
             payload = {"model": model, "max_tokens": 800, "system": system, "messages": msgs}
             headers.update({"x-api-key": api_key, "anthropic-version": "2023-06-01"})
         elif provider == "gemini":
-            base = (base_url or "https://generativelanguage.googleapis.com").rstrip("/")
+            base = _gemini_base(base_url)
             url = f"{base}/v1beta/models/{model}:generateContent?key={urllib.parse.quote(api_key, safe='')}"
             gemini_msgs = [
                 {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
@@ -1747,19 +1796,24 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
             payload = {
                 "model": model,
                 "messages": [{"role": "system", "content": system}, *msgs],
-                "temperature": 0.3,
-                "max_tokens": 800,
             }
+            if _openai_reasoning(model):
+                # Reasoning models: only default temperature + completion
+                # budgeting. Anything else 400s.
+                payload["max_completion_tokens"] = 800
+            else:
+                payload["temperature"] = 0.3
+                payload["max_tokens"] = 800
             headers["Authorization"] = f"Bearer {api_key}"
         # SSRF guard (request-time, after save-time validation): resolve the
         # effective host and refuse metadata/link-local/multicast targets.
         # Custom base_url is admin-controlled, but a hijacked admin session
         # must not become a metadata-exfil oracle. Defaults are public APIs.
-        eff_base = base_url or (
-            "https://api.anthropic.com" if provider == "anthropic"
-            else "https://generativelanguage.googleapis.com" if provider == "gemini"
-            else GROQ_DEFAULT_BASE if provider == "groq"
-            else "https://api.openai.com/v1"
+        eff_base = (
+            _anthropic_base(base_url) if provider == "anthropic"
+            else _gemini_base(base_url) if provider == "gemini"
+            else _groq_base(base_url) if provider == "groq"
+            else (base_url or "https://api.openai.com/v1")
         )
         blocked_reason = _ai_base_url_blocked(eff_base)
         if blocked_reason:
@@ -2820,7 +2874,7 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
                     if len(sval) > 300:
                         ok = False
                 elif k == "ai_provider":
-                    ok = sval in ("groq", "openai", "anthropic", "gemini")
+                    ok = sval in AI_PROVIDERS
                 elif k == "ai_base_url":
                     if sval and not re.fullmatch(r"https?://[^/\s]+(:[0-9]{1,5})?(/.*)?", sval):
                         ok = False
