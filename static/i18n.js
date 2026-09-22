@@ -1182,6 +1182,7 @@ function applyI18n(root) {
   q("[data-i18n-ph]").forEach((el) => { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph"))); });
   q("[data-i18n-title]").forEach((el) => { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
   q("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria"))); });
+  q("[data-i18n-alt]").forEach((el) => { el.setAttribute("alt", t(el.getAttribute("data-i18n-alt"))); });
 }
 
 function zLocaleTag() {
@@ -1211,7 +1212,10 @@ function mountLangSwitcher(sel) {
     document.documentElement.lang = Z_LANG === "zh" ? "zh-CN" : Z_LANG;
     document.documentElement.dir = Z_LOCALES[Z_LANG].dir;
   } catch (_) {}
-  const run = () => { try { applyI18n(document); } catch (_) {} };
+  const run = () => {
+    try { applyI18n(document); } catch (_) {}
+    try { document.querySelectorAll("select.lang-sel").forEach((el) => { el.value = Z_LANG; }); } catch (_) {}
+  };
   if (typeof document !== "undefined" && document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", run);
   } else {

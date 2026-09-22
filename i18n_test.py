@@ -102,7 +102,7 @@ for loc in ("fa", "zh", "ru"):
 _dused = set()
 for f in (HERE / "docs").glob("*.html"):
     html = f.read_text(encoding="utf-8")
-    for attr in ("data-i18n", "data-i18n-ph", "data-i18n-title", "data-i18n-aria"):
+    for attr in ("data-i18n", "data-i18n-ph", "data-i18n-title", "data-i18n-aria", "data-i18n-alt"):
         _dused.update(re.findall(attr + r'="([^"]+)"', html))
 for k in sorted(_dused - _dbase):
     fail(f"docs template key missing from en dict: {k}")

@@ -1188,6 +1188,11 @@ Object.assign(Z_STRINGS.fa, {"chg.v1120": "— فارسی، چینی، روسی"
 Object.assign(Z_STRINGS.zh, {"chg.v1120": "——波斯语、中文、俄语", "chg.v1120a_lead": "完整翻译：", "chg.v1120a": "面板、登录和订阅页，外加全部 12 个文档页，均提供波斯语、简体中文和俄语——RTL 布局、语言切换器、浏览器检测。", "chg.v1120b_lead": "无遗漏：", "chg.v1120b": "每个按钮、提示、对话框、审计事件和文档章节，都有永久 i18n 覆盖测试兜底。"});
 Object.assign(Z_STRINGS.ru, {"chg.v1120": "— персидский, китайский, русский", "chg.v1120a_lead": "Полный перевод:", "chg.v1120a": "панель, логин и страницы подписки плюс все 12 страниц доков на персидском, упрощённом китайском и русском — RTL-раскладка, переключатель языка, детект браузера.", "chg.v1120b_lead": "Без пропусков:", "chg.v1120b": "каждая кнопка, тост, диалог, аудит-событие и раздел доков покрыты постоянным i18n-тестом."});
 
+Object.assign(Z_STRINGS.en, {"docs.titleApi": "API Reference - Zefira Docs", "docs.titleChangelog": "Changelog - Zefira Docs", "docs.titleConfig": "Configuration - Zefira Docs", "docs.titleDonate": "Donate - Zefira Docs", "docs.titleFaq": "FAQ & Troubleshooting - Zefira Docs", "docs.titleIndex": "Zefira - Multi-protocol VPN sales panel", "docs.titleInstall": "Installation - Zefira Docs", "docs.titleSecurity": "Security - Zefira Docs", "docs.titleSetup": "Setup guides - Zefira Docs", "docs.titleSubs": "Subscriptions & Clients - Zefira Docs", "docs.titleSupport": "Support - Zefira Docs", "docs.titleUsers": "Users & Plans - Zefira Docs", "docs.footMit": "MIT License", "idx.altDash": "Zefira dashboard", "idx.altUser": "User subscription dashboard", "idx.altPers": "Appearance settings", "idx.altLogin": "Zefira login"});
+Object.assign(Z_STRINGS.fa, {"docs.titleApi": "مرجع API - داکس زفیرا", "docs.titleChangelog": "تغییرات - داکس زفیرا", "docs.titleConfig": "پیکربندی - داکس زفیرا", "docs.titleDonate": "دونیت - داکس زفیرا", "docs.titleFaq": "سؤالات پرتکرار و عیب‌یابی - داکس زفیرا", "docs.titleIndex": "زفیرا - پنل فروش VPN چندپروتکله", "docs.titleInstall": "نصب - داکس زفیرا", "docs.titleSecurity": "امنیت - داکس زفیرا", "docs.titleSetup": "راهنمای نصب - داکس زفیرا", "docs.titleSubs": "اشتراک‌ها و کلاینت‌ها - داکس زفیرا", "docs.titleSupport": "پشتیبانی - داکس زفیرا", "docs.titleUsers": "کاربران و پلن‌ها - داکس زفیرا", "docs.footMit": "مجوز MIT", "idx.altDash": "داشبورد زفیرا", "idx.altUser": "داشبورد اشتراک کاربر", "idx.altPers": "تنظیمات ظاهر", "idx.altLogin": "ورود زفیرا"});
+Object.assign(Z_STRINGS.zh, {"docs.titleApi": "API 参考 - Zefira 文档", "docs.titleChangelog": "更新日志 - Zefira 文档", "docs.titleConfig": "配置 - Zefira 文档", "docs.titleDonate": "捐赠 - Zefira 文档", "docs.titleFaq": "常见问题与排错 - Zefira 文档", "docs.titleIndex": "Zefira - 多协议 VPN 销售面板", "docs.titleInstall": "安装 - Zefira 文档", "docs.titleSecurity": "安全 - Zefira 文档", "docs.titleSetup": "搭建指南 - Zefira 文档", "docs.titleSubs": "订阅与客户端 - Zefira 文档", "docs.titleSupport": "支持 - Zefira 文档", "docs.titleUsers": "用户与套餐 - Zefira 文档", "docs.footMit": "MIT 许可证", "idx.altDash": "Zefira 仪表盘", "idx.altUser": "用户订阅仪表盘", "idx.altPers": "外观设置", "idx.altLogin": "Zefira 登录"});
+Object.assign(Z_STRINGS.ru, {"docs.titleApi": "Справочник API - Доки Zefira", "docs.titleChangelog": "Чейнджлог - Доки Zefira", "docs.titleConfig": "Конфигурация - Доки Zefira", "docs.titleDonate": "Донат - Доки Zefira", "docs.titleFaq": "FAQ и отладка - Доки Zefira", "docs.titleIndex": "Zefira - мультипротокольная VPN-панель продаж", "docs.titleInstall": "Установка - Доки Zefira", "docs.titleSecurity": "Безопасность - Доки Zefira", "docs.titleSetup": "Гайды по настройке - Доки Zefira", "docs.titleSubs": "Подписки и клиенты - Доки Zefira", "docs.titleSupport": "Поддержка - Доки Zefira", "docs.titleUsers": "Юзеры и тарифы - Доки Zefira", "docs.footMit": "лицензия MIT", "idx.altDash": "Дашборд Zefira", "idx.altUser": "Дашборд подписки юзера", "idx.altPers": "Настройки оформления", "idx.altLogin": "Вход Zefira"});
+
 function zDetect() {
   try {
     const s = ZI18N_STORE.get();
@@ -1236,6 +1241,7 @@ function applyI18n(root) {
   q("[data-i18n-ph]").forEach((el) => { el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph"))); });
   q("[data-i18n-title]").forEach((el) => { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
   q("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria"))); });
+  q("[data-i18n-alt]").forEach((el) => { el.setAttribute("alt", t(el.getAttribute("data-i18n-alt"))); });
 }
 
 function zLocaleTag() {
@@ -1265,7 +1271,10 @@ function mountLangSwitcher(sel) {
     document.documentElement.lang = Z_LANG === "zh" ? "zh-CN" : Z_LANG;
     document.documentElement.dir = Z_LOCALES[Z_LANG].dir;
   } catch (_) {}
-  const run = () => { try { applyI18n(document); } catch (_) {} };
+  const run = () => {
+    try { applyI18n(document); } catch (_) {}
+    try { document.querySelectorAll("select.lang-sel").forEach((el) => { el.value = Z_LANG; }); } catch (_) {}
+  };
   if (typeof document !== "undefined" && document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", run);
   } else {
