@@ -15,46 +15,26 @@ const PROTO_LABEL = {
   cisco: "Cisco AnyConnect",
   socks5: "SOCKS5"
 };
-const EVENT_EN = {
-  LOGIN_OK: "Successful login",
-  LOGIN_FAIL: "Failed login",
-  RATE_LIMIT: "Rate limited",
-  USER_CREATE: "User created",
-  USER_PATCH: "User updated",
-  USER_DELETE: "User deleted",
-  TOKEN_RESET: "Token reset",
-  USAGE_RESET: "Usage reset",  PW_CHANGE: "Password changed",
-  SETTINGS_UPDATE: "Server settings updated",
-  BACKUP_DL: "Backup downloaded",
-  RESTORE: "Backup restored",
-  RESTORE_FAIL: "Restore denied",
-  REALITY_GENERATE: "REALITY keys generated",
-  REALITY_REVEAL: "REALITY private key viewed",
-  TEMPLATE_SAVE: "Template saved",
-  TEMPLATE_DELETE: "Template deleted",
-  USER_START: "User started (first use)",
-  TUNNEL_SETTINGS: "Tunnel settings updated",
-  NODE_CREATE: "Tunnel node created",
-  NODE_DELETE: "Tunnel node removed",
-  NODE_CHECK: "Node checked",
-  NODE_TOKEN_REVEAL: "Node token revealed",
-  NODE_TOKEN_REGEN: "Node token regenerated",
-  NODE_GUIDE_DL: "Setup guide downloaded",
-  INBOUND_CREATE: "Inbound added",
-  INBOUND_PATCH: "Inbound updated",
-  INBOUND_DELETE: "Inbound removed",
-  TG_SAVE: "Telegram settings saved",
-  TG_TEST: "Telegram test sent",
-  SSL_ISSUE: "SSL certificate issued",
-  SSL_RENEW: "SSL certificate renewed"
-};
+function eventName(ev) {
+  const k = "event." + ev;
+  const v = t(k);
+  return v === k ? ev : v;
+}
 
 let USERS_CACHE = [];
 let SORT_MODE = "newest";
 
-const numFmt = new Intl.NumberFormat("en-US");
-const dateFmt = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "2-digit" });
-const dateTimeFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+let numFmt = new Intl.NumberFormat("en-US");
+let dateFmt = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "2-digit" });
+let dateTimeFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+function refreshI18nFormats() {
+  try {
+    const tag = zLocaleTag();
+    numFmt = new Intl.NumberFormat(tag);
+    dateFmt = new Intl.DateTimeFormat(tag, { year: "numeric", month: "short", day: "2-digit" });
+    dateTimeFmt = new Intl.DateTimeFormat(tag, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch (_) {}
+}
 
 async function api(url, opts = {}) {
   opts.headers = Object.assign({ "X-Requested-With": "XMLHttpRequest" }, opts.headers || {});
@@ -102,18 +82,18 @@ function badge(text, cls) {
   return s;
 }
 function expiryBadge(u) {
-  if (!u.is_active) return badge("Disabled", "off");
+  if (!u.is_active) return badge(t("badge.disabled"), "off");
   const d = daysLeft(u.expires_at);
-  if (d <= 0) return badge("Expired", "expired");
-  if (d <= 7) return badge(`${d} days`, "warn");
-  return badge(`${d} days`, "ok");
+  if (d <= 0) return badge(t("badge.expired"), "expired");
+  if (d <= 7) return badge(t("badge.expSoon", {d}), "warn");
+  return badge(t("badge.expSoon", {d}), "ok");
 }
 function statusBadge(u) {
-  if (!u.is_active) return badge("Paused", "off");
-  if (u.pending_start) return badge("Not started", "pending");
-  if (u.used_gb >= u.volume_gb) return badge("Limited", "limited");
-  if (!u.expires_at || daysLeft(u.expires_at) <= 0) return badge("Expired", "expired");
-  return badge("Active", "ok");
+  if (!u.is_active) return badge(t("badge.paused"), "off");
+  if (u.pending_start) return badge(t("badge.notStarted"), "pending");
+  if (u.used_gb >= u.volume_gb) return badge(t("badge.limited"), "limited");
+  if (!u.expires_at || daysLeft(u.expires_at) <= 0) return badge(t("badge.expired"), "expired");
+  return badge(t("badge.active"), "ok");
 }
 function protoBadges(list) {
   const wrap = document.createElement("span");
@@ -189,8 +169,8 @@ function userRow(u) {
   if (u.device_limit) {
     const dev = document.createElement("span");
     dev.className = "badge proto";
-    dev.textContent = `max ${u.device_limit} dev`;
-    dev.title = `Up to ${u.device_limit} devices can use this account`;
+    dev.textContent = t("devBadge", {n: u.device_limit});
+    dev.title = t("devTitle", {n: u.device_limit});
     unWrap.appendChild(dev);
   }
   unTd.appendChild(unWrap);
@@ -211,29 +191,29 @@ function userRow(u) {
 
   const act = document.createElement("td");
   const subUrl = `${location.origin}/sub/${u.token}`;
-  const editBtn = iconBtn("Edit user", ICONS.edit, "");
+  const editBtn = iconBtn(t("icon.editUser"), ICONS.edit, "");
   editBtn.dataset.act = "edit";
   editBtn.dataset.id = u.id;
-  const qrBtn = iconBtn("Show QR code", ICONS.qr, "accent");
+  const qrBtn = iconBtn(t("icon.qr"), ICONS.qr, "accent");
   qrBtn.dataset.act = "qr";
   qrBtn.dataset.id = u.id;
-  const copyBtn = iconBtn("Copy subscription link", ICONS.copy, "accent");
+  const copyBtn = iconBtn(t("icon.copySub"), ICONS.copy, "accent");
   copyBtn.dataset.act = "copy";
   copyBtn.dataset.url = subUrl;
-  const dlBtn = iconBtn("Download config file(s)", ICONS.download, "accent");
+  const dlBtn = iconBtn(t("icon.dl"), ICONS.download, "accent");
   dlBtn.dataset.act = "download";
   dlBtn.dataset.id = u.id;
   const toggleBtn = iconBtn(
-    u.is_active ? "Pause service" : "Enable service",
+    u.is_active ? t("icon.pause") : t("icon.enable"),
     u.is_active ? ICONS.toggleOff : ICONS.toggleOn,
     u.is_active ? "warn" : "good"
   );
   toggleBtn.dataset.act = "toggle";
   toggleBtn.dataset.id = u.id;
-  const resetBtn = iconBtn("Reset token & keys", ICONS.refresh);
+  const resetBtn = iconBtn(t("icon.reset"), ICONS.refresh);
   resetBtn.dataset.act = "reset";
   resetBtn.dataset.id = u.id;
-  const delBtn = iconBtn("Delete", ICONS.trash, "bad");
+  const delBtn = iconBtn(t("icon.delete"), ICONS.trash, "bad");
   delBtn.dataset.act = "del";
   delBtn.dataset.id = u.id;
   delBtn.dataset.name = u.username;
@@ -305,11 +285,11 @@ async function loadStats() {
     $("#s-expired").textContent = numFmt.format(s.expired_users);
     $("#s-disabled").textContent = numFmt.format(s.disabled_users);
     $("#s-soon").textContent =
-      (s.expiring_soon > 0 ? `${s.expiring_soon} expire within 7 days` : "") +
-      (s.pending_start > 0 ? `${s.expiring_soon > 0 ? " · " : ""}${s.pending_start} not started yet` : "") +
-      (s.limited_users > 0 ? `${s.expiring_soon + s.pending_start > 0 ? " · " : ""}${s.limited_users} out of volume` : "");
+      (s.expiring_soon > 0 ? t("dash.soonExpire", {n: s.expiring_soon}) : "") +
+      (s.pending_start > 0 ? `${s.expiring_soon > 0 ? " · " : ""}` + t("dash.soonPending", {n: s.pending_start}) : "") +
+      (s.limited_users > 0 ? `${s.expiring_soon + s.pending_start > 0 ? " · " : ""}` + t("dash.soonLimited", {n: s.limited_users}) : "");
     $("#s-volume").textContent = numFmt.format(Math.round(s.volume_total_gb)) + " GB";
-    $("#s-used").textContent = "Used: " + s.used_total_gb.toFixed(1) + " GB";
+    $("#s-used").textContent = t("dash.usedPre") + " " + s.used_total_gb.toFixed(1) + " GB";
   } catch (e) {}
 }
 
@@ -320,7 +300,7 @@ async function loadSystem() {
     setBar("#bar-cpu", "#val-cpu", sys.cpu);
     setBar("#bar-mem", "#val-mem", sys.mem);
     setBar("#bar-disk", "#val-disk", sys.disk);
-    $("#sys-uptime").textContent = "Uptime: " + sys.uptime_hours + "h";
+    $("#sys-uptime").textContent = t("dash.uptimePre") + " " + sys.uptime_hours + "h";
   } catch (_) {}
 }
 function setBar(barSel, valSel, pct) {
@@ -335,7 +315,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     document.querySelectorAll(".section").forEach((s) => s.classList.remove("active"));
     btn.classList.add("active");
     $("#section-" + btn.dataset.section).classList.add("active");
-    $("#page-title").textContent = btn.dataset.title;
+    $("#page-title").textContent = t(btn.dataset.titleKey || "title.dashboard");
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
     if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); loadApiTokens(); }
     if (btn.dataset.section === "customize") { loadAppearance(); }
@@ -366,7 +346,7 @@ qrModal.addEventListener("click", (e) => { if (e.target === qrModal) qrModal.cla
 let currentQrUrl = "";
 $("#qr-copy-btn").addEventListener("click", async () => {
   await navigator.clipboard.writeText(currentQrUrl);
-  toast("Link copied");
+  toast(t("msg.linkCopied"));
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { overlay.classList.add("hidden"); qrModal.classList.add("hidden"); }
@@ -376,7 +356,7 @@ $("#add-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
-  if (!protos.length) { toast("Select at least one protocol", false); return; }
+  if (!protos.length) { toast(t("msg.selectProto"), false); return; }
   const devVal = parseInt(f.device_limit.value, 10);
   try {
     await api("/api/users", {
@@ -395,7 +375,7 @@ $("#add-user-form").addEventListener("submit", async (e) => {
     f.querySelector('input[value="vless"]').checked = true;
     f.volume.value = 30; f.days.value = 30;
     overlay.classList.add("hidden");
-    toast(`User created with ${protos.length} protocol(s)`);
+    toast(t("msg.userCreated", {n: protos.length}));
     loadUsers($("#search").value.trim());
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
@@ -409,7 +389,7 @@ async function loadTemplates() {
     sel.textContent = "";
     const first = document.createElement("option");
     first.value = "";
-    first.textContent = "Load template...";
+    first.textContent = t("tpl.loadFirst");
     sel.appendChild(first);
     for (const t of tpls) {
       const o = document.createElement("option");
@@ -435,26 +415,26 @@ $("#tpl-select").addEventListener("change", () => {
 $("#tpl-save-btn").addEventListener("click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
-  if (!protos.length) { toast("Select protocols first, then save as template", false); return; }
-  const name = prompt("Template name:");
+  if (!protos.length) { toast(t("msg.tplSelectProto"), false); return; }
+  const name = prompt(t("prm.tplName"));
   if (!name) return;
   try {
     await api("/api/templates", {
       method: "POST",
       body: { name, protocols: protos, volume_gb: parseFloat(f.volume.value), days: parseInt(f.days.value, 10), start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = parseInt(f.device_limit.value, 10); return Number.isFinite(v) && v >= 1 ? v : null; })() }
     });
-    toast(`Template "${name}" saved`);
+    toast(t("msg.tplSaved", {name}));
     loadTemplates();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#tpl-del-btn").addEventListener("click", async () => {
   const sel = $("#tpl-select");
   const id = sel.value;
-  if (!id) { toast("Select a template to delete", false); return; }
-  if (!confirm(`Delete template "${sel.selectedOptions[0].textContent}"?`)) return;
+  if (!id) { toast(t("msg.tplSelectDel"), false); return; }
+  if (!confirm(t("cfm.tplDelete", {name: sel.selectedOptions[0].textContent}))) return;
   try {
     await api("/api/templates/" + id, { method: "DELETE" });
-    toast("Template deleted");
+    toast(t("msg.tplDeleted"));
     loadTemplates();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -471,7 +451,7 @@ $("#sort-sel").addEventListener("change", () => {
 });
 
 $("#export-csv-btn").addEventListener("click", () => {
-  if (!USERS_CACHE.length) { toast("No users to export", false); return; }
+  if (!USERS_CACHE.length) { toast(t("msg.noUsersExport"), false); return; }
   const safeCell = (v) => {
     const s = String(v);
     return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
@@ -495,7 +475,7 @@ $("#export-csv-btn").addEventListener("click", () => {
   a.download = "zefira-users.csv";
   a.click();
   URL.revokeObjectURL(a.href);
-  toast(`Exported ${rows.length - 1} users`);
+  toast(t("msg.exported", {n: rows.length - 1}));
 });
 
 $("#users-table").addEventListener("click", async (e) => {
@@ -519,7 +499,7 @@ $("#users-table").addEventListener("click", async (e) => {
     }
     if (btn.dataset.act === "copy") {
       await navigator.clipboard.writeText(btn.dataset.url);
-      toast("Subscription link copied");
+      toast(t("msg.subCopied"));
       return;
     }
     if (btn.dataset.act === "download") {
@@ -529,12 +509,12 @@ $("#users-table").addEventListener("click", async (e) => {
         if (u && (u.protocols || []).includes("wireguard")) {
           const srv = await api("/api/settings");
           if (!srv.wg_pub) {
-            toast("Downloaded, but set the WireGuard server public key in Settings or it won't connect", false);
+            toast(t("msg.wgKeyWarn"), false);
             return;
           }
         }
       } catch (_) {}
-      toast("Downloading config...");
+      toast(t("msg.downloading"));
       return;
     }
     if (btn.dataset.act === "qr") {
@@ -548,15 +528,15 @@ $("#users-table").addEventListener("click", async (e) => {
     if (btn.dataset.act === "toggle") {
       const isActive = btn.classList.contains("warn");
       await api("/api/users/" + id, { method: "PATCH", body: { is_active: !isActive } });
-      toast(isActive ? "Service paused" : "Service enabled");
+      toast(isActive ? t("msg.paused") : t("msg.enabled"));
     } else if (btn.dataset.act === "reset") {
-      if (!confirm("Invalidate the old token and generate completely new keys/configs?")) return;
+      if (!confirm(t("cfm.userReset"))) return;
       await api("/api/users/" + id + "/reset-token", { method: "POST" });
-      toast("Token and keys regenerated");
+      toast(t("msg.tokenRegen"));
     } else if (btn.dataset.act === "del") {
-      if (!confirm(`Delete user "${btn.dataset.name}" permanently?`)) return;
+      if (!confirm(t("cfm.userDelete", {name: btn.dataset.name}))) return;
       await api("/api/users/" + id, { method: "DELETE" });
-      toast("User deleted");
+      toast(t("msg.userDeleted"));
     }
     loadUsers($("#search").value.trim());
   } catch (err) {
@@ -568,7 +548,7 @@ $("#pw-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (f.new1.value !== f.new2.value) {
-    toast("New passwords do not match", false);
+    toast(t("msg.pwMismatch"), false);
     return;
   }
   try {
@@ -577,7 +557,7 @@ $("#pw-form").addEventListener("submit", async (e) => {
       body: { current_password: f.current.value, new_password: f.new1.value }
     });
     f.reset();
-    toast("Password changed successfully");
+    toast(t("msg.pwChanged"));
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
@@ -586,19 +566,13 @@ $("#pw-form").addEventListener("submit", async (e) => {
 function applyBrand(name) {
   const b = (name || "").trim() || "ZEFIRA";
   document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = b; });
-  document.title = b + " Panel";
+  document.title = b + " " + t("brand.panelSuffix");
 }
 
 // ---- Menu & dashboard layout ----
-const MENU_LABELS = {
-  dashboard: "Dashboard", users: "Users", inbounds: "Inbounds",
-  tunnels: "Tunnels", nodes: "Nodes", reality: "Anti-Censorship",
-  blocker: "Site Blocker", update: "Update", customize: "Personalize", settings: "Settings"
-};
-const MENU_IDS = Object.keys(MENU_LABELS);
+const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "settings"];
 const MENU_LOCKED = ["dashboard", "users", "inbounds", "customize", "settings"];
-const DASH_LABELS = { usage: "Usage ring", link: "Subscription link", groups: "Config groups", apps: "Apps" };
-const DASH_IDS = Object.keys(DASH_LABELS);
+const DASH_IDS = ["usage", "link", "groups", "apps"];
 let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));
 let DASH_STATE = { order: DASH_IDS.slice(), hidden: [] };
 
@@ -699,14 +673,14 @@ function layoutRow(label, locked, hidden, onUp, onDown, onEye) {
   };
   mk("▲", onUp, false);
   mk("▼", onDown, false);
-  const eye = mk(hidden ? "Show" : "Hide", onEye, locked);
-  if (locked) eye.title = "Always visible";
+  const eye = mk(hidden ? t("menu.hide") : t("menu.show"), onEye, locked);
+  if (locked) eye.title = t("menu.lockedNote");
   return li;
 }
 async function saveLayout(silent) {
   try {
     await api("/api/appearance", { method: "PUT", body: collectAppearance() });
-    if (!silent) toast("Layout saved");
+    if (!silent) toast(t("msg.layoutSaved"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 }
 function renderMenuLayout() {
@@ -715,7 +689,7 @@ function renderMenuLayout() {
   MENU_STATE.forEach((item, i) => {
     const locked = MENU_LOCKED.includes(item.id);
     ul.appendChild(layoutRow(
-      MENU_LABELS[item.id] || item.id,
+      t("menu." + item.id),
       locked,
       item.hidden,
       () => { if (i > 0) { const t = MENU_STATE[i - 1]; MENU_STATE[i - 1] = item; MENU_STATE[i] = t; afterMenuChange(); } },
@@ -735,7 +709,7 @@ function renderDashLayout() {
   DASH_STATE.order.forEach((id, i) => {
     const hidden = DASH_STATE.hidden.includes(id);
     ul.appendChild(layoutRow(
-      DASH_LABELS[id] || id,
+      t("dlayout." + id),
       false,
       hidden,
       () => {
@@ -790,11 +764,11 @@ $("#ap-save-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/appearance", { method: "PUT", body: collectAppearance() });
     applyBrand(r.brand_name);
-    toast("Appearance saved");
+    toast(t("msg.appearanceSaved"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#ap-reset-btn").addEventListener("click", async () => {
-  if (!confirm("Reset colors, brand and dashboard message to defaults?")) return;
+  if (!confirm(t("cfm.appearanceReset"))) return;
   try {
     const body = collectAppearance();
     body.theme_accent = ""; body.theme_bg = ""; body.theme_card = "";
@@ -803,7 +777,7 @@ $("#ap-reset-btn").addEventListener("click", async () => {
     const r = await api("/api/appearance", { method: "PUT", body });
     applyBrand(r.brand_name);
     loadAppearance();
-    toast("Appearance reset");
+    toast(t("msg.appearanceReset"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
@@ -854,7 +828,7 @@ async function saveAllSettings() {
   body.cdn_sni = document.querySelector('[name="cdn_sni"]').value.trim();
   try {
     await api("/api/settings", { method: "PUT", body });
-    toast("Server settings saved — new configs will use them");
+    toast(t("msg.srvSaved"));
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
@@ -866,13 +840,13 @@ $("#srv-form").addEventListener("submit", async (e) => {
 });
 
 $("#reality-gen-btn").addEventListener("click", async () => {
-  if (!confirm("Generate a NEW REALITY keypair? Existing REALITY configs keep working only after you update the server's Xray config with the new private key.")) return;
+  if (!confirm(t("cfm.realityGen"))) return;
   try {
     const d = await api("/api/reality/generate", { method: "POST" });
     $("#reality-pub").value = d.public_key;
     $("#reality-priv").value = d.private_key;
     $("#reality-out").classList.remove("hidden");
-    toast("REALITY keypair generated");
+    toast(t("msg.realityKeypair"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#reality-reveal-btn").addEventListener("click", async () => {
@@ -886,7 +860,7 @@ $("#reality-copy-btn").addEventListener("click", async () => {
   await navigator.clipboard.writeText(
     `private_key: ${$("#reality-priv").value}\npublic_key: ${$("#reality-pub").value}`
   );
-  toast("Keys copied");
+  toast(t("msg.keysCopied"));
 });
 
 async function loadTunnelSettings() {
@@ -905,12 +879,16 @@ $("#tunnel-save-btn").addEventListener("click", async () => {
         trusted_proxies: $("#tunnel-trusted").value.trim()
       }
     });
-    toast("Tunnel settings saved");
+    toast(t("msg.tunnelSaved"));
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
 });
-const NODE_STATUS_LABEL = { online: "\u25cf online", offline: "\u25cb offline", unknown: "? not checked" };
+function nodeStatusText(st) {
+  if (st === "online") return "\u25cf " + t("badge.online");
+  if (st === "offline") return "\u25cb " + t("badge.offline");
+  return "? " + t("badge.unknown");
+}
 
 function renderNodes(nodes) {
   const ul = $("#nodes-list");
@@ -918,7 +896,7 @@ function renderNodes(nodes) {
   if (!nodes.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = "No tunnels yet. Create one above.";
+    li.textContent = t("msg.noTunnels");
     ul.appendChild(li);
     return;
   }
@@ -931,7 +909,7 @@ function renderNodes(nodes) {
     const main = document.createElement("span");
     main.textContent = `${n.name} [${n.transport}] ${n.iran_ip} \u21c4 ${n.kharej_ip}:${n.tunnel_port}`;
     const st = document.createElement("small");
-    st.textContent = NODE_STATUS_LABEL[n.status] || n.status;
+    st.textContent = n.status ? nodeStatusText(n.status) : n.status;
     st.style.color = n.status === "online" ? "var(--green)" : n.status === "offline" ? "var(--red)" : "var(--muted)";
     li.appendChild(main);
     li.appendChild(st);
@@ -942,11 +920,11 @@ function renderNodes(nodes) {
       if (extraName) b.dataset.name = extraName;
       return b;
     };
-    li.appendChild(mk("Check reachability now", "check", "good", n.id));
-    li.appendChild(mk("Copy token", "copy", "accent", n.id));
-    li.appendChild(mk("Download BackPack setup guide", "download", "accent", n.id));
-    li.appendChild(mk("Regenerate token", "refresh", "warn", n.id));
-    const delBtn = iconBtn("Delete tunnel", ICONS.trash, "bad");
+    li.appendChild(mk(t("icon.checkNode"), "check", "good", n.id));
+    li.appendChild(mk(t("icon.copyToken"), "copy", "accent", n.id));
+    li.appendChild(mk(t("icon.guide"), "download", "accent", n.id));
+    li.appendChild(mk(t("icon.regen"), "refresh", "warn", n.id));
+    const delBtn = iconBtn(t("icon.delTunnel"), ICONS.trash, "bad");
     delBtn.dataset.act = "del-node";
     delBtn.dataset.id = n.id;
     delBtn.dataset.name = n.name;
@@ -965,7 +943,7 @@ $("#node-create-btn").addEventListener("click", async () => {
   const name = $("#node-name").value.trim();
   const iran = $("#node-iran").value.trim();
   const kharej = $("#node-kharej").value.trim();
-  if (!name || !iran || !kharej) { toast("Fill name, Iran IP and Kharej IP", false); return; }
+  if (!name || !iran || !kharej) { toast(t("msg.fillTunnel"), false); return; }
   try {
     const node = await api("/api/nodes", {
       method: "POST",
@@ -980,7 +958,7 @@ $("#node-create-btn").addEventListener("click", async () => {
       }
     });
     await navigator.clipboard.writeText(node.token_once).catch(() => {});
-    toast(`Tunnel created \u2014 TOKEN copied to clipboard!`);
+    toast(t("msg.tunnelCreated"));
     $("#node-name").value = ""; $("#node-iran").value = ""; $("#node-kharej").value = "";
     loadNodes();
     setTimeout(() => window.open(`/api/nodes/${node.id}/guide`, "_blank"), 500);
@@ -994,23 +972,23 @@ $("#nodes-list").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "check") {
       const n = await api(`/api/nodes/${id}/check`, { method: "POST" });
-      toast(n.status === "online" ? `Iran side is ONLINE (${n.iran_ip}:${n.tunnel_port})` : `Iran side UNREACHABLE`, n.status === "online");
+      toast(n.status === "online" ? t("msg.nodeOnline", {ip: n.iran_ip, port: n.tunnel_port}) : t("msg.nodeOffline"), n.status === "online");
       loadNodes();
     } else if (btn.dataset.act === "copy") {
       const r = await api(`/api/nodes/${id}/reveal-token`, { method: "POST" });
       await navigator.clipboard.writeText(r.token);
-      toast("Token copied \u2014 use the SAME token on both servers");
+      toast(t("msg.tokenCopiedSame"));
     } else if (btn.dataset.act === "download") {
       window.open(`/api/nodes/${id}/guide`, "_blank");
     } else if (btn.dataset.act === "refresh") {
-      if (!confirm("Generate a NEW token? You must update BOTH servers with it.")) return;
+      if (!confirm(t("cfm.nodeRegen"))) return;
       await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
-      toast("Token regenerated \u2014 download the guide again");
+      toast(t("msg.tokenRegenDl"));
       loadNodes();
     } else if (btn.dataset.act === "del-node") {
-      if (!confirm(`Delete tunnel "${btn.dataset.name}"?`)) return;
+      if (!confirm(t("cfm.nodeDelete", {name: btn.dataset.name}))) return;
       await api("/api/nodes/" + id, { method: "DELETE" });
-      toast("Tunnel deleted");
+      toast(t("msg.tunnelDeleted"));
       loadNodes();
     }
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1041,10 +1019,10 @@ function inboundRow(ib) {
   const cNode = document.createElement("td");
   const nodeSel = document.createElement("select");
   nodeSel.className = "ib-node-sel";
-  nodeSel.title = "Server node (offline nodes are skipped in links)";
+  nodeSel.title = t("ib.nodeTitleOpt");
   const oLocal = document.createElement("option");
   oLocal.value = "";
-  oLocal.textContent = "Local";
+  oLocal.textContent = t("ib.localPanel");
   nodeSel.appendChild(oLocal);
   for (const n of SERVER_NODES) {
     const o = document.createElement("option");
@@ -1067,7 +1045,7 @@ function inboundRow(ib) {
         method: "PATCH",
         body: { node_id: nodeSel.value ? parseInt(nodeSel.value, 10) : null }
       });
-      toast(nodeSel.value ? "Inbound pinned to node" : "Inbound back to local");
+      toast(nodeSel.value ? t("msg.ibPinned") : t("msg.ibLocal"));
       loadInbounds();
     } catch (err) {
       if (err.message !== "auth") toast(err.message, false);
@@ -1078,10 +1056,10 @@ function inboundRow(ib) {
   const c5 = document.createElement("td");
   c5.appendChild(badge(ib.enabled ? "ON" : "OFF", ib.enabled ? "ok" : "off"));
   const c6 = document.createElement("td");
-  const tglBtn = iconBtn(ib.enabled ? "Disable" : "Enable", ICONS.toggleOff, ib.enabled ? "warn" : "good");
+  const tglBtn = iconBtn(ib.enabled ? t("icon.disable") : t("icon.enableObj"), ICONS.toggleOff, ib.enabled ? "warn" : "good");
   tglBtn.dataset.act = "ib-toggle";
   tglBtn.dataset.id = ib.id;
-  const delBtn = iconBtn("Delete", ICONS.trash, "bad");
+  const delBtn = iconBtn(t("icon.delete"), ICONS.trash, "bad");
   delBtn.dataset.act = "ib-del";
   delBtn.dataset.id = ib.id;
   delBtn.dataset.name = ib.name;
@@ -1104,7 +1082,7 @@ async function loadInbounds() {
 $("#ib-add-btn").addEventListener("click", async () => {
   const name = $("#ib-name").value.trim();
   const port = parseInt($("#ib-port").value, 10);
-  if (!name || !port) { toast("Enter a name and port", false); return; }
+  if (!name || !port) { toast(t("msg.ibNamePort"), false); return; }
   try {
     await api("/api/inbounds", {
       method: "POST",
@@ -1118,7 +1096,7 @@ $("#ib-add-btn").addEventListener("click", async () => {
       }
     });
     $("#ib-name").value = ""; $("#ib-port").value = ""; $("#ib-host").value = "";
-    toast(`Inbound "${name}" added \u2014 new user links include it`);
+    toast(t("msg.ibAdded", {name}));
     loadInbounds();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1130,11 +1108,11 @@ $("#inbounds-tbody").addEventListener("click", async (e) => {
     if (btn.dataset.act === "ib-toggle") {
       const on = btn.classList.contains("warn");
       await api("/api/inbounds/" + btn.dataset.id, { method: "PATCH", body: { enabled: !on } });
-      toast(on ? "Inbound disabled" : "Inbound enabled");
+      toast(on ? t("msg.ibDisabled") : t("msg.ibEnabled"));
     } else if (btn.dataset.act === "ib-del") {
-      if (!confirm(`Delete inbound "${btn.dataset.name}"? User configs will stop using it.`)) return;
+      if (!confirm(t("cfm.ibDelete", {name: btn.dataset.name}))) return;
       await api("/api/inbounds/" + btn.dataset.id, { method: "DELETE" });
-      toast("Inbound deleted");
+      toast(t("msg.ibDeleted"));
     }
     loadInbounds();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1144,10 +1122,10 @@ $("#inbounds-tbody").addEventListener("click", async (e) => {
 let SERVER_NODES = [];
 
 function srvNodeStatus(n) {
-  if (!n.enabled) return badge("Disabled", "off");
-  if (n.status === "online") return badge("Online", "ok");
-  if (n.status === "offline") return badge("Offline", "expired");
-  return badge("Unknown", "pending");
+  if (!n.enabled) return badge(t("badge.disabled"), "off");
+  if (n.status === "online") return badge(t("badge.online"), "ok");
+  if (n.status === "offline") return badge(t("badge.offline"), "expired");
+  return badge(t("badge.unknown"), "pending");
 }
 
 function fillNodeSelect(sel, current) {
@@ -1155,12 +1133,12 @@ function fillNodeSelect(sel, current) {
   sel.textContent = "";
   const o0 = document.createElement("option");
   o0.value = "";
-  o0.textContent = "Local panel";
+  o0.textContent = t("ib.localPanel");
   sel.appendChild(o0);
   for (const n of SERVER_NODES) {
     const o = document.createElement("option");
     o.value = String(n.id);
-    o.textContent = n.enabled ? n.name : `${n.name} (off)`;
+    o.textContent = n.enabled ? n.name : `${n.name} (${t("badge.off")})`;
     sel.appendChild(o);
   }
   if (current) sel.value = String(current);
@@ -1174,7 +1152,7 @@ function renderSrvNodes(nodes) {
   if (!nodes.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = "No server nodes yet. Add one above.";
+    li.textContent = t("tpl.noNodes");
     ul.appendChild(li);
     return;
   }
@@ -1189,7 +1167,7 @@ function renderSrvNodes(nodes) {
     const meta = document.createElement("small");
     const bits = [];
     if (n.latency_ms != null) bits.push(`${n.latency_ms} ms`);
-    bits.push(n.uptime_pct != null ? `${n.uptime_pct}% uptime` : "not checked yet");
+    bits.push(n.uptime_pct != null ? `${n.uptime_pct}% ${t("meta.uptime")}` : t("meta.notChecked"));
     if (n.note) bits.push(n.note);
     meta.textContent = bits.join(" · ");
     const st = document.createElement("span");
@@ -1197,13 +1175,13 @@ function renderSrvNodes(nodes) {
     li.appendChild(main);
     li.appendChild(meta);
     li.appendChild(st);
-    const checkBtn = iconBtn("Check now", ICONS.refresh, "good");
+    const checkBtn = iconBtn(t("icon.checkNow"), ICONS.refresh, "good");
     checkBtn.dataset.act = "check";
     checkBtn.dataset.id = n.id;
-    const tglBtn = iconBtn(n.enabled ? "Disable" : "Enable", n.enabled ? ICONS.toggleOff : ICONS.toggleOn, n.enabled ? "warn" : "good");
+    const tglBtn = iconBtn(n.enabled ? t("icon.disable") : t("icon.enableObj"), n.enabled ? ICONS.toggleOff : ICONS.toggleOn, n.enabled ? "warn" : "good");
     tglBtn.dataset.act = "toggle";
     tglBtn.dataset.id = n.id;
-    const delBtn = iconBtn("Delete node", ICONS.trash, "bad");
+    const delBtn = iconBtn(t("icon.delNode"), ICONS.trash, "bad");
     delBtn.dataset.act = "del-snode";
     delBtn.dataset.id = n.id;
     delBtn.dataset.name = n.name;
@@ -1222,14 +1200,14 @@ $("#snode-create-btn").addEventListener("click", async () => {
   const name = $("#snode-name").value.trim();
   const address = $("#snode-addr").value.trim();
   const port = parseInt($("#snode-port").value, 10) || 443;
-  if (!name || !address) { toast("Enter a name and address", false); return; }
+  if (!name || !address) { toast(t("msg.snodeNameAddr"), false); return; }
   try {
     await api("/api/server-nodes", {
       method: "POST",
       body: { name, address, check_port: port, note: $("#snode-note").value.trim() }
     });
     $("#snode-name").value = ""; $("#snode-addr").value = ""; $("#snode-note").value = "";
-    toast(`Server node "${name}" added`);
+    toast(t("msg.snodeAdded", {name}));
     loadSrvNodes();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1241,17 +1219,17 @@ $("#snodes-list").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "check") {
       const n = await api(`/api/server-nodes/${id}/check`, { method: "POST" });
-      toast(n.status === "online" ? `${n.name} ONLINE (${n.latency_ms} ms)` : `${n.name} UNREACHABLE`, n.status === "online");
+      toast(n.status === "online" ? t("msg.snodeOnline", {name: n.name, ms: n.latency_ms}) : t("msg.snodeOffline", {name: n.name}), n.status === "online");
       loadSrvNodes();
     } else if (btn.dataset.act === "toggle") {
       const cur = SERVER_NODES.find((x) => String(x.id) === String(id));
       await api(`/api/server-nodes/${id}`, { method: "PATCH", body: { enabled: !(cur && cur.enabled) } });
-      toast("Node updated");
+      toast(t("msg.nodeUpdated"));
       loadSrvNodes();
     } else if (btn.dataset.act === "del-snode") {
-      if (!confirm(`Delete server node "${btn.dataset.name}"? Its inbounds become local.`)) return;
+      if (!confirm(t("cfm.snodeDelete", {name: btn.dataset.name}))) return;
       await api(`/api/server-nodes/${id}`, { method: "DELETE" });
-      toast("Server node deleted");
+      toast(t("msg.snodeDeleted"));
       loadSrvNodes();
     }
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1264,7 +1242,7 @@ async function loadBlocklist() {
     const chk = $("#porn-toggle");
     if (chk) chk.checked = !!data.porn_enabled;
     const cnt = $("#porn-count");
-    if (cnt) cnt.textContent = data.porn_enabled ? `Blocking ${data.porn_count} porn domains + ${data.sites.length} custom` : `Porn blocking is OFF — ${data.sites.length} custom domains blocked`;
+    if (cnt) cnt.textContent = data.porn_enabled ? t("blocker.countOn", {porn: data.porn_count, n: data.sites.length}) : t("blocker.countOff", {n: data.sites.length});
     const ul = $("#block-list");
     ul.textContent = "";
     for (const site of data.sites) {
@@ -1272,7 +1250,7 @@ async function loadBlocklist() {
       const span = document.createElement("span");
       span.textContent = site.domain;
       li.appendChild(span);
-      const delBtn = iconBtn("Unblock", ICONS.trash, "bad");
+      const delBtn = iconBtn(t("icon.unblock"), ICONS.trash, "bad");
       delBtn.dataset.id = site.id;
       delBtn.dataset.domain = site.domain;
       li.appendChild(delBtn);
@@ -1289,7 +1267,7 @@ async function loadBlocklist() {
 $("#porn-toggle")?.addEventListener("change", async (e) => {
   try {
     await api("/api/blocklist/porn", { method: "PUT", body: { porn_enabled: e.target.checked } });
-    toast(e.target.checked ? "Porn blocking enabled" : "Porn blocking disabled");
+    toast(e.target.checked ? t("msg.pornOn") : t("msg.pornOff"));
     loadBlocklist();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); e.target.checked = !e.target.checked; }
 });
@@ -1297,11 +1275,11 @@ $("#porn-toggle")?.addEventListener("change", async (e) => {
 $("#block-add-btn")?.addEventListener("click", async () => {
   const inp = $("#block-domain");
   const domain = inp.value.trim().toLowerCase();
-  if (!domain) { toast("Enter a domain", false); return; }
+  if (!domain) { toast(t("msg.domainEmpty"), false); return; }
   try {
     await api("/api/blocklist", { method: "POST", body: { domain } });
     inp.value = "";
-    toast(`Blocked ${domain}`);
+    toast(t("msg.blocked", {domain}));
     loadBlocklist();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1309,10 +1287,10 @@ $("#block-add-btn")?.addEventListener("click", async () => {
 $("#block-list")?.addEventListener("click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
-  if (!confirm(`Unblock "${btn.dataset.domain}"?`)) return;
+  if (!confirm(t("cfm.unblock", {domain: btn.dataset.domain}))) return;
   try {
     await api(`/api/blocklist/${btn.dataset.id}`, { method: "DELETE" });
-    toast("Domain unblocked");
+    toast(t("msg.domainUnblocked"));
     loadBlocklist();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1333,11 +1311,11 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
     body.set_device_limit = Number.isFinite(dv) && dv >= 1 ? dv : 0;
   }
   if (f.reset_used.checked) body.reset_used = true;
-  if (!Object.keys(body).length) { toast("Nothing changed", false); return; }
+  if (!Object.keys(body).length) { toast(t("msg.nothingChanged"), false); return; }
   try {
     await api("/api/users/" + f.dataset.uid, { method: "PATCH", body });
     $("#edit-modal").classList.add("hidden");
-    toast("User updated");
+    toast(t("msg.userUpdated"));
     loadUsers($("#search").value.trim());
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1350,7 +1328,7 @@ function renderChangelog(items, prefix) {
   if (!items.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = prefix || "Nothing to show.";
+    li.textContent = prefix || t("update.nothing");
     ul.appendChild(li);
     return;
   }
@@ -1372,44 +1350,44 @@ async function loadUpdate(announce) {
     const sum = $("#update-summary");
     $("#update-repo").textContent = st.repo + "@" + st.branch;
     if (st.error && !st.current) {
-      badge.textContent = "error";
+      badge.textContent = t("update.error");
       badge.className = "badge proto off";
-      sum.textContent = "Could not determine status: " + st.error;
+      sum.textContent = t("update.errStatus", {err: st.error});
       $("#update-now-btn").classList.add("hidden");
-      renderChangelog([], "No data.");
+      renderChangelog([], t("update.noData"));
     } else if (st.updating) {
-      badge.textContent = "updating…";
+      badge.textContent = t("update.updating");
       badge.className = "badge proto warn";
-      sum.textContent = "Update in progress — the panel will restart any moment. Keep this page open.";
+      sum.textContent = t("update.inProgress");
       $("#update-now-btn").classList.add("hidden");
-      renderChangelog(st.incoming || [], "Fetching changelog…");
+      renderChangelog(st.incoming || [], t("update.fetching"));
     } else if (st.update_available) {
-      badge.textContent = "update available";
+      badge.textContent = t("update.available");
       badge.className = "badge proto warn";
-      sum.textContent = `Running ${st.current} · latest is ${st.latest} — review the changes, then update.`;
+      sum.textContent = t("update.review", {cur: st.current, latest: st.latest});
       $("#update-now-btn").classList.remove("hidden");
-      renderChangelog(st.incoming || [], "No changelog returned.");
+      renderChangelog(st.incoming || [], t("update.noChangelog"));
     } else {
-      badge.textContent = "up to date";
+      badge.textContent = t("update.uptodate");
       badge.className = "badge proto ok";
-      sum.textContent = `Running ${st.latest || st.current}${st.version ? " (v" + st.version + ")" : ""} — nothing to do.`;
+      sum.textContent = t("update.clean", {ver: (st.latest || st.current) + (st.version ? " (v" + st.version + ")" : "")});
       $("#update-now-btn").classList.add("hidden");
-      renderChangelog(st.local_log || [], "No local history.");
+      renderChangelog(st.local_log || [], t("update.noLocal"));
     }
-    if (announce) toast("Update check finished");
+    if (announce) toast(t("msg.updateChecked"));
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }
 }
 $("#update-check-btn").addEventListener("click", () => loadUpdate(true));
 $("#update-now-btn").addEventListener("click", async () => {
-  if (!confirm("Update the panel now? It pulls the latest code, reinstalls dependencies and RESTARTS. Unsaved work in other tabs may be interrupted.")) return;
-  const pw = prompt("Confirm your admin password to allow the update:");
+  if (!confirm(t("cfm.updateNow"))) return;
+  const pw = prompt(t("prm.updatePw"));
   if (!pw) return;
   try {
     const before = await api("/api/update/status");
     await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
-    toast("Update started — panel will restart in about a minute");
+    toast(t("msg.updateStarted"));
     loadUpdate();
     let n = 0;
     if (updatePoll) clearInterval(updatePoll);
@@ -1422,9 +1400,9 @@ $("#update-now-btn").addEventListener("click", async () => {
         try {
           const after = await api("/api/update/status");
           if ((after.latest || "") === (before.latest || "") && !after.updating) {
-            toast("Version unchanged — no systemd found? Restart the panel manually", false);
+            toast(t("msg.updateNoSystemd"), false);
           } else {
-            toast("Update finished ✓");
+            toast(t("msg.updateDone"));
           }
         } catch (_) {}
       }
@@ -1456,7 +1434,7 @@ async function loadAi() {
     const badge = $("#ai-badge");
     if (badge) {
       const ready = a.enabled && a.has_key && a.model;
-      badge.textContent = ready ? "ready" : "off";
+      badge.textContent = ready ? t("ai.ready") : t("badge.off");
       badge.className = "badge proto " + (ready ? "ok" : "off");
     }
   } catch (_) {}
@@ -1475,7 +1453,7 @@ $("#ai-save-btn").addEventListener("click", async () => {
       }
     });
     $("#ai-key").value = "";
-    toast("AI settings saved");
+    toast(t("msg.aiSaved"));
     loadAi();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1483,7 +1461,7 @@ $("#ai-fab").addEventListener("click", () => {
   $("#ai-chat").classList.toggle("hidden");
   if (!$("#ai-chat").classList.contains("hidden")) {
     if (!$("#ai-msgs").children.length) {
-      aiAddMsg("Hi! I know this panel inside-out — and I can act: create users, top up volume, extend days, reset usage, pause accounts. Just ask.", "bot");
+      aiAddMsg(t("ai.greeting"), "bot");
     }
     $("#ai-input").focus();
   }
@@ -1506,7 +1484,7 @@ async function aiSend() {
     AI_HISTORY = AI_HISTORY.slice(-12);
   } catch (err) {
     typing.remove();
-    aiAddMsg(err.message === "auth" ? "Session expired." : ("Error: " + err.message), "bot");
+    aiAddMsg(err.message === "auth" ? t("ai.sessionExpired") : (t("ai.errorPre") + err.message), "bot");
   }
 }
 $("#ai-send").addEventListener("click", aiSend);
@@ -1519,7 +1497,7 @@ function renderApiTokens(items) {
   if (!items.length) {
     const li = document.createElement("li");
     li.className = "muted";
-    li.textContent = "No API tokens yet. Create one above — it is shown only once.";
+    li.textContent = t("tokens.empty");
     ul.appendChild(li);
     return;
   }
@@ -1533,11 +1511,11 @@ function renderApiTokens(items) {
     main.textContent = t.name;
     const meta = document.createElement("small");
     const bits = [`${t.prefix}…`];
-    bits.push(t.last_used_at ? `last used ${t.last_used_at}` : "never used");
+    bits.push(t.last_used_at ? t("tokens.lastUsed", {dt: t.last_used_at}) : t("tokens.neverUsed"));
     meta.textContent = bits.join(" · ");
     li.appendChild(main);
     li.appendChild(meta);
-    const delBtn = iconBtn("Revoke token", ICONS.trash, "bad");
+    const delBtn = iconBtn(t("icon.revoke"), ICONS.trash, "bad");
     delBtn.dataset.act = "del-token";
     delBtn.dataset.id = t.id;
     delBtn.dataset.name = t.name;
@@ -1552,15 +1530,15 @@ async function loadApiTokens() {
 }
 $("#apitoken-create-btn").addEventListener("click", async () => {
   const name = $("#apitoken-name").value.trim();
-  if (!name) { toast("Enter a token name", false); return; }
+  if (!name) { toast(t("msg.tokenNameEmpty"), false); return; }
   try {
     const r = await api("/api/api-tokens", { method: "POST", body: { name } });
     $("#apitoken-name").value = "";
     try {
       await navigator.clipboard.writeText(r.token_once);
-      toast(`Token created and copied — it will never be shown again`);
+      toast(t("msg.tokenCreated"));
     } catch (_) {
-      prompt("Copy your token now (shown only once):", r.token_once);
+      prompt(t("prm.tokenOnce"), r.token_once);
     }
     loadApiTokens();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1570,9 +1548,9 @@ $("#apitoken-list").addEventListener("click", async (e) => {
   if (!btn) return;
   try {
     if (btn.dataset.act === "del-token") {
-      if (!confirm(`Revoke API token "${btn.dataset.name}"? Connected bots stop working immediately.`)) return;
+      if (!confirm(t("cfm.tokenRevoke", {name: btn.dataset.name}))) return;
       await api("/api/api-tokens/" + btn.dataset.id, { method: "DELETE" });
-      toast("Token revoked");
+      toast(t("msg.tokenRevoked"));
       loadApiTokens();
     }
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1584,8 +1562,8 @@ async function loadTelegram() {
     const t = await api("/api/telegram");
     $("#tg-chat").value = t.chat_id || "";
     $("#tg-hint").textContent = t.has_token
-      ? "\u2713 Bot token is saved."
-      : "\u26a0 No bot token saved yet.";
+      ? t("tg.hasToken")
+      : t("tg.noToken");
   } catch (_) {}
 }
 $("#tg-save-btn").addEventListener("click", async () => {
@@ -1595,14 +1573,14 @@ $("#tg-save-btn").addEventListener("click", async () => {
       body: { bot_token: $("#tg-token").value.trim(), chat_id: $("#tg-chat").value.trim() }
     });
     $("#tg-token").value = "";
-    toast("Telegram settings saved");
+    toast(t("msg.tgSaved"));
     loadTelegram();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#tg-test-btn").addEventListener("click", async () => {
   try {
     await api("/api/telegram/test", { method: "POST", body: {} });
-    toast("Test message sent \u2014 check Telegram");
+    toast(t("msg.tgSent"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
@@ -1611,15 +1589,15 @@ function renderSslStatus(st) {
   const el = $("#ssl-status");
   if (!el) return;
   if (!st.installed) {
-    el.textContent = "\u26a0 certbot is not installed on this server (apt install certbot).";
+    el.textContent = t("ssl.noCertbot");
     return;
   }
   if (st.domains && st.domains.length && st.expires) {
-    el.textContent = `\u2713 ${st.domains.join(", ")} \u2014 valid until ${st.expires}`;
+    el.textContent = t("ssl.validUntil", {domains: st.domains.join(", "), exp: st.expires});
   } else if (st.domains && st.domains.length) {
-    el.textContent = `\u2713 Certificate files found for ${st.domains.join(", ")}`;
+    el.textContent = t("ssl.filesFound", {domains: st.domains.join(", ")});
   } else {
-    el.textContent = "No certificate yet. Enter domain + email and press Issue.";
+    el.textContent = t("ssl.noneYet");
   }
 }
 async function loadSslStatus() {
@@ -1631,14 +1609,14 @@ $("#ssl-issue-btn").addEventListener("click", async () => {
   const domain = $("#ssl-domain").value.trim();
   const subdomain = $("#ssl-subdomain").value.trim();
   const email = $("#ssl-email").value.trim();
-  if (!domain || !email) { toast("Domain and email are required", false); return; }
+  if (!domain || !email) { toast(t("msg.domainEmailReq"), false); return; }
   const fqdn = subdomain ? `${subdomain}.${domain}` : domain;
-  if (!confirm(`Issue a Let's Encrypt certificate for ${fqdn}? Port 80 must be free. It can take a minute.`)) return;
-  toast("Requesting certificate\u2026 this can take a minute");
+  if (!confirm(t("cfm.sslIssue", {fqdn}))) return;
+  toast(t("ssl.requesting"));
   try {
     const r = await api("/api/ssl/issue", { method: "POST", body: { domain, subdomain, email } });
     renderSslStatus(r);
-    toast("Certificate issued");
+    toast(t("msg.certIssued"));
     loadAudit();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1646,15 +1624,15 @@ $("#ssl-renew-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/ssl/renew", { method: "POST", body: {} });
     renderSslStatus(r);
-    toast("Certificate renewed");
+    toast(t("msg.certRenewed"));
     loadAudit();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
 $("#backup-btn").addEventListener("click", async () => {
-  const pw = prompt("Enter your admin password to download the backup:");
+  const pw = prompt(t("prm.backupPw"));
   if (!pw) return;
-  const enc = confirm("Download ENCRYPTED backup? (needs the password to restore — safe to store off-server)\nOK = encrypted, Cancel = plain JSON.");
+  const enc = confirm(t("prm.backupEnc"));
   try {
     const res = await fetch("/api/backup", {
       method: "POST",
@@ -1663,7 +1641,7 @@ $("#backup-btn").addEventListener("click", async () => {
       body: JSON.stringify({ password_confirm: pw, encrypt: enc })
     });
     if (res.status === 401) { location.href = "/login"; return; }
-    if (!res.ok) { toast("Backup failed — wrong password?", false); return; }
+    if (!res.ok) { toast(t("msg.backupFail"), false); return; }
     const blob = await res.blob();
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const a = document.createElement("a");
@@ -1671,9 +1649,9 @@ $("#backup-btn").addEventListener("click", async () => {
     a.download = enc ? `zefira-backup-${stamp}.enc.json` : `zefira-backup-${stamp}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast(enc ? "Encrypted backup download started" : "Backup download started");
+    toast(enc ? t("msg.backupEncStarted") : t("msg.backupStarted"));
   } catch (_) {
-    toast("Backup failed", false);
+    toast(t("msg.backupFailed"), false);
   }
 });
 
@@ -1684,23 +1662,23 @@ restoreFile.addEventListener("change", () => {
 $("#restore-btn").addEventListener("click", async () => {
   const file = restoreFile.files[0];
   if (!file) return;
-  if (file.size > 64 * 1048576) { toast("File is larger than 64 MB — the server will refuse it", false); return; }
+  if (file.size > 64 * 1048576) { toast(t("msg.fileTooBig"), false); return; }
   let parsed;
   try {
     parsed = JSON.parse(await file.text());
   } catch (_) {
-    toast("Invalid JSON file", false);
+    toast(t("msg.invalidJson"), false);
     return;
   }
   if (!parsed || (parsed.zefira_backup !== true && parsed.encrypted !== true)) {
-    toast("This file is not a Zefira backup", false);
+    toast(t("msg.notBackup"), false);
     return;
   }
   const isEnc = parsed.encrypted === true;
   if (!confirm(isEnc
-    ? "Restore from ENCRYPTED backup? It replaces ALL current users and settings.\nThis cannot be undone."
-    : `Replace ALL current users and settings with ${parsed.users ? parsed.users.length : 0} restored users?\nThis cannot be undone.`)) return;
-  const pw = prompt("Confirm your admin password to allow restore:");
+    ? t("cfm.restoreEnc")
+    : t("cfm.restorePlain", {n: parsed.users ? parsed.users.length : 0}))) return;
+  const pw = prompt(t("prm.restorePw"));
   if (!pw) return;
   if (isEnc) {
     // Encrypted backups decrypt with the password that created them
@@ -1710,7 +1688,7 @@ $("#restore-btn").addEventListener("click", async () => {
         method: "POST",
         body: { password_confirm: pw, salt: parsed.salt, payload: parsed.payload, backup_password: pw }
       });
-      toast(`Restored ${r.added_users} users (${r.skipped} skipped)`);
+      toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
       restoreFile.value = "";
       $("#restore-btn").disabled = true;
       loadStats();
@@ -1725,7 +1703,7 @@ $("#restore-btn").addEventListener("click", async () => {
   parsed.password_confirm = pw;
   try {
     const r = await api("/api/restore", { method: "POST", body: parsed });
-    toast(`Restored ${r.added_users} users (${r.skipped} skipped)`);
+    toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
     restoreFile.value = "";
     $("#restore-btn").disabled = true;
     loadStats();
@@ -1751,7 +1729,7 @@ async function loadAudit() {
       const li = document.createElement("li");
       if (!r.ok) li.classList.add("bad");
       const main = document.createElement("span");
-      main.textContent = (EVENT_EN[r.event] || r.event) + (r.detail ? ` \u2014 ${r.detail}` : "");
+      main.textContent = eventName(r.event) + (r.detail ? ` \u2014 ${r.detail}` : "");
       const meta = document.createElement("small");
       meta.textContent = `${dateTimeFmt.format(new Date(r.ts))}${r.ip && r.ip !== "?" ? " \u00b7 " + r.ip : ""}`;
       li.appendChild(main);
@@ -1764,6 +1742,8 @@ $("#audit-refresh").addEventListener("click", loadAudit);
 
 (async function init() {
   try {
+    refreshI18nFormats();
+    mountLangSwitcher("#lang-mount");
     const me = await api("/api/me");
     $("#admin-name").textContent = me.username;
   } catch (_) { return; }

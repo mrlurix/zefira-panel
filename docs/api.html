@@ -7,104 +7,105 @@
 <meta name="referrer" content="no-referrer">
 <title>API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">A</span>PI Reference</h1>
-<p class="subtitle">Cookie-authenticated JSON API for bots and dashboards.</p>
+<h1><span class="z">A</span><span data-i18n="api.title">PI Reference</span></h1>
+<p class="subtitle" data-i18n="api.subtitle">Cookie-authenticated JSON API for bots and dashboards.</p>
 
-<div class="callout info">Authenticate with <code>POST /api/login</code> (keeps the <code>zefira_session</code> cookie), then send <code>X-Requested-With: XMLHttpRequest</code> on every mutating call. No OpenAPI explorer is exposed.</div>
-<p><b>Bots &amp; integrations:</b> create a long-lived token under <b>Settings → API Tokens</b> with scope <code>full</code> (default, everything) or <code>bot</code> (least-privilege for resellers: <code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code>) and send it as <code>Authorization: Bearer zfp_…</code> — no CSRF header needed then. Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime. Bot tokens can create users including <code>start_on_first_use</code> (bot-safe: expiry is server-computed) but get <code>403</code> on deletes, patches, backup/restore, settings, tokens and updates.</p>
-<p>Ready-made reseller bots: <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node">Node.js</a> — plans keyboard, account creation, subscription link.</p>
+<div class="callout info"><span data-i18n="api.authA">Authenticate with</span> <code>POST /api/login</code> <span data-i18n="api.authB">(keeps the</span> <code>zefira_session</code> <span data-i18n="api.authC">cookie), then send</span> <code>X-Requested-With: XMLHttpRequest</code> <span data-i18n="api.authD">on every mutating call. No OpenAPI explorer is exposed.</span></div>
+<p><b data-i18n="api.botsLabel">Bots &amp; integrations:</b> <span data-i18n="api.botsA">create a long-lived token under</span> <b data-i18n="api.botsSettings">Settings → API Tokens</b> <span data-i18n="api.botsB">with scope</span> <code>full</code> <span data-i18n="api.botsC">(default, everything) or</span> <code>bot</code> <span data-i18n="api.botsD">(least-privilege for resellers:</span> <code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code><span data-i18n="api.botsE">) and send it as</span> <code>Authorization: Bearer zfp_…</code> <span data-i18n="api.botsF">— no CSRF header needed then.</span> <span data-i18n="api.botsG">Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime.</span> <span data-i18n="api.botsH">Bot tokens can create users including</span> <code>start_on_first_use</code> <span data-i18n="api.botsI">(bot-safe: expiry is server-computed) but get</span> <code>403</code> <span data-i18n="api.botsJ">on deletes, patches, backup/restore, settings, tokens and updates.</span></p>
+<p><span data-i18n="api.exampleBotsA">Ready-made reseller bots:</span> <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node">Node.js</a> <span data-i18n="api.exampleBotsB">— plans keyboard, account creation, subscription link.</span></p>
 
-<h2 id="auth-account">Auth &amp; account</h2>
+<h2 id="auth-account" data-i18n="api.hAuth">Auth &amp; account</h2>
 <table>
-<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
+<tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password}</code></td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td>Invalidates the session server-side</td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/api-tokens…</code></td><td>Bot tokens: list, create (once-only secret), revoke</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td>Username</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td>Strong-password enforced, kills other sessions</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td data-i18n="api.authLogout">Invalidates the session server-side</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/api-tokens…</code></td><td data-i18n="api.authTokens">Bot tokens: list, create (once-only secret), revoke</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td data-i18n="api.authMe">Username</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td data-i18n="api.authPw">Strong-password enforced, kills other sessions</td></tr>
 </table>
 
-<h2 id="users">Users</h2>
+<h2 id="users" data-i18n="api.hUsers">Users</h2>
 <table>
-<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td>Counters: active, expired, expiring-soon, limited…</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/users?q=…</code></td><td>Up to 500, username/note search</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/users/by-username/{username}</code></td><td>Exact lookup — bots know usernames, not IDs</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td>Create (protocols, volume, days, first-use, device limit)</td></tr>
-<tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td>Extend, top-up, note, expiry, active flag</td></tr>
+<tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td data-i18n="api.usersStats">Counters: active, expired, expiring-soon, limited…</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users?q=…</code></td><td data-i18n="api.usersList">Up to 500, username/note search</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users/by-username/{username}</code></td><td data-i18n="api.usersByName">Exact lookup — bots know usernames, not IDs</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td data-i18n="api.usersCreate">Create (protocols, volume, days, first-use, device limit)</td></tr>
+<tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td data-i18n="api.usersPatch">Extend, top-up, note, expiry, active flag</td></tr>
 <tr><td><span class="badge del">DELETE</span></td><td><code>/api/users/{id}</code></td><td>—</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td>Rotates token + all secrets</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-usage</code></td><td>Zeroes used traffic (for developers/bots)</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset</code></td><td>Developer combo: <code>{"reset_usage": true, "reset_token": false}</code> — one call for renew/top-up flows (token rotation kills the old link)</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td>Sub URL + QR / config file or ZIP</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td data-i18n="api.usersResetToken">Rotates token + all secrets</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-usage</code></td><td data-i18n="api.usersResetUsage">Zeroes used traffic (for developers/bots)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset</code></td><td><span data-i18n="api.usersResetA">Developer combo:</span> <code>{"reset_usage": true, "reset_token": false}</code> <span data-i18n="api.usersResetB">— one call for renew/top-up flows (token rotation kills the old link)</span></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td data-i18n="api.usersQr">Sub URL + QR / config file or ZIP</td></tr>
 </table>
 
-<h2 id="server-objects">Server objects</h2>
+<h2 id="server-objects" data-i18n="api.hServer">Server objects</h2>
 <table>
-<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td>Domain, ports (VLESS/VMess/Trojan/SS, Hysteria2, WireGuard, OpenVPN, L2TP, Cisco, SOCKS5), REALITY, obfuscation…</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td>New X25519 keypair</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td>Audit-logged reveal</td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td>Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td>Generated theme overrides, text/css</td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td>Provider, model, key state (key never returned)</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> → scoped assistant reply (30/hr). The assistant can also <b>act</b>: create/extend/top-up/reset/pause users, find users, stats, sub links (max 3 ops/turn, audit-logged; delete/reset/backup/update/settings/tokens never)</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/update/status</code></td><td>Current vs latest commit + incoming changelog</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td>Password-confirmed pull + pip + restart</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td>Certbot presence, domains, expiry</td></tr>
+<tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td data-i18n="api.srvSettings">Domain, ports (VLESS/VMess/Trojan/SS, Hysteria2, WireGuard, OpenVPN, L2TP, Cisco, SOCKS5), REALITY, obfuscation…</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td data-i18n="api.realityGen">New X25519 keypair</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td data-i18n="api.realityReveal">Audit-logged reveal</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td data-i18n="api.appearance">Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td data-i18n="api.themeCss">Generated theme overrides, text/css</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td data-i18n="api.aiSettings">Provider, model, key state (key never returned)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> <span data-i18n="api.aiChatA">→ scoped assistant reply (30/hr). The assistant can also</span> <b data-i18n="api.aiChatAct">act</b><span data-i18n="api.aiChatB">: create/extend/top-up/reset/pause users, find users, stats, sub links (max 3 ops/turn, audit-logged; delete/reset/backup/update/settings/tokens never)</span></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/update/status</code></td><td data-i18n="api.updateStatus">Current vs latest commit + incoming changelog</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td data-i18n="api.updateApply">Password-confirmed pull + pip + restart</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td data-i18n="api.sslStatus">Certbot presence, domains, expiry</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/ssl/issue</code> · <code>/ssl/renew</code></td><td><code>{domain, subdomain?, email}</code></td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/server-nodes…</code></td><td>Register servers, health, latency, uptime</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/server-nodes/{id}/check</code></td><td>On-demand probe</td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td>Extra ports per protocol (optional node pin)</td></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/templates…</code> · <code>/api/nodes…</code> · <code>/api/blocklist…</code></td><td>Plans, tunnels, blocked sites</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/nodes/{id}/check</code> · <code>/guide</code> · <code>/reveal-token</code> · <code>/regen-token</code></td><td>Tunnel ops</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/backup</code></td><td>Full JSON export, password-confirmed (download). <code>{"encrypt": true}</code> returns a scrypt + Fernet blob instead of plaintext</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/restore</code></td><td>Password-confirmed re-import (weak admin hashes / zero-volume users skipped, scopes preserved)</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/restore-encrypted</code></td><td><code>{password_confirm, salt, payload, backup_password?}</code> — restores an encrypted backup</td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code></td><td>Logs, CPU/RAM/disk, notifications</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/server-nodes…</code></td><td data-i18n="api.nodes">Register servers, health, latency, uptime</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/server-nodes/{id}/check</code></td><td data-i18n="api.nodeCheck">On-demand probe</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/inbounds</code> · <code>/api/inbounds/{id}</code></td><td data-i18n="api.inbounds">Extra ports per protocol (optional node pin)</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/templates…</code> · <code>/api/nodes…</code> · <code>/api/blocklist…</code></td><td data-i18n="api.tplNodesBlock">Plans, tunnels, blocked sites</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/nodes/{id}/check</code> · <code>/guide</code> · <code>/reveal-token</code> · <code>/regen-token</code></td><td data-i18n="api.tunnelOps">Tunnel ops</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/backup</code></td><td><span data-i18n="api.backupA">Full JSON export, password-confirmed (download).</span> <code>{"encrypt": true}</code> <span data-i18n="api.backupB">returns a scrypt + Fernet blob instead of plaintext</span></td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/restore</code></td><td data-i18n="api.restore">Password-confirmed re-import (weak admin hashes / zero-volume users skipped, scopes preserved)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/restore-encrypted</code></td><td><code>{password_confirm, salt, payload, backup_password?}</code> <span data-i18n="api.restoreEnc">— restores an encrypted backup</span></td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code></td><td data-i18n="api.auditSys">Logs, CPU/RAM/disk, notifications</td></tr>
 </table>
 
-<h2 id="public">Public</h2>
+<h2 id="public" data-i18n="api.hPublic">Public</h2>
 <table>
-<tr><th>Method</th><th>Endpoint</th><th>Notes</th></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td>Browsers get the user dashboard; clients get Base64 sub, or Clash YAML with <code>?format=clash</code>. Expired, disabled <b>and out-of-volume</b> (<code>used_gb &gt;= volume_gb</code>) users 404 in all modes; <code>device_limit</code> is advisory only</td></tr>
+<tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/sub/{token}</code></td><td><span data-i18n="api.publicA">Browsers get the user dashboard; clients get Base64 sub, or Clash YAML with</span> <code>?format=clash</code><span data-i18n="api.publicB">. Expired, disabled</span> <b data-i18n="api.publicC">and out-of-volume</b> <span data-i18n="api.publicD">(</span><code>used_gb &gt;= volume_gb</code><span data-i18n="api.publicE">) users 404 in all modes;</span> <code>device_limit</code> <span data-i18n="api.publicF">is advisory only</span></td></tr>
 </table>
 
-<h2 id="example-create-a-user">Example: create a user</h2>
+<h2 id="example-create-a-user" data-i18n="api.hExCreate">Example: create a user</h2>
 <pre>curl -c jar.txt -H 'Content-Type: application/json' \
      -H 'X-Requested-With: XMLHttpRequest' \
      -d '{"username":"admin","password":"…"}' \
@@ -115,8 +116,8 @@ curl -b jar.txt -H 'Content-Type: application/json' \
      -d '{"username":"buyer1","protocols":["vless","reality"],"volume_gb":50,"days":30}' \
      https://vpn.example.com/api/users</pre>
 
-<h2 id="example-bot-renewal">Example: bot renewal flow (bot-scoped token)</h2>
-<p>No cookies, no CSRF header — just <code>Authorization: Bearer zfp_…</code> from a <code>bot</code>-scoped token. Lookup by username, renew usage + link in one call:</p>
+<h2 id="example-bot-renewal" data-i18n="api.hExRenew">Example: bot renewal flow (bot-scoped token)</h2>
+<p><span data-i18n="api.renewA">No cookies, no CSRF header — just</span> <code>Authorization: Bearer zfp_…</code> <span data-i18n="api.renewB">from a</span> <code>bot</code><span data-i18n="api.renewC">-scoped token. Lookup by username, renew usage + link in one call:</span></p>
 <pre># 1) find the buyer by username (bots know tg123, not numeric IDs)
 curl -H 'Authorization: Bearer zfp_…' \
      https://vpn.example.com/api/users/by-username/tg123
@@ -132,12 +133,13 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
      -H 'Content-Type: application/json' \
      -d '{"reset_usage": true, "reset_token": false}' \
      https://vpn.example.com/api/users/12/reset</pre>
-<div class="callout info"><code>bot</code> tokens get <code>200</code> on lookup, QR, <code>reset-usage</code> and <code>reset</code> — and <code>403</code> on deletes, patches, backup/restore, settings, tokens and updates.</div>
+<div class="callout info"><code>bot</code> <span data-i18n="api.botNoteA">tokens get</span> <code>200</code> <span data-i18n="api.botNoteB">on lookup, QR,</span> <code>reset-usage</code> <span data-i18n="api.botNoteC">and</span> <code>reset</code> <span data-i18n="api.botNoteD">— and</span> <code>403</code> <span data-i18n="api.botNoteE">on deletes, patches, backup/restore, settings, tokens and updates.</span></div>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

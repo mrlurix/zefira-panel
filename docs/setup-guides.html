@@ -7,80 +7,82 @@
 <meta name="referrer" content="no-referrer">
 <title>Setup guides — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">S</span>etup guides</h1>
-<p class="subtitle">Connect apps, servers and tunnels — step by step.</p>
+<h1><span class="z" data-i18n="stg.titleZ">S</span><span data-i18n="stg.titleRest">etup guides</span></h1>
+<p class="subtitle" data-i18n="stg.subtitle">Connect apps, servers and tunnels — step by step.</p>
 
-<h2 id="client-apps-per-protocol">Client apps per protocol</h2>
+<h2 id="client-apps-per-protocol" data-i18n="stg.clientsTitle">Client apps per protocol</h2>
 <table>
-<tr><th>Protocol</th><th>How to connect</th></tr>
-<tr><td>VLESS / VMess / Trojan / Shadowsocks / Hysteria2</td><td>Copy one link from the user dashboard, or import the whole subscription URL at once (one link carries <b>all</b> protocols). Android: <b>v2rayNG</b>, NekoBox. iOS: <b>Streisand</b>, FoXray, Shadowrocket. Desktop: <b>NekoRay</b>, Clash Verge, Hiddify, sing-box.</td></tr>
-<tr><td>Clash users</td><td>Import the <code>?format=clash</code> URL (auto-detected for Clash user-agents): proxies + <code>Zefira</code> select group + site-block rules + <code>MATCH</code>.</td></tr>
-<tr><td>WireGuard</td><td>Download the <code>-wg.conf</code> (panel Download button or user dashboard) and import it into the WireGuard app. No handshake? The server public key is missing: Settings → Server/Hosts → WireGuard server public key (from <code>wg show</code> on the server).</td></tr>
-<tr><td>OpenVPN</td><td>Download the <code>.ovpn</code> (CA + cert + key embedded) and import into OpenVPN Connect / Tunnelblick. Match proto (UDP/TCP) and port with Settings.</td></tr>
-<tr><td>L2TP/IPsec</td><td>Open the <code>-l2tp.txt</code> credentials (server, username, password, IPsec PSK). <b>Windows:</b> Settings → Network → VPN → Add VPN, type L2TP/IPsec with pre-shared key. <b>Android:</b> Settings → Network → VPN → L2TP/IPsec PSK. <b>iOS:</b> Settings → General → VPN → Add L2TP (shared secret = PSK). The server needs UDP 500/4500/1701 open <b>and</b> a matching server-side user entry — create it before selling.</td></tr>
-<tr><td>Cisco AnyConnect</td><td>Install <b>OpenConnect</b> (or the AnyConnect app). Command: <code>openconnect --user=USERNAME SERVER</code>. In the app: add the server, sign in with panel username + password. Default port 443 (Settings → Cisco port).</td></tr>
-<tr><td>SOCKS5</td><td>Use the <code>socks5://</code> link. <b>Telegram:</b> Settings → Data and Storage → Proxy → Add SOCKS5 (server, port, username, password). <b>Browsers:</b> SwitchyOmega / FoxyProxy. <b>Clash:</b> included automatically as a <code>socks5</code> proxy.</td></tr>
+<tr><th data-i18n="stg.thProto">Protocol</th><th data-i18n="stg.thHow">How to connect</th></tr>
+<tr><td>VLESS / VMess / Trojan / Shadowsocks / Hysteria2</td><td><span data-i18n="stg.vlessA">Copy one link from the user dashboard, or import the whole subscription URL at once (one link carries</span> <b data-i18n="stg.all">all</b> <span data-i18n="stg.vlessB">protocols).</span> Android: <b>v2rayNG</b>, NekoBox. iOS: <b>Streisand</b>, FoXray, Shadowrocket. Desktop: <b>NekoRay</b>, Clash Verge, Hiddify, sing-box.</td></tr>
+<tr><td data-i18n="stg.clashUsers">Clash users</td><td><span data-i18n="stg.clashA">Import the</span> <code>?format=clash</code> <span data-i18n="stg.clashB">URL (auto-detected for Clash user-agents): proxies +</span> <code>Zefira</code> <span data-i18n="stg.clashC">select group + site-block rules +</span> <code>MATCH</code><span data-i18n="stg.clashDot">.</span></td></tr>
+<tr><td>WireGuard</td><td><span data-i18n="stg.wgA">Download the</span> <code>-wg.conf</code> <span data-i18n="stg.wgB">(panel Download button or user dashboard) and import it into the WireGuard app. No handshake? The server public key is missing: Settings → Server/Hosts → WireGuard server public key (from</span> <code>wg show</code> <span data-i18n="stg.wgC">on the server).</span></td></tr>
+<tr><td>OpenVPN</td><td><span data-i18n="stg.ovpnA">Download the</span> <code>.ovpn</code> <span data-i18n="stg.ovpnB">(CA + cert + key embedded) and import into OpenVPN Connect / Tunnelblick. Match proto (UDP/TCP) and port with Settings.</span></td></tr>
+<tr><td>L2TP/IPsec</td><td><span data-i18n="stg.l2tpA">Open the</span> <code>-l2tp.txt</code> <span data-i18n="stg.l2tpB">credentials (server, username, password, IPsec PSK).</span> <b>Windows:</b> <span data-i18n="stg.l2tpWin">Settings → Network → VPN → Add VPN, type L2TP/IPsec with pre-shared key.</span> <b>Android:</b> <span data-i18n="stg.l2tpAnd">Settings → Network → VPN → L2TP/IPsec PSK.</span> <b>iOS:</b> <span data-i18n="stg.l2tpIos">Settings → General → VPN → Add L2TP (shared secret = PSK).</span> <span data-i18n="stg.l2tpC">The server needs UDP 500/4500/1701 open</span> <b data-i18n="stg.and">and</b> <span data-i18n="stg.l2tpD">a matching server-side user entry — create it before selling.</span></td></tr>
+<tr><td>Cisco AnyConnect</td><td><span data-i18n="stg.ciscoA">Install</span> <b>OpenConnect</b> <span data-i18n="stg.ciscoB">(or the AnyConnect app). Command:</span> <code>openconnect --user=USERNAME SERVER</code><span data-i18n="stg.ciscoC">. In the app: add the server, sign in with panel username + password. Default port 443 (Settings → Cisco port).</span></td></tr>
+<tr><td>SOCKS5</td><td><span data-i18n="stg.socksA">Use the</span> <code>socks5://</code> <span data-i18n="stg.socksB">link.</span> <b>Telegram:</b> <span data-i18n="stg.socksTg">Settings → Data and Storage → Proxy → Add SOCKS5 (server, port, username, password).</span> <b data-i18n="stg.browsers">Browsers:</b> SwitchyOmega / FoxyProxy. <b>Clash:</b> <span data-i18n="stg.socksClashA">included automatically as a</span> <code>socks5</code> <span data-i18n="stg.socksClashB">proxy.</span></td></tr>
 </table>
 
-<h2 id="backpack-tunnel-walkthrough">BackPack tunnel walkthrough (Iran ⇄ Kharej)</h2>
+<h2 id="backpack-tunnel-walkthrough" data-i18n="stg.backpackTitle">BackPack tunnel walkthrough (Iran ⇄ Kharej)</h2>
 <ol>
-<li><b>Install BackPack on BOTH servers</b> (Iran entry + Kharej exit) with its install script.</li>
-<li><b>Zefira → Tunnels → create node:</b> transport, Iran IP, Kharej IP, tunnel port, forwarded ports (e.g. <code>443:8000</code>), UDP flag. Copy the one-time token — it must match on both servers.</li>
-<li><b>Iran server:</b> <code>backpack</code> → Setup Iran → same transport, port, name, token, exposed ports, Turbo preset.</li>
-<li><b>Kharej server:</b> <code>backpack</code> → Setup Kharej → same values + Iran address.</li>
-<li><b>Verify:</b> Status on both servers, Health Check on errors, then Zefira <b>Check now</b> probes <code>iran-ip:tunnel-port</code>. Keep the token secret — whoever holds it can join the tunnel.</li>
+<li><b data-i18n="stg.bp1Bold">Install BackPack on BOTH servers</b> <span data-i18n="stg.bp1Rest">(Iran entry + Kharej exit) with its install script.</span></li>
+<li><b data-i18n="stg.bp2Bold">Zefira → Tunnels → create node:</b> <span data-i18n="stg.bp2A">transport, Iran IP, Kharej IP, tunnel port, forwarded ports (e.g.</span> <code>443:8000</code><span data-i18n="stg.bp2B">), UDP flag. Copy the one-time token — it must match on both servers.</span></li>
+<li><b data-i18n="stg.bpIran">Iran server:</b> <code>backpack</code> <span data-i18n="stg.bp3Rest">→ Setup Iran → same transport, port, name, token, exposed ports, Turbo preset.</span></li>
+<li><b data-i18n="stg.bpKharej">Kharej server:</b> <code>backpack</code> <span data-i18n="stg.bp4Rest">→ Setup Kharej → same values + Iran address.</span></li>
+<li><b data-i18n="stg.verify">Verify:</b> <span data-i18n="stg.bp5A">Status on both servers, Health Check on errors, then Zefira</span> <b data-i18n="stg.checkNow">Check now</b> <span data-i18n="stg.bp5B">probes</span> <code>iran-ip:tunnel-port</code><span data-i18n="stg.bp5C">. Keep the token secret — whoever holds it can join the tunnel.</span></li>
 </ol>
-<p><b>Transport picks:</b> dirty routes → TCP+Stealth or WSS/WSS-Mux. UDP apps (WireGuard, DNS, games) → enable Forward UDP with KCP/QUIC transports.</p>
+<p><b data-i18n="stg.transportPicks">Transport picks:</b> <span data-i18n="stg.transportRest">dirty routes → TCP+Stealth or WSS/WSS-Mux. UDP apps (WireGuard, DNS, games) → enable Forward UDP with KCP/QUIC transports.</span></p>
 
-<h2 id="anti-filter-cookbook">Anti-filter cookbook</h2>
+<h2 id="anti-filter-cookbook" data-i18n="stg.antiTitle">Anti-filter cookbook</h2>
 <ol>
-<li><b>REALITY first:</b> Anti-Censorship → Generate keypair (private stays encrypted, reveal is audit-logged) → paste the private key into the Xray server config. Links rotate SNI automatically (<code>xtls-rprx-vision</code>).</li>
-<li><b>Stack layers on dirty networks:</b> REALITY or Hysteria2 + <b>obfuscated host</b> (a weird CDN URL hiding the real IP) + <b>per-user subdomains</b> (needs wildcard DNS <code>*.host</code> — every user gets a random prefix) + <b>CDN SNI spoofing</b> + <b>block-direct-IP</b> (panel reachable only via domain).</li>
-<li><b>Monitor:</b> Nodes section tracks remote servers (status/latency/uptime every 5 min). Pin inbounds to a node — offline/disabled nodes drop out of every subscription link automatically until recovery.</li>
-<li><b>Diagnose 404s:</b> user expired/disabled/out-of-volume? Then Settings domain/ports, server firewall ports, REALITY keys / WireGuard public key. Sub loads but clients can't connect = server-side ports or keys, almost always.</li>
+<li><b data-i18n="stg.realityFirst">REALITY first:</b> <span data-i18n="stg.af1A">Anti-Censorship → Generate keypair (private stays encrypted, reveal is audit-logged) → paste the private key into the Xray server config. Links rotate SNI automatically (</span><code>xtls-rprx-vision</code><span data-i18n="stg.af1B">).</span></li>
+<li><b data-i18n="stg.stackBold">Stack layers on dirty networks:</b> <span data-i18n="stg.af2A">REALITY or Hysteria2 +</span> <b data-i18n="stg.obfHost">obfuscated host</b> <span data-i18n="stg.af2B">(a weird CDN URL hiding the real IP) +</span> <b data-i18n="stg.perUser">per-user subdomains</b> <span data-i18n="stg.af2C">(needs wildcard DNS</span> <code>*.host</code> <span data-i18n="stg.af2D">— every user gets a random prefix) +</span> <b data-i18n="stg.cdnSpoof">CDN SNI spoofing</b> <span data-i18n="stg.plus">+</span> <b data-i18n="stg.blockIp">block-direct-IP</b> <span data-i18n="stg.af2E">(panel reachable only via domain).</span></li>
+<li><b data-i18n="stg.monitor">Monitor:</b> <span data-i18n="stg.monitorRest">Nodes section tracks remote servers (status/latency/uptime every 5 min). Pin inbounds to a node — offline/disabled nodes drop out of every subscription link automatically until recovery.</span></li>
+<li><b data-i18n="stg.diagnose">Diagnose 404s:</b> <span data-i18n="stg.diagnoseRest">user expired/disabled/out-of-volume? Then Settings domain/ports, server firewall ports, REALITY keys / WireGuard public key. Sub loads but clients can't connect = server-side ports or keys, almost always.</span></li>
 </ol>
 
-<h2 id="ask-the-ai">Ask the AI</h2>
-<p>The panel <b>?</b> assistant knows all of the above and <b>acts too</b>: <i>“make user ali 50 gig 30 days vless”</i>, <i>“top up reza 20 gig”</i>, <i>“how do I tunnel Kharej?”</i> — setup answers plus real operations, audit-logged. Full list in <a href="user-guide.html#ai-assistant">Users &amp; Plans → AI assistant</a>.</p>
+<h2 id="ask-the-ai" data-i18n="stg.aiTitle">Ask the AI</h2>
+<p><span data-i18n="stg.aiA">The panel</span> <b>?</b> <span data-i18n="stg.aiB">assistant knows all of the above and</span> <b data-i18n="stg.actsToo">acts too</b><span data-i18n="stg.aiColon">:</span> <i>“make user ali 50 gig 30 days vless”</i>, <i>“top up reza 20 gig”</i>, <i>“how do I tunnel Kharej?”</i> <span data-i18n="stg.aiD">— setup answers plus real operations, audit-logged. Full list in</span> <a href="user-guide.html#ai-assistant" data-i18n="stg.aiLink">Users &amp; Plans → AI assistant</a><span data-i18n="stg.aiDot">.</span></p>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

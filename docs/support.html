@@ -7,65 +7,67 @@
 <meta name="referrer" content="no-referrer">
 <title>Support — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">S</span>upport</h1>
-<p class="subtitle">Stuck somewhere? Pick the fastest channel.</p>
+<h1><span class="z" data-i18n="sup.titleZ">S</span><span data-i18n="sup.titleRest">upport</span></h1>
+<p class="subtitle" data-i18n="sup.subtitle">Stuck somewhere? Pick the fastest channel.</p>
 
 <div class="cards">
-  <a class="card" href="#" id="ask-site-ai"><b>Ask the site assistant</b><span>Docs-powered answers about donating, changelog, GitHub and the panel. Offline, no key needed.</span></a>
-  <a class="card" href="https://github.com/mrlurix/zefira-panel/discussions" target="_blank" rel="noopener"><b>Community Q&amp;A</b><span>Ask usage questions, share setups, get answers from other operators.</span></a>
-  <a class="card" href="https://github.com/mrlurix/zefira-panel/issues" target="_blank" rel="noopener"><b>Bug reports</b><span>Something broken? Open an issue with steps to reproduce.</span></a>
-  <a class="card" href="faq.html"><b>FAQ first</b><span>Login lockouts, 404 subs, SSL fails — most answers are already here.</span></a>
-  <a class="card" href="donate.html"><b>Donate</b><span>Like Zefira? Crypto wallets and contact inside.</span></a>
+  <a class="card" id="ask-site-ai" href="#"><b data-i18n="sup.aiTitle">Ask the site assistant</b><span data-i18n="sup.aiText">Docs-powered answers about donating, changelog, GitHub and the panel. Offline, no key needed.</span></a>
+  <a class="card" href="https://github.com/mrlurix/zefira-panel/discussions" target="_blank" rel="noopener"><b data-i18n="sup.qaTitle">Community Q&amp;A</b><span data-i18n="sup.qaText">Ask usage questions, share setups, get answers from other operators.</span></a>
+  <a class="card" href="https://github.com/mrlurix/zefira-panel/issues" target="_blank" rel="noopener"><b data-i18n="sup.bugTitle">Bug reports</b><span data-i18n="sup.bugText">Something broken? Open an issue with steps to reproduce.</span></a>
+  <a class="card" href="faq.html"><b data-i18n="sup.faqTitle">FAQ first</b><span data-i18n="sup.faqText">Login lockouts, 404 subs, SSL fails — most answers are already here.</span></a>
+  <a class="card" href="donate.html"><b data-i18n="sup.donTitle">Donate</b><span data-i18n="sup.donText">Like Zefira? Crypto wallets and contact inside.</span></a>
 </div>
 
-<h2 id="before-you-ask">Before you ask</h2>
+<h2 id="before-you-ask" data-i18n="sup.beforeTitle">Before you ask</h2>
 <ul>
-  <li>Read the <a href="faq.html">FAQ</a> — 9 out of 10 problems end there.</li>
-  <li>Collect: panel version (<b>Update</b> section), relevant lines from <code>journalctl -u zefira -n 100 --no-pager</code>, and what you already tried.</li>
-  <li><b>Never post</b> subscription tokens, passwords, backup files, or your <code>secret.key</code> — rotate anything that leaks.</li>
+  <li><span data-i18n="sup.beforeFaq">Read the</span> <a href="faq.html" data-i18n="docs.nFaq">FAQ</a> <span data-i18n="sup.beforeFaq2">— 9 out of 10 problems end there.</span></li>
+  <li><span data-i18n="sup.beforeCollect">Collect: panel version (</span><b data-i18n="sup.beforeUpdate">Update</b><span data-i18n="sup.beforeCollect2"> section), relevant lines from </span><code>journalctl -u zefira -n 100 --no-pager</code><span data-i18n="sup.beforeTried">, and what you already tried.</span></li>
+  <li><b data-i18n="sup.beforeNever">Never post</b><span data-i18n="sup.beforeNever2"> subscription tokens, passwords, backup files, or your </span><code>secret.key</code><span data-i18n="sup.beforeNever3"> — rotate anything that leaks.</span></li>
 </ul>
 
-<h2 id="security-issues">Security issues</h2>
-<div class="callout warn">Found a vulnerability? Do NOT open a public issue — report it privately via <a href="https://github.com/mrlurix/zefira-panel/security/advisories/new">GitHub Security Advisories</a> so it can be fixed before disclosure.</div>
+<h2 id="security-issues" data-i18n="sup.secTitle">Security issues</h2>
+<div class="callout warn"><span data-i18n="sup.secText">Found a vulnerability? Do NOT open a public issue — report it privately via</span> <a href="https://github.com/mrlurix/zefira-panel/security/advisories/new" data-i18n="sup.secLink">GitHub Security Advisories</a> <span data-i18n="sup.secText2">so it can be fixed before disclosure.</span></div>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

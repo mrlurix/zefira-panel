@@ -6,11 +6,27 @@
     "text": "Send any amount on BNB Smart Chain (BEP-20). All three currencies go to the same address:\n\nTRX, ETH and USDC → 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18\n\nAlways double-check the address AND the network before sending — crypto transfers cannot be reversed.",
     "fa": "برای دونیت، روی شبکه BNB Smart Chain (BEP-20) به آدرس 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18 ارسال کن (TRX، ETH یا USDC). حتماً آدرس و شبکه را چک کن — برگشت ندارد.",
     "wallets": [
-      {"label": "TRX (BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"},
-      {"label": "ETH (BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"},
-      {"label": "USDC (BNB BEP-20)", "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"}
+      {
+        "label": "TRX (BEP-20)",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      },
+      {
+        "label": "ETH (BEP-20)",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      },
+      {
+        "label": "USDC (BNB BEP-20)",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      }
     ],
-    "links": [{"label": "Full donate page", "href": "donate.html"}]
+    "links": [
+      {
+        "label": "Full donate page",
+        "href": "donate.html"
+      }
+    ],
+    "zh": "在 BNB Smart Chain (BEP-20) 上发送:TRX、ETH 或 USDC 到 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18。务必核对地址和网络——无法撤销。",
+    "ru": "Отправь на BNB Smart Chain (BEP-20): TRX, ETH или USDC на 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18. Проверь адрес и сеть — необратимо."
   },
   {
     "id": "changelog",
@@ -18,7 +34,14 @@
     "keywords": "changelog change log version versions new update updates release history news latest v1 تغییر نسخه جدید آپدیت",
     "text": "Latest releases:\n\nv1.8.1 — encrypted backups from the panel button, bot renewal docs.\nv1.8.0 — developer reset API (lookup by username + combo reset) for bots.\nv1.7.0 — the panel AI assistant can act (create/top-up/extend users).\nv1.6.0 — L2TP/IPsec, Cisco AnyConnect and SOCKS5 protocols.\n\nThe panel itself shows incoming changes under Update before you upgrade.",
     "fa": "آخرین نسخه‌ها: 1.8.1 (بکاپ رمزنگاری‌شده)، 1.8.0 (Reset API برای بات‌ها)، 1.7.0 (دستیار هوشمند اجراکننده)، 1.6.0 (پروتکل‌های L2TP/Cisco/SOCKS5). جزئیات کامل در صفحه changelog.",
-    "links": [{"label": "Full changelog", "href": "changelog.html"}]
+    "links": [
+      {
+        "label": "Full changelog",
+        "href": "changelog.html"
+      }
+    ],
+    "zh": "最近更新:加密备份、机器人重置 API、会干活的 AI、L2TP/Cisco/SOCKS5。详情看更新日志页。",
+    "ru": "Свежее: шифрованные бэкапы, reset API для ботов, действующий AI, L2TP/Cisco/SOCKS5. Подробности — в чейнджлоге."
   },
   {
     "id": "github",
@@ -26,18 +49,37 @@
     "keywords": "github repo repository source code star discussions discuss issues bug report security advisory vuln contribute گیت‌هاب سورس استار باگ گزارش",
     "text": "Repo: mrlurix/zefira-panel (MIT). Community Q&A → Discussions. Something broken? Open an issue with steps to reproduce. Found a vulnerability? Report PRIVATELY via Security Advisories — never a public issue. A star helps more people find Zefira.",
     "links": [
-      {"label": "Repository", "href": "https://github.com/mrlurix/zefira-panel"},
-      {"label": "Discussions", "href": "https://github.com/mrlurix/zefira-panel/discussions"},
-      {"label": "Issues", "href": "https://github.com/mrlurix/zefira-panel/issues"}
-    ]
+      {
+        "label": "Repository",
+        "href": "https://github.com/mrlurix/zefira-panel"
+      },
+      {
+        "label": "Discussions",
+        "href": "https://github.com/mrlurix/zefira-panel/discussions"
+      },
+      {
+        "label": "Issues",
+        "href": "https://github.com/mrlurix/zefira-panel/issues"
+      }
+    ],
+    "fa": "ریپو: mrlurix/zefira-panel ‏(MIT)‏. سؤال کاربردی → Discussions. باگ → issue با steps بازتولید. آسیب‌پذیری فقط خصوصی via Security Advisories. استار کمک می‌کند.",
+    "zh": "仓库：mrlurix/zefira-panel（MIT）。使用问题去 Discussions，有 Bug 附复现步骤提 issue，漏洞只通过 Security Advisories 私下报告。点 Star 让更多人发现。",
+    "ru": "Репо: mrlurix/zefira-panel (MIT). Вопросы — в Discussions. Баг — issue с шагами. Уязвимость — только приватно через Security Advisories. Звезда помогает находить Zefira."
   },
   {
     "id": "panel",
     "title": "What the Zefira panel is",
     "keywords": "panel what is zefira about features protocols overview sell vpn proxy intro معرفی پنل چیست قابلیت پروتکل",
     "text": "Zefira is a self-hosted VPN sales panel (FastAPI + SQLite, no Docker). Create users with traffic + time limits; each gets ONE subscription link. 11 protocols: VLESS, VLESS-REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5. Extras: AI assistant that acts, reseller bots, Clash subs, user dashboard, QR/ZIP bundles, BackPack tunnels, one-click updates, encrypted backups.",
-    "fa": "زفیرا پنل فروش VPN سلف‌هستد است (۱۱ پروتکل: VLESS، Reality، VMess، Trojan، شادوساکس، Hysteria2، وایرگارد، OpenVPN، L2TP، Cisco، SOCKS5). هر کاربر یک لینک ساب می‌گیرد.",
-    "links": [{"label": "User guide", "href": "user-guide.html"}]
+    "fa": "زفیرا پنل فروش VPN سلف‌هستد است (۱۱ پروتکل). هر کاربر یک لینک اشتراک می‌گیرد.",
+    "links": [
+      {
+        "label": "User guide",
+        "href": "user-guide.html"
+      }
+    ],
+    "zh": "Zefira 是自托管 VPN 销售面板(11 种协议)。每个用户一个订阅链接。",
+    "ru": "Zefira — селфхостед VPN-панель продаж (11 протоколов). У каждого юзера одна ссылка подписки."
   },
   {
     "id": "install",
@@ -45,63 +87,138 @@
     "keywords": "install installation setup server deploy ubuntu debian requirements one-line installer steps install.sh نصب راه‌اندازی سرور",
     "text": "Ubuntu 20.04+/Debian 11+, root, ~5 minutes. One line:\n\nbash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)\n\nGuided steps: port → domain → admin → database → subscription path → Telegram → Nginx+SSL. First login: change the password in Settings. Uninstall: sudo bash install.sh --uninstall.",
     "fa": "روی اوبونتو/دبیان با دسترسی روت، حدود ۵ دقیقه. دستور نصب تک‌خطی در صفحه installation. بعد از اولین ورود حتماً پسورد را عوض کن.",
-    "links": [{"label": "Installation guide", "href": "installation.html"}]
+    "links": [
+      {
+        "label": "Installation guide",
+        "href": "installation.html"
+      }
+    ],
+    "zh": "Ubuntu/Debian + root,约 5 分钟。一键安装见 installation 页。首次登录后务必改密码。",
+    "ru": "Ubuntu/Debian + root, минут 5. Однострочник — на странице installation. После первого входа смени пароль."
   },
   {
     "id": "subscription",
     "title": "Subscription link and 404s",
     "keywords": "subscription sub link token 404 expired disabled volume dashboard raw clash format clients connect لینک ساب اشتراک خراب کار نمی‌کند",
     "text": "Every user has https://domain/sub/TOKEN. Browsers open a personal dashboard (usage, QR, imports); VPN apps get raw bytes or Clash YAML (?format=clash). Expired, disabled or out-of-volume users get 404 without saying why. Leaked link? Reset token kills it instantly.",
-    "links": [{"label": "Subscriptions & clients", "href": "subscription.html"}]
+    "links": [
+      {
+        "label": "Subscriptions & clients",
+        "href": "subscription.html"
+      }
+    ],
+    "fa": "هر کاربر https://domain/sub/TOKEN دارد. مرورگر داشبورد شخصی باز می‌کند (مصرف، QR، ایمپورت)؛ اپ‌ها بایت خام یا YAML مخصوص Clash می‌گیرند (?format=clash). منقضی/غیرفعال/تمام‌حجم 404 بدون گفتن دلیل. لینک لو رفت؟ ریست توکن فوراً می‌کشدش.",
+    "zh": "每个用户有 https://domain/sub/TOKEN。浏览器打开个人仪表盘（用量、二维码、导入）；客户端拿原始字节或 Clash YAML（?format=clash）。过期/禁用/流量用尽返回 404 且不说明原因。链接泄露？重置令牌立即作废。",
+    "ru": "У каждого юзера https://domain/sub/TOKEN. Браузер открывает личный дашборд (трафик, QR, импорты); приложения получают сырые байты или Clash YAML (?format=clash). Истёкшие/выключенные/безлимитные получают 404 без причин. Ссылка утекла? Сброс токена убивает её сразу."
   },
   {
     "id": "clients",
     "title": "Client apps and protocol setup",
     "keywords": "client clients app apps android ios windows v2rayng clash streisand wireguard openvpn l2tp cisco socks5 openconnect connect setup import conf ovpn کلاینت اپ اتصال تنظیم",
     "text": "Android: v2rayNG/NekoBox. iOS: Streisand/FoXray/Shadowrocket. Desktop: NekoRay/Clash Verge/Hiddify. WireGuard: import the .conf. OpenVPN: import the .ovpn. L2TP: system VPN with server+username+password+PSK. Cisco: openconnect --user=NAME SERVER. SOCKS5: Telegram proxy settings or SwitchyOmega.",
-    "links": [{"label": "Setup guides", "href": "setup-guides.html"}]
+    "links": [
+      {
+        "label": "Setup guides",
+        "href": "setup-guides.html"
+      }
+    ],
+    "fa": "اندروید: v2rayNG/NekoBox. آیفون: Streisand/FoXray/Shadowrocket. دسکتاپ: NekoRay/Clash Verge/Hiddify. وایرگارد: ایمپورت .conf. اوپن‌وی‌پی‌ان: ایمپورت .ovpn. ‏L2TP‏: ‏VPN‏ سیستمی با سرور+یوزر+پسورد+PSK. ‏Cisco‏: ‏openconnect --user=NAME SERVER‏. ‏SOCKS5‏: پروکسی تلگرام یا SwitchyOmega.",
+    "zh": "安卓：v2rayNG/NekoBox。iOS：Streisand/FoXray/Shadowrocket。桌面：NekoRay/Clash Verge/Hiddify。WireGuard 导入 .conf。OpenVPN 导入 .ovpn。L2TP 用系统 VPN（服务器+用户名+密码+PSK）。Cisco：openconnect --user=NAME SERVER。SOCKS5：Telegram 代理或 SwitchyOmega。",
+    "ru": "Android: v2rayNG/NekoBox. iOS: Streisand/FoXray/Shadowrocket. Десктоп: NekoRay/Clash Verge/Hiddify. WireGuard: импорт .conf. OpenVPN: импорт .ovpn. L2TP: системный VPN (сервер+логин+пароль+PSK). Cisco: openconnect --user=NAME SERVER. SOCKS5: прокси Telegram или SwitchyOmega."
   },
   {
     "id": "users",
     "title": "Users, plans and quota",
     "keywords": "user users create plan plans volume quota expiry expire days first use device limit states active limited pending تمدید شارژ کاربر حجم",
     "text": "Username (a-z 0-9 _), protocols, volume GB, days. Volume stops service at 100% until topped up/reset. Start-on-first-use counts from first fetch. Extend adds days (expired counts from today). Reset token rotates token AND secrets.",
-    "links": [{"label": "Users & plans", "href": "user-guide.html"}]
+    "links": [
+      {
+        "label": "Users & plans",
+        "href": "user-guide.html"
+      }
+    ],
+    "fa": "یوزرنیم (حروف، رقم، _)، پروتکل‌ها، حجم (گیگ)، روز. حجم در 100٪ سرویس را می‌خواباند تا شارژ/ریست. شروع-با-اولین-استفاده از اولین fetch می‌شمارد. تمدید روز اضافه می‌کند (منقضی از امروز). ریست توکن هم توکن هم سکرت‌ها را می‌چرخاند.",
+    "zh": "用户名（字母数字下划线）、协议、流量（GB）、天数。流量到 100% 停服，直到续费或清零。首次使用启动从第一次拉取计时。续期加天数（过期从今天起算）。重置令牌会同时轮换令牌和密钥。",
+    "ru": "Юзернейм (латиница, цифры, _), протоколы, трафик (ГБ), дни. 100% трафика — стоп до пополнения/сброса. Старт-с-первого-юза считает с первого фетча. Продление добавляет дни (истёкшие — от сегодня). Сброс токена ротирует и токен, и секреты."
   },
   {
     "id": "bots",
     "title": "Telegram bots and API tokens",
     "keywords": "bot bots telegram reseller api token tokens bearer integration script scope scopes full بات تلگرام فروش توکن",
     "text": "Settings → API Tokens issues zfp_… bearer tokens. Scope bot = least privilege (list/create/renew users) for reseller bots; full = everything, your scripts only. Ready bots in examples/telegram-bot-python and -node: /buy plans keyboard, instant account + link, /my quota. Panel notifications (create/delete, lockouts) need any bot token + chat ID in Settings → Telegram.",
-    "links": [{"label": "Bots guide", "href": "user-guide.html#bots-integrations"}, {"label": "API reference", "href": "api.html"}]
+    "links": [
+      {
+        "label": "Bots guide",
+        "href": "user-guide.html#bots-integrations"
+      },
+      {
+        "label": "API reference",
+        "href": "api.html"
+      }
+    ],
+    "fa": "تنظیمات → توکن‌های API توکن zfp_… می‌دهد. اسکوپ bot کمترین دسترسی (لیست/ساخت/تمدید) برای بات‌های فروش؛ full همه‌چیز، فقط اسکریپت‌های خودت. بات آماده در examples/telegram-bot-python و -node: کیبورد /buy، اکانت فوری + لینک، /my. اطلاع‌رسانی پنل (ساخت/حذف، lockout) با هر توکن بات + آیدی چت در تنظیمات → تلگرام.",
+    "zh": "设置 → API 令牌签发 zfp_… 令牌。bot 范围最小权限（查看/创建/续费用户），给转售机器人；full 全部权限，只给自己的脚本。现成机器人见 examples/telegram-bot-python 和 -node：/buy 套餐键盘、即时开户 + 链接、/my 查用量。面板通知（创建/删除、锁定）在设置 → Telegram 里填任意机器人令牌 + 聊天 ID。",
+    "ru": "Настройки → API-токены выдают zfp_… Scope bot — минимум (список/создание/продление) для реселл-ботов; full — всё, только своим скриптам. Готовые боты в examples/telegram-bot-python и -node: клавиатура /buy, мгновенный аккаунт + ссылка, /my. Уведомления панели (создание/удаление, локауты) — любой токен бота + chat ID в Настройки → Telegram."
   },
   {
     "id": "panel-ai",
     "title": "Panel AI assistant",
     "keywords": "ai assistant artificial intelligence bubble act actions create top up help panel ai هوش مصنوعی دستیار",
     "text": "The ? bubble in the panel chats AND acts: create users, extend days, add volume, reset usage, pause/enable, find users, stats, links (max 3 ops/turn, audit-logged). Setup: Settings → AI Assistant, provider (OpenAI-compatible/Anthropic/Gemini) + model + key (encrypted). It never deletes, resets tokens, or touches backup/update/settings.",
-    "links": [{"label": "AI guide", "href": "user-guide.html#ai-assistant"}]
+    "links": [
+      {
+        "label": "AI guide",
+        "href": "user-guide.html#ai-assistant"
+      }
+    ],
+    "fa": "حباب ؟ در پنل چت می‌کند و عمل هم می‌کند: ساخت کاربر، تمدید روز، شارژ حجم، ریست مصرف، توقف/فعال، جستجو، آمار، لینک (حداکثر 3 عمل در هر نوبت، audit-log). ستاپ: تنظیمات → دستیار AI، پرووایدر + مدل + کلید (رمزنگاری). هرگز حذف، ریست توکن، بکاپ/آپدیت/تنظیمات را دست نمی‌زند.",
+    "zh": "面板里的 ? 气泡能聊天也能干活：建用户、续天数、充流量、清零用量、停用/启用、找用户、统计、链接（每轮最多 3 个操作，记审计日志）。配置：设置 → AI 助手，选提供商 + 模型 + 密钥（加密存）。绝不删除、重置令牌，不碰备份/更新/设置。",
+    "ru": "Пузырь ? в панели чатится И действует: создание юзеров, продление дней, пополнение трафика, сброс использования, пауза/включение, поиск, статистика, ссылки (макс. 3 операции за ход, в аудите). Настройка: Настройки → AI-ассистент, провайдер + модель + ключ (шифруется). Никогда не удаляет, не сбрасывает токены, не трогает бэкап/обновление/настройки."
   },
   {
     "id": "tunnels",
     "title": "Tunnels and server nodes",
     "keywords": "tunnel tunnels backpack iran kharej node nodes server monitor health reality anti-filter censorship sni تانل نود سرور",
     "text": "BackPack tunnels (Iran⇄Kharej): create node in Tunnels, run the same token on both servers (Setup Iran / Setup Kharej), verify with Check-now. Server Nodes: register remotes for 5-min health checks; pin inbounds to a node — offline nodes drop out of links automatically. Anti-filter stack: REALITY keys + SNI rotation + obfuscated host + per-user subdomains + CDN SNI.",
-    "links": [{"label": "Setup guides", "href": "setup-guides.html"}]
+    "links": [
+      {
+        "label": "Setup guides",
+        "href": "setup-guides.html"
+      }
+    ],
+    "fa": "تانل BackPack ‏(ایران⇄خارج)‏: در تانل‌ها نود بساز، همان توکن را در هر دو سرور اجرا کن (Setup Iran / Setup Kharej)، با Check-now تأیید کن. نودهای سرور: ثبت ریموت‌ها برای health-check هر 5 دقیقه؛ اینباند را به نود پین کن — نود آفلاین خودکار از لینک‌ها می‌افتد. استک ضدفیلتر: کلیدهای REALITY + چرخش SNI + هاست مبهم + ساب‌دامنه هر کاربر + جعل SNI با CDN.",
+    "zh": "BackPack 隧道（伊朗⇄境外）：在隧道页建节点，两台服务器用同一令牌运行（Setup Iran / Setup Kharej），用 Check-now 验证。服务器节点：注册远端做 5 分钟健康检查；把入站绑定到节点——离线节点自动从链接中剔除。反过滤组合：REALITY 密钥 + SNI 轮换 + 混淆主机 + 每用户子域名 + CDN SNI 伪装。",
+    "ru": "Туннели BackPack (Иран⇄Харедж): создай ноду в Туннелях, прогони тот же токен на обоих серверах (Setup Iran / Setup Kharej), проверь Check-now. Серверные ноды: регистрация удалённых для health-check каждые 5 минут; привяжи инбаунд к ноде — офлайн-ноды сами выпадают из ссылок. Антифильтр-стек: ключи REALITY + ротация SNI + обфусцированный хост + per-user поддомены + CDN SNI."
   },
   {
     "id": "update",
     "title": "Updates and backup",
     "keywords": "update upgrade version backup restore encrypted download import export آپدیت بکاپ ریستور",
     "text": "Update (left menu): compares with GitHub, shows incoming changes, password-confirmed pull + reinstall + restart; refused on local changes. Backup: password-confirmed download, encrypted option available; restore wipes users — both need the password.",
-    "links": [{"label": "Changelog", "href": "changelog.html"}]
+    "links": [
+      {
+        "label": "Changelog",
+        "href": "changelog.html"
+      }
+    ],
+    "fa": "آپدیت (منوی چپ): با گیت‌هاب مقایسه می‌کند، تغییرات ورودی را نشان می‌دهد، با تأیید پسورد پول + نصب مجدد + ری‌استارت؛ با تغییر محلی رد می‌شود. بکاپ: دانلود با تأیید پسورد، گزینه رمزنگاری؛ برگرداندن کاربران را پاک می‌کند — هر دو پسورد می‌خواهند.",
+    "zh": "更新（左侧菜单）：与 GitHub 对比、展示 incoming 变更，密码确认后拉取 + 重装 + 重启；有本地改动则拒绝。备份：密码确认下载，可加密；恢复会清空用户——两者都要密码。",
+    "ru": "Обновление (левое меню): сравнение с GitHub, показ входящих изменений, pull + переустановка + рестарт по паролю; при локальных правках — отказ. Бэкап: скачивание по паролю, есть шифрование; восстановление стирает юзеров — везде нужен пароль."
   },
   {
     "id": "troubleshoot",
     "title": "Top problems",
     "keywords": "problem error fail login lockout locked 404 ssl password lost down troubleshoot fix help مشکل خطا ورود قفل",
     "text": "Locked out (too many attempts)? Wait 15 min or restart the panel. Sub 404 for everyone? Check expiry/volume/active, then domain/ports, then firewall. SSL fails? DNS must point here + port 80 free + certbot. Clients can't connect but sub loads? Server ports or REALITY/WireGuard keys. Lost password? Only via fresh DB + backup restore.",
-    "links": [{"label": "FAQ", "href": "faq.html"}]
+    "links": [
+      {
+        "label": "FAQ",
+        "href": "faq.html"
+      }
+    ],
+    "fa": "Lockout شدی (تلاش زیاد)؟ 15 دقیقه صبر کن یا پنل را ری‌استارت کن. ساب همه 404؟ اول انقضا/حجم/فعال، بعد دامنه/پورت، بعد فایروال. ‏SSL‏ خراب؟ ‏DNS‏ باید به اینجا اشاره کند + پورت 80 آزاد + ‏certbot‏. ساب لود می‌شود ولی کلاینت وصل نمی‌شود؟ پورت‌های سرور یا کلیدهای ‏REALITY/WireGuard‏. پسورد گم شد؟ فقط دیتابیس تازه + برگرداندن بکاپ.",
+    "zh": "被锁定（尝试过多）？等 15 分钟或重启面板。所有订阅 404？先查过期/流量/状态，再查域名/端口，再查防火墙。SSL 失败？DNS 必须指向本机 + 80 端口空闲 + 装好 certbot。订阅能加载但连不上？服务器端口或 REALITY/WireGuard 密钥。忘记密码？只能全新数据库 + 恢复备份。",
+    "ru": "Локаут (много попыток)? Подожди 15 минут или рестартни панель. Сабы 404 у всех? Сначала expiry/трафик/статус, потом домен/порты, потом фаервол. SSL падает? DNS должен смотреть сюда + порт 80 свободен + certbot. Саб грузится, а клиенты нет? Порты сервера или ключи REALITY/WireGuard. Потерял пароль? Только свежая БД + восстановление из бэкапа."
   },
   {
     "id": "support",
@@ -109,6 +226,13 @@
     "keywords": "support help contact ask question community human پشتیبانی کمک تماس سوال",
     "text": "Fastest channels: FAQ first, then GitHub Discussions (usage), Issues (bugs with repro steps), Security Advisories (private vuln reports). Before asking: panel version, journalctl -u zefira lines, what you tried. Never post tokens, passwords, backups or secret.key.",
     "fa": "اول FAQ، بعد Discussions (سوال)، Issues (باگ با steps)، آسیب‌پذیری فقط خصوصی. توکن/پسورد/بکاپ را هیچ‌جا پست نکن.",
-    "links": [{"label": "Support page", "href": "support.html"}]
+    "links": [
+      {
+        "label": "Support page",
+        "href": "support.html"
+      }
+    ],
+    "zh": "先看 FAQ,再去 Discussions(使用)、Issues(Bug 需复现步骤),漏洞只私下报告。别发令牌/密码/备份。",
+    "ru": "Сначала FAQ, потом Discussions (вопросы), Issues (баги с шагами), уязвимости — только приватно. Токены/пароли/бэкапы не пости."
   }
 ]

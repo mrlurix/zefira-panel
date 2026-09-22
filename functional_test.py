@@ -360,7 +360,8 @@ if uid:
     st, _, dshb = req("GET", f"/sub/{utok}", headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36"})
     dsh = dshb.decode("utf-8", "replace") if isinstance(dshb, bytes) else dshb
-    check("sub dashboard for browser", st == 200 and "fte_full" in dsh and "Last active" in dsh, f"got {st}")
+    check("sub dashboard for browser", st == 200 and "fte_full" in dsh and any(
+        marker in dsh for marker in ("Last active:", "آخرین فعالیت:", "上次活跃:", "Был(а):")), f"got {st}")
     st, _, _ = req("PATCH", f"/api/users/{uid}", json.dumps({"is_active": False}), AUTH)
     st, _, _ = req("GET", f"/sub/{utok}", headers={"User-Agent": "v2rayNG/1.9"})
     check("disabled user sub 404s", st == 404, f"got {st}")

@@ -7,87 +7,89 @@
 <meta name="referrer" content="no-referrer">
 <title>FAQ &amp; Troubleshooting — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1>FAQ <span class="z">&amp;</span> Troubleshooting</h1>
-<p class="subtitle">Fast answers to common problems.</p>
+<h1><span data-i18n="faq.titleA">FAQ</span> <span class="z">&amp;</span> <span data-i18n="faq.titleB">Troubleshooting</span></h1>
+<p class="subtitle" data-i18n="faq.subtitle">Fast answers to common problems.</p>
 
-<h2 id="login-access">Login &amp; access</h2>
-<div class="callout warn">LAN / tunnel mode (<code>start-lan.bat</code>) serves the panel over plain HTTP. Anyone on that network can sniff your session — only use it on networks you trust, or reach the panel through an encrypted SSH tunnel instead.</div>
-<h3 id="too-many-attempts-try-again-in-a-few-minutes">“Too many attempts, try again in a few minutes”</h3>
-<p>You (or someone) failed login 8+ times in 15 minutes. Wait, then log in carefully. If it persists with the right password, restart the panel service — in-memory counters reset: <code>systemctl restart zefira</code>.</p>
-<h3 id="password-lost">Password lost</h3>
-<p>SSH into the server and set a new one via environment + restart, or edit <code>ZEFIRA_ADMIN_PASSWORD</code> in <code>/opt/zefira/.env</code> — note this only applies to a <i>fresh</i> database. On an existing DB, stop the service, delete <code>instance/zefira.db</code> (you lose data — restore from backup after), and restart to trigger first-run creation.</p>
-<h3 id="api-returns-403-forbidden-on-post">API returns 403 “forbidden” on POST</h3>
-<p>You forgot the <code>X-Requested-With: XMLHttpRequest</code> header — the CSRF guard. Browsers using the panel send it automatically.</p>
+<h2 id="login-access" data-i18n="faq.loginAccess">Login &amp; access</h2>
+<div class="callout warn"><span data-i18n="faq.lanA">LAN / tunnel mode (</span><code>start-lan.bat</code><span data-i18n="faq.lanB">) serves the panel over plain HTTP. Anyone on that network can sniff your session — only use it on networks you trust, or reach the panel through an encrypted SSH tunnel instead.</span></div>
+<h3 id="too-many-attempts-try-again-in-a-few-minutes" data-i18n="faq.tooMany">“Too many attempts, try again in a few minutes”</h3>
+<p><span data-i18n="faq.tooManyT">You (or someone) failed login 8+ times in 15 minutes. Wait, then log in carefully. If it persists with the right password, restart the panel service — in-memory counters reset:</span> <code>systemctl restart zefira</code>.</p>
+<h3 id="password-lost" data-i18n="faq.pwLost">Password lost</h3>
+<p><span data-i18n="faq.pwLostA">SSH into the server and set a new one via environment + restart, or edit</span> <code>ZEFIRA_ADMIN_PASSWORD</code> <span data-i18n="faq.pwLostB">in</span> <code>/opt/zefira/.env</code> <span data-i18n="faq.pwLostC">— note this only applies to a</span> <i data-i18n="faq.pwLostFresh">fresh</i> <span data-i18n="faq.pwLostD">database. On an existing DB, stop the service, delete</span> <code>instance/zefira.db</code> <span data-i18n="faq.pwLostE">(you lose data — restore from backup after), and restart to trigger first-run creation.</span></p>
+<h3 id="api-returns-403-forbidden-on-post" data-i18n="faq.api403">API returns 403 “forbidden” on POST</h3>
+<p><span data-i18n="faq.api403A">You forgot the</span> <code>X-Requested-With: XMLHttpRequest</code> <span data-i18n="faq.api403B">header — the CSRF guard. Browsers using the panel send it automatically.</span></p>
 
-<h2 id="panel-not-responding">Panel not responding</h2>
+<h2 id="panel-not-responding" data-i18n="faq.panelDown">Panel not responding</h2>
 <pre>systemctl status zefira
 journalctl -u zefira -n 100 --no-pager
 curl -fsS http://127.0.0.1:8000/login && echo PANEL-UP
 ss -tlnp | grep 8000</pre>
-<p>If the port is taken, another copy is already running — stop it before starting a new one.</p>
+<p data-i18n="faq.portTaken">If the port is taken, another copy is already running — stop it before starting a new one.</p>
 
-<h2 id="subscriptions-show-404-for-everyone">Subscriptions show 404 for everyone</h2>
+<h2 id="subscriptions-show-404-for-everyone" data-i18n="faq.subs404">Subscriptions show 404 for everyone</h2>
 <ul>
-  <li> Tokens rotate on <b>Reset token</b> — resend the new link.</li>
-  <li>Check the user is active, not expired and not out of volume.</li>
-  <li>If you renamed <code>SUBSCRIPTION_PATH</code>, old <code>/sub/…</code> links stop working.</li>
+  <li><span data-i18n="faq.subs404A">Tokens rotate on</span> <b data-i18n="faq.resetToken">Reset token</b> <span data-i18n="faq.subs404B">— resend the new link.</span></li>
+  <li data-i18n="faq.subs404C">Check the user is active, not expired and not out of volume.</li>
+  <li><span data-i18n="faq.subs404D">If you renamed</span> <code>SUBSCRIPTION_PATH</code><span data-i18n="faq.subs404E">, old</span> <code>/sub/…</code> <span data-i18n="faq.subs404F">links stop working.</span></li>
 </ul>
 
-<h2 id="ssl-fails">SSL fails</h2>
+<h2 id="ssl-fails" data-i18n="faq.sslFails">SSL fails</h2>
 <ul>
-  <li>Port 80 must be free and the domain's DNS must point at the server.</li>
-  <li>Let's Encrypt rate-limits repeated issuance — wait an hour and retry.</li>
-  <li>Behind Nginx, make sure the HTTP vhost exists before issuing.</li>
+  <li data-i18n="faq.sslA">Port 80 must be free and the domain's DNS must point at the server.</li>
+  <li data-i18n="faq.sslB">Let's Encrypt rate-limits repeated issuance — wait an hour and retry.</li>
+  <li data-i18n="faq.sslC">Behind Nginx, make sure the HTTP vhost exists before issuing.</li>
 </ul>
 
-<h2 id="clients-can-t-connect-but-the-sub-link-loads">Clients can't connect but the sub link loads</h2>
+<h2 id="clients-can-t-connect-but-the-sub-link-loads" data-i18n="faq.clientsTitle">Clients can't connect but the sub link loads</h2>
 <ul>
-  <li>Open the VPN ports on the firewall (<code>ufw allow 443/tcp</code>, plus inbound / Hy2 / WG ports).</li>
-  <li>Verify <b>Settings → Server</b> domain/ports match reality, and the REALITY public key is generated.</li>
-  <li>WireGuard shows a warning comment until you paste the server's public key in Settings.</li>
+  <li><span data-i18n="faq.clientsA">Open the VPN ports on the firewall (</span><code>ufw allow 443/tcp</code><span data-i18n="faq.clientsB">, plus inbound / Hy2 / WG ports).</span></li>
+  <li><span data-i18n="faq.clientsC">Verify</span> <b data-i18n="faq.settingsServer">Settings → Server</b> <span data-i18n="faq.clientsD">domain/ports match reality, and the REALITY public key is generated.</span></li>
+  <li data-i18n="faq.clientsE">WireGuard shows a warning comment until you paste the server's public key in Settings.</li>
 </ul>
 
-<h2 id="do-i-have-to-pay-for-any-of-this">Do I have to pay for any of this?</h2>
-<p>No. Zefira is MIT-licensed, the docs site is plain static files in this repo, and GitHub Pages hosting is free. Let's Encrypt certificates are free too.</p>
+<h2 id="do-i-have-to-pay-for-any-of-this" data-i18n="faq.payTitle">Do I have to pay for any of this?</h2>
+<p data-i18n="faq.payText">No. Zefira is MIT-licensed, the docs site is plain static files in this repo, and GitHub Pages hosting is free. Let's Encrypt certificates are free too.</p>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

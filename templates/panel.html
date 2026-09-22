@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="{{ lang }}" dir="{{ direction }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,109 +14,110 @@
   <aside class="sidebar">
     <div class="brand">
       <img src="/static/logo.png" alt="" width="40" height="40" class="logo-round">
-      <div class="brand-text"><strong data-brand>ZEFIRA</strong><small>Admin Panel</small></div>
+      <div class="brand-text"><strong data-brand>ZEFIRA</strong><small data-i18n="brand.adminPanel">Admin Panel</small></div>
     </div>
 
     <nav class="nav">
-      <button class="nav-btn active" data-section="dashboard" data-title="Dashboard">
+      <button class="nav-btn active" data-section="dashboard" data-title-key="title.dashboard">
         <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>
-        <span>Dashboard</span>
+        <span data-i18n="nav.dashboard">Dashboard</span>
       </button>
-      <button class="nav-btn" data-section="users" data-title="Users">
+      <button class="nav-btn" data-section="users" data-title-key="title.users">
         <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M17 3.5a4 4 0 0 1 0 9"/><path d="M19.5 14.5c1.5 1.2 2.5 3 2.5 6.5"/></svg>
-        <span>Users</span>
+        <span data-i18n="nav.users">Users</span>
       </button>
-      <button class="nav-btn" data-section="inbounds" data-title="Inbounds">
+      <button class="nav-btn" data-section="inbounds" data-title-key="title.inbounds">
         <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><rect x="3" y="19" width="18" height="2" rx="1"/></svg>
-        <span>Inbounds</span>
+        <span data-i18n="nav.inbounds">Inbounds</span>
       </button>
-      <button class="nav-btn" data-section="tunnels" data-title="BackPack Tunnels">
+      <button class="nav-btn" data-section="tunnels" data-title-key="title.tunnels">
         <svg viewBox="0 0 24 24"><path d="M17.5 19a4.5 4.5 0 1 0-4.4-5.5"/><circle cx="9" cy="9" r="6"/><path d="M6.5 9h5"/><path d="M9 6.5v5"/></svg>
-        <span>Tunnels</span>
+        <span data-i18n="nav.tunnels">Tunnels</span>
       </button>
-      <button class="nav-btn" data-section="nodes" data-title="Server Nodes">
+      <button class="nav-btn" data-section="nodes" data-title-key="title.nodes">
         <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>
-        <span>Nodes</span>
+        <span data-i18n="nav.nodes">Nodes</span>
       </button>
-      <button class="nav-btn" data-section="reality" data-title="Anti-Censorship">
+      <button class="nav-btn" data-section="reality" data-title-key="title.reality">
         <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-        <span>Anti-Censorship</span>
+        <span data-i18n="nav.reality">Anti-Censorship</span>
       </button>
-      <button class="nav-btn" data-section="blocker" data-title="Content Filter">
+      <button class="nav-btn" data-section="blocker" data-title-key="title.blocker">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
-        <span>Site Blocker</span>
+        <span data-i18n="nav.blocker">Site Blocker</span>
       </button>
-      <button class="nav-btn" data-section="update" data-title="Panel Update">
+      <button class="nav-btn" data-section="update" data-title-key="title.update">
         <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
-        <span>Update</span>
+        <span data-i18n="nav.update">Update</span>
       </button>
-      <button class="nav-btn" data-section="customize" data-title="Personalize">
+      <button class="nav-btn" data-section="customize" data-title-key="title.customize">
         <svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 1 9-9c0 3-2 4.5-3.5 4.5h-2a2 2 0 0 0-1.5 3.3c.5.6-.3 1.2-2 1.2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
-        <span>Personalize</span>
+        <span data-i18n="nav.customize">Personalize</span>
       </button>
-      <button class="nav-btn" data-section="settings" data-title="Settings & Security">
+      <button class="nav-btn" data-section="settings" data-title-key="title.settings">
         <svg viewBox="0 0 24 24"><path d="M4 6h16"/><circle cx="9" cy="6" r="2.5"/><path d="M4 12h16"/><circle cx="15" cy="12" r="2.5"/><path d="M4 18h16"/><circle cx="7" cy="18" r="2.5"/></svg>
-        <span>Settings</span>
+        <span data-i18n="nav.settings">Settings</span>
       </button>
     </nav>
 
-    <a class="logout-btn" href="https://mrlurix.github.io/zefira-panel/" target="_blank" rel="noopener" title="Open documentation website">
+    <a class="logout-btn" href="https://mrlurix.github.io/zefira-panel/" target="_blank" rel="noopener" data-i18n-title="nav.website" title="Open documentation website">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      <span>Website</span>
+      <span data-i18n="nav.website">Website</span>
     </a>
     <button id="logout-btn" class="logout-btn">
       <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
-      <span>Sign out</span>
+      <span data-i18n="nav.signout">Sign out</span>
     </button>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <h1 id="page-title">Dashboard</h1>
+      <h1 id="page-title" data-i18n="title.dashboard">Dashboard</h1>
       <div class="admin-chip">
         <span class="pulse-dot"></span>
         <span id="admin-name">&hellip;</span>
       </div>
+      <span id="lang-mount"></span>
     </header>
 
     <section id="section-dashboard" class="section active">
       <div class="stats-grid">
         <article class="stat-card red">
           <div class="stat-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M17 3.5a4 4 0 0 1 0 9"/></svg></div>
-          <div><b id="s-total">0</b><span>Total users</span></div>
+          <div><b id="s-total">0</b><span data-i18n="dash.totalUsers">Total users</span></div>
         </article>
         <article class="stat-card green">
           <div class="stat-icon"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
-          <div><b id="s-active">0</b><span>Active</span><small id="s-soon"></small></div>
+          <div><b id="s-active">0</b><span data-i18n="dash.active">Active</span><small id="s-soon"></small></div>
         </article>
         <article class="stat-card orange">
           <div class="stat-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
-          <div><b id="s-expired">0</b><span>Expired</span></div>
+          <div><b id="s-expired">0</b><span data-i18n="dash.expired">Expired</span></div>
         </article>
         <article class="stat-card gray">
           <div class="stat-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M6 6l12 12"/></svg></div>
-          <div><b id="s-disabled">0</b><span>Disabled</span></div>
+          <div><b id="s-disabled">0</b><span data-i18n="dash.disabled">Disabled</span></div>
         </article>
         <article class="stat-card red wide">
           <div class="stat-icon"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></div>
-          <div><b id="s-volume">0 GB</b><span>Total sold volume</span><small id="s-used"></small></div>
+          <div><b id="s-volume">0 GB</b><span data-i18n="dash.soldVolume">Total sold volume</span><small id="s-used"></small></div>
         </article>
       </div>
 
       <div class="card" id="sys-card">
-        <div class="card-head"><h2>System Status</h2><small id="sys-uptime" class="muted"></small></div>
+        <div class="card-head"><h2 data-i18n="dash.sysStatus">System Status</h2><small id="sys-uptime" class="muted"></small></div>
         <div class="sys-bars">
-          <div class="sys-row"><span>CPU</span><div class="bar big"><div class="fill" id="bar-cpu"></div></div><b id="val-cpu">&mdash;</b></div>
-          <div class="sys-row"><span>Memory</span><div class="bar big"><div class="fill" id="bar-mem"></div></div><b id="val-mem">&mdash;</b></div>
-          <div class="sys-row"><span>Disk</span><div class="bar big"><div class="fill" id="bar-disk"></div></div><b id="val-disk">&mdash;</b></div>
+          <div class="sys-row"><span data-i18n="dash.cpu">CPU</span><div class="bar big"><div class="fill" id="bar-cpu"></div></div><b id="val-cpu">&mdash;</b></div>
+          <div class="sys-row"><span data-i18n="dash.memory">Memory</span><div class="bar big"><div class="fill" id="bar-mem"></div></div><b id="val-mem">&mdash;</b></div>
+          <div class="sys-row"><span data-i18n="dash.disk">Disk</span><div class="bar big"><div class="fill" id="bar-disk"></div></div><b id="val-disk">&mdash;</b></div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h2>Latest Users</h2><button class="btn btn-ghost btn-sm" data-goto="users">View all</button></div>
+        <div class="card-head"><h2 data-i18n="dash.latestUsers">Latest Users</h2><button class="btn btn-ghost btn-sm" data-goto="users" data-i18n="dash.viewAll">View all</button></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>User</th><th>Protocols</th><th>Volume</th><th>Expires</th><th>Status</th></tr></thead>
+            <thead><tr><th data-i18n="dash.thUser">User</th><th data-i18n="dash.thProto">Protocols</th><th data-i18n="dash.thVolume">Volume</th><th data-i18n="dash.thExpires">Expires</th><th data-i18n="dash.thStatus">Status</th></tr></thead>
             <tbody id="recent-tbody"></tbody>
           </table>
         </div>
@@ -127,18 +128,18 @@
       <div class="toolbar">
         <div class="search-box has-icon">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
-          <input type="search" id="search" placeholder="Search by username or note...">
+          <input type="search" id="search" data-i18n-ph="users.searchPh" placeholder="Search by username or note...">
         </div>
         <select id="sort-sel" class="mw-190">
-          <option value="newest">Sort: Newest</option>
-          <option value="expiry">Sort: Nearest expiry</option>
-          <option value="usage">Sort: Most used</option>
-          <option value="name">Sort: Name</option>
+          <option value="newest" data-i18n="users.sortNewest">Sort: Newest</option>
+          <option value="expiry" data-i18n="users.sortExpiry">Sort: Nearest expiry</option>
+          <option value="usage" data-i18n="users.sortUsage">Sort: Most used</option>
+          <option value="name" data-i18n="users.sortName">Sort: Name</option>
         </select>
-        <button id="export-csv-btn" class="btn btn-ghost btn-sm" title="Export users.csv">Export CSV</button>
+        <button id="export-csv-btn" class="btn btn-ghost btn-sm" title="Export users.csv" data-i18n="users.exportCsv">Export CSV</button>
         <button id="add-user-btn" class="btn btn-primary">
           <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          Add User
+          <span data-i18n="users.addUser">Add User</span>
         </button>
       </div>
 
@@ -147,15 +148,15 @@
           <table id="users-table">
             <thead>
               <tr>
-                <th>Status</th><th>User / Protocols</th><th>Note</th><th>Usage</th>
-                <th>Expiry</th><th>Actions</th>
+                <th data-i18n="users.thStatus">Status</th><th data-i18n="users.thUserProto">User / Protocols</th><th data-i18n="users.thNote">Note</th><th data-i18n="users.thUsage">Usage</th>
+                <th data-i18n="users.thExpiry">Expiry</th><th data-i18n="users.thActions">Actions</th>
               </tr>
             </thead>
             <tbody id="users-tbody"></tbody>
           </table>
         </div>
         <div id="empty-state" class="empty-state hidden">
-          <p>No users found.</p>
+          <p data-i18n="users.empty">No users found.</p>
         </div>
       </div>
     </section>
@@ -163,7 +164,7 @@
 ﻿    <section id="section-inbounds" class="section">
       <div class="toolbar">
         <div class="search-box mw-140">
-          <input type="text" id="ib-name" placeholder="name" spellcheck="false">
+          <input type="text" id="ib-name" data-i18n-ph="ib.namePh" placeholder="name" spellcheck="false">
         </div>
         <select id="ib-proto" class="mw-180">
           <option value="vless">VLESS</option>
@@ -174,29 +175,29 @@
           <option value="hysteria2">Hysteria2</option>
         </select>
         <div class="search-box mw-120">
-          <input type="number" id="ib-port" placeholder="port" min="1" max="65535">
+          <input type="number" id="ib-port" data-i18n-ph="ib.portPh" placeholder="port" min="1" max="65535">
         </div>
         <div class="search-box flex-1">
-          <input type="text" id="ib-host" placeholder="Host / domain override (optional)" spellcheck="false">
+          <input type="text" id="ib-host" data-i18n-ph="ib.hostPh" placeholder="Host / domain override (optional)" spellcheck="false">
         </div>
         <select id="ib-node" class="mw-140" title="Server node (optional)">
-          <option value="">Local panel</option>
+          <option value="" data-i18n="ib.localPanel">Local panel</option>
         </select>
         <button id="ib-add-btn" class="btn btn-primary">
           <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          Add Inbound
+          <span data-i18n="ib.addBtn">Add Inbound</span>
         </button>
       </div>
 
       <div class="card">
-        <p class="hint mt-0-mb-12">Each enabled inbound adds an extra endpoint for user configs of the same protocol (Marzban-style multi-inbound). With no inbounds defined, the global ports from Server Settings are used.</p>
+        <p class="hint mt-0-mb-12" data-i18n="ib.hint">Each enabled inbound adds an extra endpoint for user configs of the same protocol (Marzban-style multi-inbound). With no inbounds defined, the global ports from Server Settings are used.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Protocol</th><th>Port</th><th>Host override</th><th>Node</th><th>Enabled</th><th>Actions</th></tr></thead>
+            <thead><tr><th data-i18n="ib.thName">Name</th><th data-i18n="ib.thProto">Protocol</th><th data-i18n="ib.thPort">Port</th><th data-i18n="ib.thHost">Host override</th><th data-i18n="ib.thNode">Node</th><th data-i18n="ib.thEnabled">Enabled</th><th data-i18n="ib.thActions">Actions</th></tr></thead>
             <tbody id="inbounds-tbody"></tbody>
           </table>
         </div>
-        <div id="ib-empty" class="empty-state hidden"><p>No custom inbounds &#8212; global settings apply.</p></div>
+        <div id="ib-empty" class="empty-state hidden"><p data-i18n="ib.empty">No custom inbounds — global settings apply.</p></div>
       </div>
     </section>
 
@@ -204,22 +205,22 @@
     <section id="section-blocker" class="section">
       <div class="settings-grid">
         <div class="card form-card">
-          <div class="card-head"><h2>Porn Blocker</h2></div>
-          <p class="hint mt-0">Block all major porn sites for every user. When enabled, Clash configs get extra <code>REJECT</code> rules and the panel shows the preset count.</p>
-          <label class="proto-check wide"><input type="checkbox" id="porn-toggle"><span>Enable porn blocking</span></label>
+          <div class="card-head"><h2 data-i18n="blocker.pornTitle">Porn Blocker</h2></div>
+          <p class="hint mt-0"><span data-i18n="blocker.pornHintA">Block all major porn sites for every user. When enabled, Clash configs get extra</span> <code>REJECT</code> <span data-i18n="blocker.pornHintB">rules and the panel shows the preset count.</span></p>
+          <label class="proto-check wide"><input type="checkbox" id="porn-toggle"><span data-i18n="blocker.pornToggle">Enable porn blocking</span></label>
           <p class="hint" id="porn-count"></p>
         </div>
         <div class="card form-card">
-          <div class="card-head"><h2>Custom Blocked Sites</h2></div>
-          <p class="hint mt-0">Add any domain to block (e.g. <code>example.com</code>). It will be added to Clash configs as <code>DOMAIN-SUFFIX,example.com,REJECT</code>.</p>
+          <div class="card-head"><h2 data-i18n="blocker.customTitle">Custom Blocked Sites</h2></div>
+          <p class="hint mt-0" data-i18n="blocker.customHint">Add any domain to block (e.g. example.com). It will be added to Clash configs as DOMAIN-SUFFIX,example.com,REJECT.</p>
           <div class="field-row">
             <div class="search-box flex-1">
-              <input type="text" id="block-domain" placeholder="example.com" spellcheck="false">
+              <input type="text" id="block-domain" data-i18n-ph="blocker.domainPh" placeholder="example.com" spellcheck="false">
             </div>
-            <button id="block-add-btn" class="btn btn-primary">Block Site</button>
+            <button id="block-add-btn" class="btn btn-primary" data-i18n="blocker.blockBtn">Block Site</button>
           </div>
           <ul class="audit-list" id="block-list"></ul>
-          <div id="block-empty" class="empty-state hidden"><p>No custom blocked sites.</p></div>
+          <div id="block-empty" class="empty-state hidden"><p data-i18n="blocker.empty">No custom blocked sites.</p></div>
         </div>
       </div>
     </section>
@@ -228,27 +229,27 @@
       <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>Anti-Censorship / REALITY</h2></div>
-          <p class="hint mt-0">Generate an X25519 REALITY keypair. Put the private key into your server's Xray config; the panel embeds the public key inside every VLESS-REALITY link automatically. REALITY masquerades as normal TLS traffic to real websites &mdash; extremely resistant to DPI blocking.</p>
+          <div class="card-head"><h2 data-i18n="reality.title">Anti-Censorship / REALITY</h2></div>
+          <p class="hint mt-0" data-i18n="reality.hint">Generate an X25519 REALITY keypair. Put the private key into your server's Xray config; the panel embeds the public key inside every VLESS-REALITY link automatically. REALITY masquerades as normal TLS traffic to real websites — extremely resistant to DPI blocking.</p>
           <div class="field-row">
-            <label class="field"><span>REALITY port</span><input type="number" name="reality_port" min="1" max="65535"></label>
-            <label class="field"><span>Masquerade SNI list (comma separated)</span><input type="text" name="reality_sni" placeholder="www.yahoo.com,www.samsung.com"></label>
+            <label class="field"><span data-i18n="reality.port">REALITY port</span><input type="number" name="reality_port" min="1" max="65535"></label>
+            <label class="field"><span data-i18n="reality.sniList">Masquerade SNI list (comma separated)</span><input type="text" name="reality_sni" placeholder="www.yahoo.com,www.samsung.com"></label>
           </div>
           <div class="reality-actions">
-            <button type="button" id="reality-gen-btn" class="btn btn-primary">Generate New Keypair</button>
-            <button type="button" id="reality-reveal-btn" class="btn btn-ghost">Reveal Private Key</button>
+            <button type="button" id="reality-gen-btn" class="btn btn-primary" data-i18n="reality.genBtn">Generate New Keypair</button>
+            <button type="button" id="reality-reveal-btn" class="btn btn-ghost" data-i18n="reality.revealBtn">Reveal Private Key</button>
           </div>
           <div id="reality-out" class="hidden">
-            <label class="field"><span>Public Key (embedded in links)</span><textarea id="reality-pub" readonly rows="2"></textarea></label>
-            <label class="field"><span>Private Key (for your Xray server config &mdash; keep secret!)</span><textarea id="reality-priv" readonly rows="2"></textarea></label>
-            <button type="button" id="reality-copy-btn" class="btn btn-sm btn-ghost">Copy Both Keys</button>
+            <label class="field"><span data-i18n="reality.pubLabel">Public Key (embedded in links)</span><textarea id="reality-pub" readonly rows="2"></textarea></label>
+            <label class="field"><span data-i18n="reality.privLabel">Private Key (for your Xray server config — keep secret!)</span><textarea id="reality-priv" readonly rows="2"></textarea></label>
+            <button type="button" id="reality-copy-btn" class="btn btn-sm btn-ghost" data-i18n="reality.copyBoth">Copy Both Keys</button>
           </div>
           <hr class="sep">
-          <p class="hint mt-0"><b>CDN SNI Spoofing</b> — when enabled, the SNI in configs becomes the CDN domain instead of your server. Traffic still goes to your obfuscated host, but DPI sees CDN's SNI.</p>
-          <label class="proto-check wide"><input type="checkbox" name="cdn_enabled"><span>Enable CDN SNI Spoofing</span></label>
-          <label class="field"><span>CDN SNI</span>
+          <p class="hint mt-0"><b data-i18n="reality.cdnTitle">CDN SNI Spoofing</b> <span data-i18n="reality.cdnHint">— when enabled, the SNI in configs becomes the CDN domain instead of your server. Traffic still goes to your obfuscated host, but DPI sees CDN's SNI.</span></p>
+          <label class="proto-check wide"><input type="checkbox" name="cdn_enabled"><span data-i18n="reality.cdnToggle">Enable CDN SNI Spoofing</span></label>
+          <label class="field"><span data-i18n="reality.cdnLabel">CDN SNI</span>
             <select id="cdn-preset" class="mb-8">
-              <option value="">Custom...</option>
+              <option value="" data-i18n="reality.customOpt">Custom...</option>
               <option value="www.cloudflare.com">Cloudflare — www.cloudflare.com</option>
               <option value="www.fastly.com">Fastly — www.fastly.com</option>
               <option value="www.akamaized.net">Akamai — www.akamaized.net</option>
@@ -256,7 +257,7 @@
             </select>
             <input type="text" name="cdn_sni" placeholder="www.cloudflare.com" spellcheck="false">
           </label>
-          <button type="button" id="save-reality-btn" class="btn btn-primary mt-10">Save Anti-Censorship Settings</button>
+          <button type="button" id="save-reality-btn" class="btn btn-primary mt-10" data-i18n="reality.saveBtn">Save Anti-Censorship Settings</button>
         </div>
 
       </div>
@@ -267,11 +268,11 @@
       <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>Remote Access &amp; Tunneling</h2></div>
-          <p class="hint mt-0">Reach the panel through a normal or reverse tunnel (SSH, socat, gost, realm). Set your public URL so subscription links &amp; QR codes stay correct behind any tunnel. Only list proxy IPs in Trusted Proxies &mdash; they are the ONLY addresses allowed to set X-Forwarded-For.</p>
-          <label class="field"><span>Public base URL (used in sub links / QR)</span><input type="text" id="tunnel-public-url" placeholder="https://panel.example.com" spellcheck="false"></label>
-          <label class="field"><span>Trusted proxies (IP/CIDR, comma separated)</span><input type="text" id="tunnel-trusted" placeholder="10.0.0.5, 192.168.1.0/24"></label>
-          <button type="button" id="tunnel-save-btn" class="btn btn-primary btn-block">Save Tunnel Settings</button>
+          <div class="card-head"><h2 data-i18n="tunnels.remoteTitle">Remote Access &amp; Tunneling</h2></div>
+          <p class="hint mt-0" data-i18n="tunnels.remoteHint">Reach the panel through a normal or reverse tunnel (SSH, socat, gost, realm). Set your public URL so subscription links &amp; QR codes stay correct behind any tunnel. Only list proxy IPs in Trusted Proxies &mdash; they are the ONLY addresses allowed to set X-Forwarded-For.</p>
+          <label class="field"><span data-i18n="tunnels.pubUrl">Public base URL (used in sub links / QR)</span><input type="text" id="tunnel-public-url" placeholder="https://panel.example.com" spellcheck="false"></label>
+          <label class="field"><span data-i18n="tunnels.trustedProxies">Trusted proxies (IP/CIDR, comma separated)</span><input type="text" id="tunnel-trusted" placeholder="10.0.0.5, 192.168.1.0/24"></label>
+          <button type="button" id="tunnel-save-btn" class="btn btn-primary btn-block" data-i18n="tunnels.saveBtn">Save Tunnel Settings</button>
           <hr class="sep">
           <ul class="sec-list mt-0">
             <li>Normal tunnel: SSH -L forwards a local port to the panel on the server</li>
@@ -281,10 +282,10 @@
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>BackPack Tunnel Nodes</h2></div>
-          <p class="hint mt-0">Manage <b>BackPack</b> reverse tunnels (Iran &harr; Kharej) from here. Create a tunnel, download the setup guide with the secure token, run the wizard answers on both servers, then press <b>Check now</b> to see if the Iran side is reachable. Get BackPack: <span dir="ltr">github.com/AminMGMT/BackPack</span></p>
+          <div class="card-head"><h2 data-i18n="tunnels.backpackTitle">BackPack Tunnel Nodes</h2></div>
+          <p class="hint mt-0" data-i18n="tunnels.backpackHint">Manage BackPack reverse tunnels (Iran ⇄ Kharej) from here. Create a tunnel, download the setup guide with the secure token, run the wizard answers on both servers, then press Check now to see if the Iran side is reachable.</p>
           <div class="field-row">
-            <label class="field"><span>Tunnel name</span><input type="text" id="node-name" placeholder="My Tunnel" maxlength="40"></label>
+            <label class="field"><span data-i18n="tunnels.tunnelName">Tunnel name</span><input type="text" id="node-name" placeholder="My Tunnel" maxlength="40"></label>
             <label class="field"><span>Transport</span>
               <select id="node-transport">
                 <option value="tcp">TCP (start here)</option>
@@ -303,15 +304,15 @@
             </label>
           </div>
           <div class="field-row">
-            <label class="field"><span>Iran server IP/Domain</span><input type="text" id="node-iran" placeholder="5.6.7.8" spellcheck="false"></label>
-            <label class="field"><span>Kharej server IP/Domain</span><input type="text" id="node-kharej" placeholder="1.2.3.4" spellcheck="false"></label>
+            <label class="field"><span data-i18n="tunnels.iranIp">Iran server IP/Domain</span><input type="text" id="node-iran" placeholder="5.6.7.8" spellcheck="false"></label>
+            <label class="field"><span data-i18n="tunnels.kharejIp">Kharej server IP/Domain</span><input type="text" id="node-kharej" placeholder="1.2.3.4" spellcheck="false"></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>Tunnel port</span><input type="number" id="node-tport" min="1" max="65535" value="443"></label>
-            <label class="field"><span>Forwarded ports (iran:kharej)</span><input type="text" id="node-fports" placeholder="443:8000, 80:8080" spellcheck="false"></label>
+            <label class="field"><span data-i18n="tunnels.tunnelPort">Tunnel port</span><input type="number" id="node-tport" min="1" max="65535" value="443"></label>
+            <label class="field"><span data-i18n="tunnels.fwdPorts">Forwarded ports (iran:kharej)</span><input type="text" id="node-fports" placeholder="443:8000, 80:8080" spellcheck="false"></label>
           </div>
-          <label class="proto-check wide"><input type="checkbox" id="node-udp"><span>Forward UDP too (WireGuard, DNS, games)</span></label>
-          <button type="button" id="node-create-btn" class="btn btn-primary btn-block">Create Tunnel + Get Guide</button>
+          <label class="proto-check wide"><input type="checkbox" id="node-udp"><span data-i18n="tunnels.fwdUdp">Forward UDP too (WireGuard, DNS, games)</span></label>
+          <button type="button" id="node-create-btn" class="btn btn-primary btn-block" data-i18n="tunnels.createBtn">Create Tunnel + Get Guide</button>
           <ul class="audit-list" id="nodes-list"></ul>
         </div>
 
@@ -323,23 +324,23 @@
       <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>Register Server</h2></div>
-          <p class="hint mt-0">Add a remote VPN server. The panel probes it every 5 minutes (plus on demand) and shows latency + uptime. Pin inbounds to a node and its links vanish from subscriptions while it is offline.</p>
+          <div class="card-head"><h2 data-i18n="nodes.regTitle">Register Server</h2></div>
+          <p class="hint mt-0" data-i18n="nodes.regHint">Add a remote VPN server. The panel probes it every 5 minutes (plus on demand) and shows latency + uptime. Pin inbounds to a node and its links vanish from subscriptions while it is offline.</p>
           <div class="field-row">
-            <label class="field"><span>Node name</span><input type="text" id="snode-name" placeholder="Germany 1" maxlength="40"></label>
-            <label class="field"><span>Address (IP or domain)</span><input type="text" id="snode-addr" placeholder="vpn2.example.com" spellcheck="false"></label>
+            <label class="field"><span data-i18n="nodes.nodeName">Node name</span><input type="text" id="snode-name" placeholder="Germany 1" maxlength="40"></label>
+            <label class="field"><span data-i18n="nodes.address">Address (IP or domain)</span><input type="text" id="snode-addr" placeholder="vpn2.example.com" spellcheck="false"></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>Check port</span><input type="number" id="snode-port" min="1" max="65535" value="443"></label>
-            <label class="field"><span>Note (optional)</span><input type="text" id="snode-note" maxlength="200" placeholder="Hetzner, 4 vCPU"></label>
+            <label class="field"><span data-i18n="nodes.checkPort">Check port</span><input type="number" id="snode-port" min="1" max="65535" value="443"></label>
+            <label class="field"><span data-i18n="nodes.noteOpt">Note (optional)</span><input type="text" id="snode-note" maxlength="200" placeholder="Hetzner, 4 vCPU"></label>
           </div>
-          <button type="button" id="snode-create-btn" class="btn btn-primary btn-block">Add Server Node</button>
+          <button type="button" id="snode-create-btn" class="btn btn-primary btn-block" data-i18n="nodes.addBtn">Add Server Node</button>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>Servers</h2><button type="button" class="icon-btn" id="snodes-refresh">&#8635;</button></div>
+          <div class="card-head"><h2 data-i18n="nodes.serversTitle">Servers</h2><button type="button" class="icon-btn" id="snodes-refresh">&#8635;</button></div>
           <ul class="audit-list" id="snodes-list"></ul>
-          <p class="hint">Tip: assign an inbound to a node from the Inbounds section (per-row dropdown). Unassigned inbounds always stay in links.</p>
+          <p class="hint" data-i18n="nodes.tip">Tip: assign an inbound to a node from the Inbounds section (per-row dropdown). Unassigned inbounds always stay in links.</p>
         </div>
 
       </div>
@@ -348,18 +349,18 @@
     <section id="section-update" class="section">      <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>Panel Update</h2><span class="badge proto" id="update-badge">unknown</span></div>
-          <p class="hint mt-0" id="update-summary">Check GitHub for new commits, review what changed, then update this server in one click.</p>
+          <div class="card-head"><h2 data-i18n="update.title">Panel Update</h2><span class="badge proto" id="update-badge">unknown</span></div>
+          <p class="hint mt-0" id="update-summary" data-i18n="update.summary">Check GitHub for new commits, review what changed, then update this server in one click.</p>
           <div class="reality-actions">
-            <button type="button" id="update-check-btn" class="btn btn-ghost">Check for updates</button>
-            <button type="button" id="update-now-btn" class="btn btn-primary hidden">Update now</button>
+            <button type="button" id="update-check-btn" class="btn btn-ghost" data-i18n="update.checkBtn">Check for updates</button>
+            <button type="button" id="update-now-btn" class="btn btn-primary hidden" data-i18n="update.updateBtn">Update now</button>
           </div>
-          <p class="hint">Update pulls <span class="mono" id="update-repo">mrlurix/zefira-panel</span>, reinstalls dependencies and restarts the panel. Refused if you have local changes.</p>
+          <p class="hint"><span data-i18n="update.dlHintA">Update pulls</span> <span class="mono" id="update-repo">mrlurix/zefira-panel</span><span data-i18n="update.dlHintB">, reinstalls dependencies and restarts the panel. Refused if you have local changes.</span></p>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>What's new</h2></div>
-          <ul class="audit-list" id="update-changelog"><li class="muted">Press “Check for updates”.</li></ul>
+          <div class="card-head"><h2 data-i18n="update.newTitle">What's new</h2></div>
+          <ul class="audit-list" id="update-changelog"><li class="muted" data-i18n="update.pressCheck">Press “Check for updates”.</li></ul>
         </div>
 
       </div>
@@ -370,35 +371,35 @@
       <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>Appearance &amp; Branding</h2></div>
-          <p class="hint mt-0">Recolor the panel and every user dashboard, rename the brand, and pin a message on all subscription pages. Empty color = default red-black.</p>
+          <div class="card-head"><h2 data-i18n="customize.appearanceTitle">Appearance &amp; Branding</h2></div>
+          <p class="hint mt-0" data-i18n="customize.appearanceHint">Recolor the panel and every user dashboard, rename the brand, and pin a message on all subscription pages. Empty color = default red-black.</p>
           <div class="field-row">
-            <label class="field"><span>Accent</span><input type="color" id="ap-accent" value="#ff2740"></label>
-            <label class="field"><span>Background</span><input type="color" id="ap-bg" value="#06060a"></label>
-            <label class="field"><span>Cards</span><input type="color" id="ap-card" value="#10101a"></label>
+            <label class="field"><span data-i18n="customize.accent">Accent</span><input type="color" id="ap-accent" value="#ff2740"></label>
+            <label class="field"><span data-i18n="customize.bg">Background</span><input type="color" id="ap-bg" value="#06060a"></label>
+            <label class="field"><span data-i18n="customize.cards">Cards</span><input type="color" id="ap-card" value="#10101a"></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>Text</span><input type="color" id="ap-text" value="#ececf2"></label>
-            <label class="field"><span>Muted text</span><input type="color" id="ap-muted" value="#8b8c9e"></label>
+            <label class="field"><span data-i18n="customize.text">Text</span><input type="color" id="ap-text" value="#ececf2"></label>
+            <label class="field"><span data-i18n="customize.muted">Muted text</span><input type="color" id="ap-muted" value="#8b8c9e"></label>
           </div>
-          <label class="field"><span>Brand name (empty = ZEFIRA)</span><input type="text" id="ap-brand" maxlength="24" placeholder="ZEFIRA" spellcheck="false"></label>
-          <label class="field"><span>Dashboard message (shown on every user page)</span><input type="text" id="ap-note" maxlength="300" placeholder="Support: @you"></label>
+          <label class="field"><span data-i18n="customize.brandName">Brand name (empty = ZEFIRA)</span><input type="text" id="ap-brand" maxlength="24" placeholder="ZEFIRA" spellcheck="false"></label>
+          <label class="field"><span data-i18n="customize.dashMsg">Dashboard message (shown on every user page)</span><input type="text" id="ap-note" maxlength="300" placeholder="Support: @you"></label>
           <div class="reality-actions">
-            <button type="button" id="ap-save-btn" class="btn btn-primary">Save Appearance</button>
-            <button type="button" id="ap-reset-btn" class="btn btn-ghost">Reset to defaults</button>
+            <button type="button" id="ap-save-btn" class="btn btn-primary" data-i18n="customize.saveBtn">Save Appearance</button>
+            <button type="button" id="ap-reset-btn" class="btn btn-ghost" data-i18n="customize.resetBtn">Reset to defaults</button>
           </div>
         </div>
 
 
         <div class="card form-card">
-          <div class="card-head"><h2>Menu Layout</h2></div>
-          <p class="hint mt-0">Reorder the left menu and hide sections you never use. Dashboard, Users, Inbounds, Personalize and Settings always stay.</p>
+          <div class="card-head"><h2 data-i18n="customize.menuTitle">Menu Layout</h2></div>
+          <p class="hint mt-0" data-i18n="customize.menuHint">Reorder the left menu and hide sections you never use. Dashboard, Users, Inbounds, Personalize and Settings always stay.</p>
           <ul class="audit-list" id="menu-layout-list"></ul>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>User Dashboard Layout</h2></div>
-          <p class="hint mt-0">Reorder or hide cards on every customer's subscription page.</p>
+          <div class="card-head"><h2 data-i18n="customize.dashLayoutTitle">User Dashboard Layout</h2></div>
+          <p class="hint mt-0" data-i18n="customize.dashLayoutHint">Reorder or hide cards on every customer's subscription page.</p>
           <ul class="audit-list" id="dash-layout-list"></ul>
         </div>
 
@@ -410,116 +411,116 @@
       <div class="settings-grid">
 
         <div class="card form-card">
-          <div class="card-head"><h2>AI Assistant</h2><span class="badge proto" id="ai-badge">off</span></div>
-          <p class="hint mt-0">Chat helper that knows this panel inside-out (answers panel questions only). <b>Groq</b> is the default (free, fast) — get a key at console.groq.com, pick a model like <code>qwen/qwen3.8-27b</code>, leave the base URL empty. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama also work.</p>
-          <label class="proto-check wide"><input type="checkbox" id="ai-enabled"><span>Enable AI assistant</span></label>
+          <div class="card-head"><h2 data-i18n="ai.title">AI Assistant</h2><span class="badge proto" id="ai-badge">off</span></div>
+          <p class="hint mt-0"><span data-i18n="ai.hintA">Chat helper that knows this panel inside-out (answers panel questions only).</span> <b>Groq</b> <span data-i18n="ai.hintB">is the default (free, fast) — get a key at console.groq.com, pick a model like</span> <code>qwen/qwen3.8-27b</code><span data-i18n="ai.hintC">, leave the base URL empty. OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama also work.</span></p>
+          <label class="proto-check wide"><input type="checkbox" id="ai-enabled"><span data-i18n="ai.enable">Enable AI assistant</span></label>
           <div class="field-row">
-            <label class="field"><span>Provider</span>
+            <label class="field"><span data-i18n="ai.provider">Provider</span>
               <select id="ai-provider">
-                <option value="groq">Groq (free, recommended)</option>
-                <option value="openai">OpenAI-compatible (OpenAI / DeepSeek / OpenRouter / Ollama…)</option>
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="gemini">Google (Gemini)</option>
+                <option value="groq" data-i18n="ai.provGroq">Groq (free, recommended)</option>
+                <option value="openai" data-i18n="ai.provOpenai">OpenAI-compatible (OpenAI / DeepSeek / OpenRouter / Ollama…)</option>
+                <option value="anthropic" data-i18n="ai.provAnthropic">Anthropic (Claude)</option>
+                <option value="gemini" data-i18n="ai.provGemini">Google (Gemini)</option>
               </select>
             </label>
-            <label class="field"><span>Model</span><input type="text" id="ai-model" maxlength="100" placeholder="qwen/qwen3.8-27b" spellcheck="false"></label>
+            <label class="field"><span data-i18n="ai.model">Model</span><input type="text" id="ai-model" maxlength="100" placeholder="qwen/qwen3.8-27b" spellcheck="false"></label>
           </div>
-          <label class="field"><span>API base URL (empty = Groq default https://api.groq.com/openai/v1; e.g. http://127.0.0.1:11434/v1 for Ollama)</span><input type="text" id="ai-base" maxlength="300" placeholder="https://api.groq.com/openai/v1" spellcheck="false"></label>
-          <label class="field"><span>API key (stored encrypted, empty = keep current)</span><input type="password" id="ai-key" maxlength="500" autocomplete="off" placeholder="gsk-…"></label>
-          <label class="field"><span>Extra instructions (optional)</span><input type="text" id="ai-extra" maxlength="500" placeholder="e.g. Always answer in Persian"></label>
-          <button type="button" id="ai-save-btn" class="btn btn-primary">Save AI Settings</button>
+          <label class="field"><span data-i18n="ai.baseUrl">API base URL (empty = Groq default https://api.groq.com/openai/v1; e.g. http://127.0.0.1:11434/v1 for Ollama)</span><input type="text" id="ai-base" maxlength="300" placeholder="https://api.groq.com/openai/v1" spellcheck="false"></label>
+          <label class="field"><span data-i18n="ai.apiKey">API key (stored encrypted, empty = keep current)</span><input type="password" id="ai-key" maxlength="500" autocomplete="off" placeholder="gsk-…"></label>
+          <label class="field"><span data-i18n="ai.extra">Extra instructions (optional)</span><input type="text" id="ai-extra" maxlength="500" placeholder="e.g. Always answer in Persian"></label>
+          <button type="button" id="ai-save-btn" class="btn btn-primary" data-i18n="ai.saveBtn">Save AI Settings</button>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>API Tokens</h2></div>
-          <p class="hint mt-0">Long-lived <code>zfp_…</code> tokens for bots and dashboards. Send as <code>Authorization: Bearer …</code> header — no CSRF header needed. Shown once, revoke anytime.</p>
+          <div class="card-head"><h2 data-i18n="tokens.title">API Tokens</h2></div>
+          <p class="hint mt-0"><span data-i18n="tokens.hintA">Long-lived</span> <code>zfp_…</code> <span data-i18n="tokens.hintB">tokens for bots and dashboards. Send as</span> <code>Authorization: Bearer …</code> <span data-i18n="tokens.hintC">header — no CSRF header needed. Shown once, revoke anytime.</span></p>
           <div class="field-row">
-            <label class="field"><span>Token name</span><input type="text" id="apitoken-name" maxlength="40" placeholder="telegram-bot"></label>
-            <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block">Create Token</button></div>
+            <label class="field"><span data-i18n="tokens.nameLabel">Token name</span><input type="text" id="apitoken-name" maxlength="40" placeholder="telegram-bot"></label>
+            <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block" data-i18n="tokens.createBtn">Create Token</button></div>
           </div>
           <ul class="audit-list" id="apitoken-list"></ul>
         </div>
 
         <form id="pw-form" class="card form-card">
-          <div class="card-head"><h2>Change Admin Password</h2></div>
-          <label class="field"><span>Current password</span><input type="password" name="current" minlength="8" maxlength="128" required></label>
-          <label class="field"><span>New password (min 8 chars)</span><input type="password" name="new1" minlength="8" maxlength="128" required></label>
-          <label class="field"><span>Repeat new password</span><input type="password" name="new2" minlength="8" maxlength="128" required></label>
-          <button type="submit" class="btn btn-primary">Save New Password</button>
-          <p class="hint">Changing the password invalidates all other active sessions.</p>
+          <div class="card-head"><h2 data-i18n="pw.title">Change Admin Password</h2></div>
+          <label class="field"><span data-i18n="pw.current">Current password</span><input type="password" name="current" minlength="8" maxlength="128" required></label>
+          <label class="field"><span data-i18n="pw.new1">New password (min 8 chars)</span><input type="password" name="new1" minlength="8" maxlength="128" required></label>
+          <label class="field"><span data-i18n="pw.new2">Repeat new password</span><input type="password" name="new2" minlength="8" maxlength="128" required></label>
+          <button type="submit" class="btn btn-primary" data-i18n="pw.saveBtn">Save New Password</button>
+          <p class="hint" data-i18n="pw.hint">Changing the password invalidates all other active sessions.</p>
         </form>
 
         <form id="srv-form" class="card form-card">
-          <div class="card-head"><h2>Server / Hosts Settings</h2></div>
-          <p class="hint mt-0">These values are embedded into generated configs and subscription links.</p>
-          <label class="field"><span>Domain or server IP</span><input type="text" name="domain" placeholder="vpn.example.com" spellcheck="false"></label>
+          <div class="card-head"><h2 data-i18n="srv.title">Server / Hosts Settings</h2></div>
+          <p class="hint mt-0" data-i18n="srv.hint">These values are embedded into generated configs and subscription links.</p>
+          <label class="field"><span data-i18n="srv.domain">Domain or server IP</span><input type="text" name="domain" placeholder="vpn.example.com" spellcheck="false"></label>
           <div class="field-row">
-            <label class="field"><span>V2Ray/Trojan/SS port</span><input type="number" name="sub_port" min="1" max="65535" required></label>
-            <label class="field"><span>Hysteria2 port</span><input type="number" name="hy2_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.subPort">V2Ray/Trojan/SS port</span><input type="number" name="sub_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.hy2Port">Hysteria2 port</span><input type="number" name="hy2_port" min="1" max="65535" required></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>WireGuard port</span><input type="number" name="wg_port" min="1" max="65535" required></label>
-            <label class="field"><span>OpenVPN port</span><input type="number" name="ovpn_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.wgPort">WireGuard port</span><input type="number" name="wg_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.ovpnPort">OpenVPN port</span><input type="number" name="ovpn_port" min="1" max="65535" required></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>L2TP port</span><input type="number" name="l2tp_port" min="1" max="65535" required></label>
-            <label class="field"><span>Cisco AnyConnect port</span><input type="number" name="cisco_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.l2tpPort">L2TP port</span><input type="number" name="l2tp_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.ciscoPort">Cisco AnyConnect port</span><input type="number" name="cisco_port" min="1" max="65535" required></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>SOCKS5 port</span><input type="number" name="socks5_port" min="1" max="65535" required></label>
-            <label class="field"><span>Tunnel DNS</span><input type="text" name="dns" placeholder="1.1.1.1"></label>
+            <label class="field"><span data-i18n="srv.socks5Port">SOCKS5 port</span><input type="number" name="socks5_port" min="1" max="65535" required></label>
+            <label class="field"><span data-i18n="srv.dns">Tunnel DNS</span><input type="text" name="dns" placeholder="1.1.1.1"></label>
           </div>
           <div class="field-row">
-            <label class="field"><span>OpenVPN protocol</span>
+            <label class="field"><span data-i18n="srv.ovpnProto">OpenVPN protocol</span>
               <select name="ovpn_proto"><option value="udp">UDP</option><option value="tcp">TCP</option></select>
             </label>
           </div>
-          <label class="field"><span>WireGuard server public key</span><input type="text" name="wg_pub" placeholder="Server PublicKey from wg show" dir="ltr" spellcheck="false"></label>
-          <label class="field"><span>Obfuscated host (weird URL to hide real IP)</span><input type="text" name="obfuscated_host" placeholder="e.g. cdn.weird.workers.dev — leave empty to use domain" spellcheck="false"></label>
-          <label class="proto-check wide"><input type="checkbox" name="per_user_subdomain"><span>Per-user weird subdomain — each config gets a random prefix (needs wildcard DNS *.host)</span></label>
-          <label class="proto-check wide"><input type="checkbox" name="block_direct_ip"><span>Block direct IP access to panel (anti-filter — only allow domain, hides panel from IP scan)</span></label>
-          <button type="submit" class="btn btn-primary">Save Server Settings</button>
+          <label class="field"><span data-i18n="srv.wgPub">WireGuard server public key</span><input type="text" name="wg_pub" placeholder="Server PublicKey from wg show" dir="ltr" spellcheck="false"></label>
+          <label class="field"><span data-i18n="srv.obfHost">Obfuscated host (weird URL to hide real IP)</span><input type="text" name="obfuscated_host" placeholder="e.g. cdn.weird.workers.dev — leave empty to use domain" spellcheck="false"></label>
+          <label class="proto-check wide"><input type="checkbox" name="per_user_subdomain"><span data-i18n="srv.perUserSub">Per-user weird subdomain — each config gets a random prefix (needs wildcard DNS *.host)</span></label>
+          <label class="proto-check wide"><input type="checkbox" name="block_direct_ip"><span data-i18n="srv.blockIp">Block direct IP access to panel (anti-filter — only allow domain, hides panel from IP scan)</span></label>
+          <button type="submit" class="btn btn-primary" data-i18n="srv.saveBtn">Save Server Settings</button>
         </form>
 
         <div class="card form-card">
-          <div class="card-head"><h2>SSL Certificate (Let's Encrypt)</h2></div>
-          <p class="hint mt-0">Enter your domain and the panel fetches a free certificate itself. Requirements: domain DNS points to this server, port 80 is free, and certbot is installed.</p>
+          <div class="card-head"><h2 data-i18n="ssl.title">SSL Certificate (Let's Encrypt)</h2></div>
+          <p class="hint mt-0" data-i18n="ssl.hint">Enter your domain and the panel fetches a free certificate itself. Requirements: domain DNS points to this server, port 80 is free, and certbot is installed.</p>
           <div class="field-row">
-            <label class="field"><span>Domain</span><input type="text" id="ssl-domain" placeholder="example.com" spellcheck="false"></label>
-            <label class="field"><span>Subdomain (optional)</span><input type="text" id="ssl-subdomain" placeholder="panel" spellcheck="false"></label>
+            <label class="field"><span data-i18n="ssl.domain">Domain</span><input type="text" id="ssl-domain" placeholder="example.com" spellcheck="false"></label>
+            <label class="field"><span data-i18n="ssl.subdomain">Subdomain (optional)</span><input type="text" id="ssl-subdomain" placeholder="panel" spellcheck="false"></label>
           </div>
-          <label class="field"><span>Email (for expiry notices)</span><input type="email" id="ssl-email" placeholder="you@example.com" spellcheck="false"></label>
+          <label class="field"><span data-i18n="ssl.email">Email (for expiry notices)</span><input type="email" id="ssl-email" placeholder="you@example.com" spellcheck="false"></label>
           <div class="reality-actions">
-            <button type="button" id="ssl-issue-btn" class="btn btn-primary">Issue Certificate</button>
-            <button type="button" id="ssl-renew-btn" class="btn btn-ghost">Renew</button>
+            <button type="button" id="ssl-issue-btn" class="btn btn-primary" data-i18n="ssl.issueBtn">Issue Certificate</button>
+            <button type="button" id="ssl-renew-btn" class="btn btn-ghost" data-i18n="ssl.renewBtn">Renew</button>
           </div>
           <p class="hint" id="ssl-status"></p>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>Telegram Notifications</h2></div>
-          <p class="hint mt-0">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
-          <label class="field"><span>Bot token (kept encrypted)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
-          <label class="field"><span>Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
+          <div class="card-head"><h2 data-i18n="tg.title">Telegram Notifications</h2></div>
+          <p class="hint mt-0" data-i18n="tg.hint">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
+          <label class="field"><span data-i18n="tg.token">Bot token (kept encrypted)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
+          <label class="field"><span data-i18n="tg.chat">Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
           <div class="reality-actions">
-            <button type="button" id="tg-save-btn" class="btn btn-primary">Save</button>
-            <button type="button" id="tg-test-btn" class="btn btn-ghost">Send Test</button>
+            <button type="button" id="tg-save-btn" class="btn btn-primary" data-i18n="tg.saveBtn">Save</button>
+            <button type="button" id="tg-test-btn" class="btn btn-ghost" data-i18n="tg.testBtn">Send Test</button>
           </div>
           <p class="hint" id="tg-hint"></p>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>Backup & Restore</h2></div>
-          <p class="hint mt-0">Download a full JSON snapshot (users, secrets, settings, admin). Keep it safe &mdash; it contains everything.</p>
-          <button type="button" id="backup-btn" class="btn btn-primary btn-block">Download Backup</button>
+          <div class="card-head"><h2 data-i18n="backup.title">Backup & Restore</h2></div>
+          <p class="hint mt-0" data-i18n="backup.dlHint">Download a full JSON snapshot (users, secrets, settings, admin). Keep it safe &mdash; it contains everything.</p>
+          <button type="button" id="backup-btn" class="btn btn-primary btn-block" data-i18n="backup.dlBtn">Download Backup</button>
           <hr class="sep">
-          <p class="hint">Restore replaces ALL current users and server settings from a backup file.</p>
+          <p class="hint" data-i18n="backup.restoreHint">Restore replaces ALL current users and server settings from a backup file.</p>
           <input type="file" id="restore-file" accept=".json,application/json" class="file-input">
-          <button type="button" id="restore-btn" class="btn btn-danger btn-block" disabled>Restore From Backup</button>
+          <button type="button" id="restore-btn" class="btn btn-danger btn-block" disabled data-i18n="backup.restoreBtn">Restore From Backup</button>
         </div>
 
         <div class="card form-card">
-          <div class="card-head"><h2>Security Events</h2><button type="button" class="icon-btn" id="audit-refresh">&#8635;</button></div>
+          <div class="card-head"><h2 data-i18n="audit.title">Security Events</h2><button type="button" class="icon-btn" id="audit-refresh">&#8635;</button></div>
           <ul class="audit-list" id="audit-list"></ul>
         </div>
 
@@ -532,19 +533,19 @@
 
 <div id="modal-overlay" class="modal-overlay hidden">
   <form id="add-user-form" class="modal" autocomplete="off">
-    <div class="modal-head"><h2>Add New User</h2><button type="button" class="icon-btn" id="modal-close">&times;</button></div>
+    <div class="modal-head"><h2 data-i18n="modal.addTitle">Add New User</h2><button type="button" class="icon-btn" id="modal-close">&times;</button></div>
     <div class="tpl-row">
-      <select id="tpl-select"><option value="">Load template...</option></select>
-      <button type="button" class="row-btn accent" id="tpl-save-btn" title="Save current selections as template">
+      <select id="tpl-select"><option value="" data-i18n="modal.tplLoad">Load template...</option></select>
+      <button type="button" class="row-btn accent" id="tpl-save-btn" data-i18n-title="modal.tplSaveTitle" title="Save current selections as template">
         <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
       </button>
-      <button type="button" class="row-btn bad" id="tpl-del-btn" title="Delete selected template">
+      <button type="button" class="row-btn bad" id="tpl-del-btn" data-i18n-title="modal.tplDelTitle" title="Delete selected template">
         <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
       </button>
     </div>
-    <label class="field"><span>Username (a-z, 0-9, _)</span><input type="text" name="username" pattern="[a-zA-Z0-9_]{3,32}" required spellcheck="false"></label>
+    <label class="field"><span data-i18n="modal.username">Username (a-z, 0-9, _)</span><input type="text" name="username" pattern="[a-zA-Z0-9_]{3,32}" required spellcheck="false"></label>
     <div class="field">
-      <span>Protocols (multi-select)</span>
+      <span data-i18n="modal.protoLabel">Protocols (multi-select)</span>
       <div class="proto-grid">
         <label class="proto-check"><input type="checkbox" name="proto" value="reality"><span>VLESS-REALITY</span></label>
         <label class="proto-check"><input type="checkbox" name="proto" value="vless" checked><span>VLESS</span></label>
@@ -561,54 +562,55 @@
     </div>
     <label class="proto-check wide">
       <input type="checkbox" name="start_on_first_use" id="sofu-check">
-      <span>Start expiry countdown on first connection &nbsp;<small class="muted">(Marzban-style start-on-first-use)</small></span>
+      <span><span data-i18n="modal.sofu">Start expiry countdown on first connection</span> &nbsp;<small class="muted" data-i18n="modal.sofuSmall">(Marzban-style start-on-first-use)</small></span>
     </label>
     <div class="field-row">
-      <label class="field"><span>Volume (GB)</span><input type="number" name="volume" min="1" max="100000" step="0.5" value="30" required></label>
-      <label class="field"><span>Duration (days)</span><input type="number" name="days" min="1" max="3650" value="30" required></label>
+      <label class="field"><span data-i18n="modal.volume">Volume (GB)</span><input type="number" name="volume" min="1" max="100000" step="0.5" value="30" required></label>
+      <label class="field"><span data-i18n="modal.days">Duration (days)</span><input type="number" name="days" min="1" max="3650" value="30" required></label>
     </div>
-    <label class="field"><span>Device limit (optional, empty = unlimited)</span><input type="number" name="device_limit" min="1" max="1000" step="1" placeholder="e.g. 2"></label>
-    <label class="field"><span>Note (optional)</span><input type="text" name="note" maxlength="200"></label>
-    <button type="submit" class="btn btn-primary btn-block">Create User</button>
+    <label class="field"><span data-i18n="modal.devLimit">Device limit (optional, empty = unlimited)</span><input type="number" name="device_limit" min="1" max="1000" step="1" data-i18n-ph="modal.devLimitPh" placeholder="e.g. 2"></label>
+    <label class="field"><span data-i18n="modal.noteOpt">Note (optional)</span><input type="text" name="note" maxlength="200"></label>
+    <button type="submit" class="btn btn-primary btn-block" data-i18n="modal.createBtn">Create User</button>
   </form>
 </div>
 
 <div id="edit-modal" class="modal-overlay hidden">
   <form id="edit-user-form" class="modal" autocomplete="off">
-    <div class="modal-head"><h2>Edit User <span id="edit-uname"></span></h2><button type="button" class="icon-btn" id="edit-close">&times;</button></div>
-    <label class="field"><span>Note</span><input type="text" name="note" maxlength="200"></label>
+    <div class="modal-head"><h2><span data-i18n="modal.editTitle">Edit User</span> <span id="edit-uname"></span></h2><button type="button" class="icon-btn" id="edit-close">&times;</button></div>
+    <label class="field"><span data-i18n="modal.note">Note</span><input type="text" name="note" maxlength="200"></label>
     <div class="field-row">
-      <label class="field"><span>Total volume (GB)</span><input type="number" name="volume" min="0.5" max="100000" step="0.5"></label>
-      <label class="field"><span>Exact expiry (UTC)</span><input type="datetime-local" name="expires"></label>
+      <label class="field"><span data-i18n="modal.totalVol">Total volume (GB)</span><input type="number" name="volume" min="0.5" max="100000" step="0.5"></label>
+      <label class="field"><span data-i18n="modal.exactExpiry">Exact expiry (UTC)</span><input type="datetime-local" name="expires"></label>
     </div>
-    <label class="field"><span>Device limit (empty = no change, 0 = unlimited)</span><input type="number" name="device_limit" min="0" max="1000" step="1"></label>
-    <label class="proto-check wide"><input type="checkbox" name="reset_used"><span>Reset used traffic to zero</span></label>
-    <p class="hint">Setting an exact expiry switches a start-on-first-use user to fixed expiry.</p>
-    <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+    <label class="field"><span data-i18n="modal.devEdit">Device limit (empty = no change, 0 = unlimited)</span><input type="number" name="device_limit" min="0" max="1000" step="1"></label>
+    <label class="proto-check wide"><input type="checkbox" name="reset_used"><span data-i18n="modal.resetUsed">Reset used traffic to zero</span></label>
+    <p class="hint" data-i18n="modal.exactHint">Setting an exact expiry switches a start-on-first-use user to fixed expiry.</p>
+    <button type="submit" class="btn btn-primary btn-block" data-i18n="modal.saveChanges">Save Changes</button>
   </form>
 </div>
 
 <div id="qr-modal" class="modal-overlay hidden">
   <div class="modal qr-modal">
-    <div class="modal-head"><h2>Subscription QR</h2><button type="button" class="icon-btn" id="qr-close">&times;</button></div>
+    <div class="modal-head"><h2 data-i18n="modal.qrTitle">Subscription QR</h2><button type="button" class="icon-btn" id="qr-close">&times;</button></div>
     <div class="qr-box"><img id="user-qr-img" alt="Subscription QR"></div>
     <p class="mono sub-url" id="qr-url"></p>
-    <button type="button" id="qr-copy-btn" class="btn btn-primary btn-block">Copy Link</button>
+    <button type="button" id="qr-copy-btn" class="btn btn-primary btn-block" data-i18n="modal.qrCopy">Copy Link</button>
   </div>
 </div>
 
 <div id="toast-box"></div>
 
-<button type="button" id="ai-fab" class="ai-fab" title="Ask the AI assistant" aria-label="Ask the AI assistant">?</button>
+<button type="button" id="ai-fab" class="ai-fab" data-i18n-title="icon.aiFab" data-i18n-aria="icon.aiFab" title="Ask the AI assistant" aria-label="Ask the AI assistant">?</button>
 <div id="ai-chat" class="ai-chat hidden" role="dialog" aria-label="AI assistant">
-  <div class="ai-chat-head"><b>AI Assistant</b><span class="muted">panel help only</span><button type="button" class="icon-btn" id="ai-close">&times;</button></div>
+  <div class="ai-chat-head"><b data-i18n="ai.chatTitle">AI Assistant</b><span class="muted" data-i18n="ai.chatSub">panel help only</span><button type="button" class="icon-btn" id="ai-close">&times;</button></div>
   <div id="ai-msgs" class="ai-msgs"></div>
   <div class="ai-input-row">
-    <input type="text" id="ai-input" maxlength="2000" placeholder="Ask about the panel…" autocomplete="off">
-    <button type="button" id="ai-send" class="btn btn-sm btn-primary">Send</button>
+    <input type="text" id="ai-input" maxlength="2000" data-i18n-ph="ai.inputPh" placeholder="Ask about the panel…" autocomplete="off">
+    <button type="button" id="ai-send" class="btn btn-sm btn-primary" data-i18n="ai.sendBtn">Send</button>
   </div>
 </div>
 
+  <script src="/static/i18n.js?v={{ asset_v }}" defer></script>
   <script src="/static/app.js?v={{ asset_v }}" defer></script>
 </body>
 </html>

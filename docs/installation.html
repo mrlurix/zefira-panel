@@ -7,87 +7,88 @@
 <meta name="referrer" content="no-referrer">
 <title>Installation — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">Z</span>EFIRA Installation</h1>
-<p class="subtitle">From empty server to working panel in about 5 minutes.</p>
+<h1><span class="z" data-i18n="inst.titleZ">Z</span><span data-i18n="inst.titleRest">EFIRA Installation</span></h1>
+<p class="subtitle" data-i18n="inst.subtitle">From empty server to working panel in about 5 minutes.</p>
 
-<h2 id="requirements">Requirements</h2>
+<h2 id="requirements" data-i18n="inst.requirements">Requirements</h2>
 <ul>
-  <li>Ubuntu 20.04+ / Debian 11+ server (1 vCPU, 1 GB RAM minimum)</li>
-  <li>Root access (<code>sudo</code>)</li>
-  <li>Optional: a domain pointed at the server (for HTTPS)</li>
+  <li data-i18n="inst.reqA">Ubuntu 20.04+ / Debian 11+ server (1 vCPU, 1 GB RAM minimum)</li>
+  <li><span data-i18n="inst.reqB">Root access (</span><code>sudo</code><span data-i18n="inst.reqB2">)</span></li>
+  <li data-i18n="inst.reqC">Optional: a domain pointed at the server (for HTTPS)</li>
 </ul>
 
-<h2 id="one-line-install">One-line install</h2>
+<h2 id="one-line-install" data-i18n="inst.oneLine">One-line install</h2>
 <pre>bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)</pre>
-<div class="callout info">Piped scripts run non-interactively with safe defaults and print a random admin password at the end. For the guided setup, download the script first and run <code>sudo bash install.sh</code>.</div>
+<div class="callout info"><span data-i18n="inst.pipedA">Piped scripts run non-interactively with safe defaults and print a random admin password at the end. For the guided setup, download the script first and run</span> <code>sudo bash install.sh</code><span data-i18n="inst.pipedB">.</span></div>
 
-<h2 id="the-7-guided-steps">The 7 guided steps</h2>
+<h2 id="the-7-guided-steps" data-i18n="inst.steps7">The 7 guided steps</h2>
 <table>
-<tr><th>Step</th><th>What you choose</th></tr>
-<tr><td>1 · Port</td><td>Panel port (default <code>8000</code>)</td></tr>
-<tr><td>2 · Domain</td><td>Domain for links &amp; SSL, or empty to use the server IP</td></tr>
-<tr><td>3 · Admin</td><td>Admin username + password (empty = strong random password; typed passwords need 10+ chars with letters AND digits, 3 tries)</td></tr>
-<tr><td>4 · Database</td><td>SQLite (zero setup), MySQL, MariaDB or PostgreSQL</td></tr>
-<tr><td>5 · Subscription</td><td>Subscription URL path (default <code>/sub</code>)</td></tr>
-<tr><td>6 · Telegram</td><td>Optional bot token + chat ID for notifications</td></tr>
-<tr><td>7 · Nginx + SSL</td><td>Reverse proxy + Let's Encrypt certificate (needs port 80 free)</td></tr>
+<tr><th data-i18n="inst.thStep">Step</th><th data-i18n="inst.thChoose">What you choose</th></tr>
+<tr><td data-i18n="inst.s1">1 · Port</td><td><span data-i18n="inst.s1t">Panel port (default</span> <code>8000</code><span data-i18n="inst.s1t2">)</span></td></tr>
+<tr><td data-i18n="inst.s2">2 · Domain</td><td data-i18n="inst.s2t">Domain for links &amp; SSL, or empty to use the server IP</td></tr>
+<tr><td data-i18n="inst.s3">3 · Admin</td><td><span data-i18n="inst.s3t">Admin username + password (empty = strong random password; typed passwords need 10+ chars with letters AND digits, 3 tries)</span></td></tr>
+<tr><td data-i18n="inst.s4">4 · Database</td><td data-i18n="inst.s4t">SQLite (zero setup), MySQL, MariaDB or PostgreSQL</td></tr>
+<tr><td data-i18n="inst.s5">5 · Subscription</td><td><span data-i18n="inst.s5t">Subscription URL path (default</span> <code>/sub</code><span data-i18n="inst.s5t2">)</span></td></tr>
+<tr><td data-i18n="inst.s6">6 · Telegram</td><td data-i18n="inst.s6t">Optional bot token + chat ID for notifications</td></tr>
+<tr><td data-i18n="inst.s7">7 · Nginx + SSL</td><td data-i18n="inst.s7t">Reverse proxy + Let's Encrypt certificate (needs port 80 free)</td></tr>
 </table>
 
-<h2 id="what-the-installer-does">What the installer does</h2>
+<h2 id="what-the-installer-does" data-i18n="inst.whatDoes">What the installer does</h2>
 <ol>
-  <li>Installs Python, Nginx and Certbot</li>
-  <li>Clones Zefira to <code>/opt/zefira</code></li>
-  <li>Creates a virtualenv and installs dependencies</li>
-  <li>Writes a locked-down <code>.env</code> (mode 600, admin password one-time — auto-scrubbed on first boot)</li>
-  <li>Creates a <code>zefira</code> system user, chowns <code>/opt/zefira</code>, installs a passwordless sudoers rule scoped to <code>systemctl restart zefira</code> only</li>
-  <li>Registers a non-root <code>systemd</code> service (<code>zefira.service</code>: <code>User=zefira</code>, <code>ProtectSystem=strict</code>, <code>PrivateDevices</code>, <code>UMask=0077</code>)</li>
-  <li>Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
+  <li data-i18n="inst.w1">Installs Python, Nginx and Certbot</li>
+  <li><span data-i18n="inst.w2a">Clones Zefira to</span> <code>/opt/zefira</code></li>
+  <li data-i18n="inst.w3">Creates a virtualenv and installs dependencies</li>
+  <li><span data-i18n="inst.w4a">Writes a locked-down</span> <code>.env</code> <span data-i18n="inst.w4b">(mode 600, admin password one-time — auto-scrubbed on first boot)</span></li>
+  <li><span data-i18n="inst.w5a">Creates a</span> <code>zefira</code> <span data-i18n="inst.w5b">system user, chowns</span> <code>/opt/zefira</code><span data-i18n="inst.w5c">, installs a passwordless sudoers rule scoped to</span> <code>systemctl restart zefira</code> <span data-i18n="inst.w5d">only</span></li>
+  <li><span data-i18n="inst.w6a">Registers a non-root</span> <code>systemd</code> <span data-i18n="inst.w6b">service (</span><code>zefira.service</code><span data-i18n="inst.w6c">:</span> <code>User=zefira</code><span data-i18n="inst.w6d">,</span> <code>ProtectSystem=strict</code><span data-i18n="inst.w6e">,</span> <code>PrivateDevices</code><span data-i18n="inst.w6f">,</span> <code>UMask=0077</code><span data-i18n="inst.w6g">)</span></li>
+  <li data-i18n="inst.w7">Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
 </ol>
 
-<h2 id="after-install">After install</h2>
+<h2 id="after-install" data-i18n="inst.afterInstall">After install</h2>
 <pre># your URL, login and paths are printed at the end, e.g.
 # URL   : https://vpn.example.com
 # Local : http://127.0.0.1:8000
 
 systemctl status zefira
 journalctl -u zefira -n 100 --no-pager   # logs</pre>
-<div class="callout warn">First login: open Settings and change the password. Do this before creating users.</div>
+<div class="callout warn" data-i18n="inst.firstLogin">First login: open Settings and change the password. Do this before creating users.</div>
 
-<h2 id="non-interactive-install">Non-interactive install</h2>
+<h2 id="non-interactive-install" data-i18n="inst.nonInteractive">Non-interactive install</h2>
 <pre>ZEFIRA_DOMAIN=vpn.example.com \
 ZEFIRA_SSL_EMAIL=admin@example.com \
 ZEFIRA_SETUP_NGINX=y ZEFIRA_USE_SSL=y \
@@ -95,13 +96,14 @@ ZEFIRA_ADMIN_USERNAME=admin \
 ZEFIRA_ADMIN_PASSWORD='S3cure-Pass-99' \
 bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)</pre>
 
-<h2 id="uninstall">Uninstall</h2>
+<h2 id="uninstall" data-i18n="inst.uninstall">Uninstall</h2>
 <pre>sudo bash install.sh --uninstall</pre>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

@@ -74,12 +74,12 @@
     r.appendChild(el("b", null, label));
     var c = el("code", null, addr);
     c.title = addr;
-    var btn = el("button", null, "Copy");
+    var btn = el("button", null, t("docs.copy"));
     btn.type = "button";
     btn.addEventListener("click", function () {
       var done = function (ok) {
-        btn.textContent = ok ? "Copied ✓" : "Copy failed";
-        setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+        btn.textContent = ok ? t("docs.copied") : t("docs.copyFailed");
+        setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(addr).then(function () { done(true); }, function () { done(false); });
@@ -90,10 +90,11 @@
     parent.appendChild(r);
   }
 
-  function addEntry(parent, entry, faMode) {
+  function addEntry(parent, entry, lang) {
     var box = el("div", "ai-entry");
     box.appendChild(el("strong", null, entry.title));
-    var body = (faMode && entry.fa) ? (entry.fa + "\n\n" + entry.text) : entry.text;
+    var lead = lang !== "en" ? (entry[lang] || entry.fa) : null;
+    var body = lead ? (lead + "\n\n" + entry.text) : entry.text;
     body.split(/\n\n+/).forEach(function (para) {
       box.appendChild(el("p", null, para));
     });
@@ -104,11 +105,11 @@
 
   function addRefusal(parent) {
     var box = el("div", "ai-entry");
-    box.appendChild(el("strong", null, "Out of scope"));
-    box.appendChild(el("p", null, "I only answer Zefira site and panel questions — docs, setup, donating, changelog, GitHub. Ask me about those, or try the channels below."));
-    addLinkBtn(box, "Support page", "support.html");
-    addLinkBtn(box, "FAQ", "faq.html");
-    addLinkBtn(box, "Community Q&A", "https://github.com/mrlurix/zefira-panel/discussions");
+    box.appendChild(el("strong", null, t("ai.refusalTitle")));
+    box.appendChild(el("p", null, t("ai.refusalText")));
+    addLinkBtn(box, t("docs.supSupport"), "support.html");
+    addLinkBtn(box, t("docs.supFaq"), "faq.html");
+    addLinkBtn(box, t("docs.supCommunity"), "https://github.com/mrlurix/zefira-panel/discussions");
     parent.appendChild(box);
   }
 
@@ -119,30 +120,28 @@
     return m;
   }
 
-  function answerInner(q, faMode, box, kb) {
+  function answerInner(q, lang, box, kb) {
     if (/^(hi|hello|hey|salam|سلام|درود|yo)\b/i.test(q.trim())) {
       var w = el("div", "ai-entry");
-      w.appendChild(el("strong", null, faMode ? "سلام! من دستیار سایت زفیرا هستم" : "Hi! I'm the Zefira site assistant"));
-      w.appendChild(el("p", null, faMode
-        ? "فقط درباره سایت، داکس، پنل، دونیت، changelog و گیت‌هاب جواب می‌دهم. بپرس:"
-        : "I answer Zefira site/panel questions only — docs, setup, donating, changelog, GitHub. Try:"));
+      w.appendChild(el("strong", null, t("ai.greetTitle")));
+      w.appendChild(el("p", null, t("ai.greetText")));
       parentChips(w);
       box.appendChild(w);
       return;
     }
     if (!kb || !kb.length) {
-      box.appendChild(el("p", null, "Knowledge base failed to load. Try the support page instead."));
-      addLinkBtn(box, "Support page", "support.html");
+      box.appendChild(el("p", null, t("ai.kbFail")));
+      addLinkBtn(box, t("docs.supSupport"), "support.html");
       return;
     }
     var hits = rank(q);
     if (!hits.length || hits[0].score < 3) { addRefusal(box); return; }
-    hits.forEach(function (h) { addEntry(box, h.e, faMode); });
+    hits.forEach(function (h) { addEntry(box, h.e, lang); });
     msgsBox.scrollTop = msgsBox.scrollHeight;
   }
 
   function parentChips(parent) {
-    var chips = ["How do I donate?", "What is new in the changelog?", "What is the Zefira panel?"];
+    var chips = [t("ai.chipDonate"), t("ai.chipNew"), t("ai.chipInstall")];
     var row = el("div", "ai-chips");
     chips.forEach(function (c) {
       var b = el("button", null, c);
@@ -164,10 +163,10 @@
     loadKB(function (kb) {
       var box = addMsg("bot");
       try {
-        answerInner(q, /[\u0600-\u06FF]/.test(q), box, kb);
+        answerInner(q, (typeof Z_LANG !== "undefined" ? Z_LANG : "en"), box, kb);
       } catch (err) {
-        box.appendChild(el("p", null, "Something broke on my side (" + String((err && err.message) || err).slice(0, 120) + "). Try the support page instead."));
-        addLinkBtn(box, "Support page", "support.html");
+        box.appendChild(el("p", null, t("ai.errPre") + String((err && err.message) || err).slice(0, 120) + t("ai.errPost")));
+        addLinkBtn(box, t("docs.supSupport"), "support.html");
       }
       msgsBox.scrollTop = msgsBox.scrollHeight;
     });
@@ -181,16 +180,16 @@
     modal.setAttribute("aria-modal", "true");
     modal.setAttribute("aria-label", "Zefira site assistant");
     var head = el("div", "ai-head");
-    head.appendChild(el("b", null, "Zefira site assistant"));
+    head.appendChild(el("b", null, t("ai.chatHead")));
     var x = el("button", "ai-x", "×");
     x.type = "button";
-    x.setAttribute("aria-label", "Close");
+    x.setAttribute("aria-label", t("ai.close"));
     x.addEventListener("click", close);
     head.appendChild(x);
-    var sub = el("div", "ai-sub", "Docs-powered answers. Offline, no account, no key.");
+    var sub = el("div", "ai-sub", t("ai.note"));
     msgsBox = el("div", "ai-msgs");
     var chips = el("div", "ai-chips");
-    ["How do I donate?", "What is new?", "Install help"].forEach(function (c) {
+    [t("ai.chipDonate"), t("ai.chipNew"), t("ai.chipInstall")].forEach(function (c) {
       var b = el("button", null, c);
       b.type = "button";
       b.addEventListener("click", function () { ask(c); });
@@ -199,11 +198,11 @@
     var form = el("form", "ai-form");
     inputEl = document.createElement("input");
     inputEl.type = "text";
-    inputEl.placeholder = "Ask about the site, panel, donating…";
-    inputEl.setAttribute("aria-label", "Ask about the site");
+    inputEl.placeholder = t("ai.inputPh");
+    inputEl.setAttribute("aria-label", t("ai.inputPh"));
     inputEl.maxLength = 500;
     inputEl.autocomplete = "off";
-    var send = el("button", "ai-send", "Send");
+    var send = el("button", "ai-send", t("ai.sendBtn"));
     send.type = "submit";
     form.appendChild(inputEl);
     form.appendChild(send);
@@ -230,8 +229,8 @@
     if (!msgsBox.children.length) {
       var w = addMsg("bot");
       var e = el("div", "ai-entry");
-      e.appendChild(el("strong", null, "Hi! I'm the Zefira site assistant"));
-      e.appendChild(el("p", null, "I answer from these docs only: donating, changelog, GitHub, panel features, install, subscriptions, troubleshooting."));
+      e.appendChild(el("strong", null, t("ai.greetTitle")));
+      e.appendChild(el("p", null, t("ai.greetText")));
       w.appendChild(e);
     }
     setTimeout(function () { if (inputEl) inputEl.focus(); }, 100);

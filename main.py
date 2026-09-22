@@ -1061,12 +1061,20 @@ def root():
 
 @app.get("/login")
 def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {"title": "Sign in | Zefira", "asset_v": APP_VERSION})
+    lang = sub_lang(request)
+    return templates.TemplateResponse(request, "login.html", {
+        "title": "Sign in | Zefira", "asset_v": APP_VERSION,
+        "lang": lang, "direction": "rtl" if lang == "fa" else "ltr",
+    })
 
 
 @app.get("/panel")
 def panel_page(request: Request):
-    return templates.TemplateResponse(request, "panel.html", {"title": "Zefira Panel", "asset_v": APP_VERSION})
+    lang = sub_lang(request)
+    return templates.TemplateResponse(request, "panel.html", {
+        "title": "Zefira Panel", "asset_v": APP_VERSION,
+        "lang": lang, "direction": "rtl" if lang == "fa" else "ltr",
+    })
 
 
 @app.post("/api/login")
@@ -3744,6 +3752,66 @@ def _dashboard_blocks(groups_raw: dict, layout) -> list:
     return blocks
 
 
+SUB_LANGS = ("en", "fa", "zh", "ru")
+
+_SUB_MONTHS = {
+    "en": ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "fa": ["", "ژانویه", "فوریه", "مارس", "آوریل", "مه", "ژوئن", "ژوئیه", "اوت", "سپتامبر", "اکتبر", "نوامبر", "دسامبر"],
+    "ru": ["", "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"],
+}
+
+_SUB_WORDS = {
+    "en": {"pending": "Not started", "first_use": "Starts on first use", "no_expiry": "No expiry yet",
+           "expired": "Expired", "limited": "Out of volume", "active": "Active", "days_left": "{n} days left",
+           "never": "Never yet", "just_now": "Just now", "min_ago": "{n} min ago",
+           "h_ago": "{n} h ago", "d_ago": "{n} d ago", "last_active": "Last active:"},
+    "fa": {"pending": "شروع‌نشده", "first_use": "با اولین استفاده شروع می‌شود", "no_expiry": "هنوز انقضایی نیست",
+           "expired": "منقضی", "limited": "تمام‌حجم", "active": "فعال", "days_left": "{n} روز مانده",
+           "never": "هنوز هرگز", "just_now": "همین حالا", "min_ago": "{n} دقیقه پیش",
+           "h_ago": "{n} ساعت پیش", "d_ago": "{n} روز پیش", "last_active": "آخرین فعالیت:"},
+    "zh": {"pending": "未开始", "first_use": "首次使用时开始", "no_expiry": "暂无到期",
+           "expired": "已过期", "limited": "流量用尽", "active": "正常", "days_left": "剩余 {n} 天",
+           "never": "从未", "just_now": "刚刚", "min_ago": "{n} 分钟前",
+           "h_ago": "{n} 小时前", "d_ago": "{n} 天前", "last_active": "上次活跃:"},
+    "ru": {"pending": "Не начат", "first_use": "Старт с первого использования", "no_expiry": "Срока пока нет",
+           "expired": "Истёк", "limited": "Лимит", "active": "Активен", "days_left": "осталось: {n} дн.",
+           "never": "пока нет", "just_now": "только что", "min_ago": "{n} мин. назад",
+           "h_ago": "{n} ч. назад", "d_ago": "{n} дн. назад", "last_active": "Был(а):"},
+}
+
+
+def sub_lang(request: Request) -> str:
+    """UI language for server-rendered pages (cookie set by i18n.js)."""
+    try:
+        lang = (request.cookies.get("zefira_lang") or "").strip().lower()[:5]
+    except Exception:
+        return "en"
+    if lang.startswith("fa"):
+        return "fa"
+    if lang.startswith("zh"):
+        return "zh"
+    if lang.startswith("ru"):
+        return "ru"
+    return "en"
+
+
+def _sub_word(lang: str, key: str) -> str:
+    return _SUB_WORDS.get(lang, _SUB_WORDS["en"]).get(key, _SUB_WORDS["en"][key])
+
+
+def _sub_expires(lang: str, exp) -> str:
+    if exp is None:
+        return ""
+    y, m, d = exp.year, exp.month, exp.day
+    if lang == "zh":
+        return f"{y}年{m}月{d}日"
+    if lang == "fa":
+        return f"{d} {_SUB_MONTHS['fa'][m]} {y}"
+    if lang == "ru":
+        return f"{d} {_SUB_MONTHS['ru'][m]} {y}"
+    return f"{_SUB_MONTHS['en'][m]} {d}, {y}"
+
+
 def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> dict:
     from config import SUBSCRIPTION_PATH as _SUB_PATH
 
@@ -3755,6 +3823,8 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     used = float(udict.get("used_gb") or 0)
     pct = int(min(100, used / vol * 100)) if vol > 0 else 0
     now = utcnow()
+    lang = sub_lang(request)
+    W = lambda k: _sub_word(lang, k)  # noqa: E731
     try:
         exp = (
             datetime.fromisoformat(udict["expires_at"].replace("Z", "+00:00")).replace(tzinfo=None)
@@ -3764,21 +3834,21 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     except (ValueError, AttributeError):
         exp = None
     if udict.get("pending_start"):
-        status_label, status_cls, days_label = "Not started", "pending", "Starts on first use"
-        expires_label = "No expiry yet"
+        status_label, status_cls, days_label = W("pending"), "pending", W("first_use")
+        expires_label = W("no_expiry")
     elif exp is not None and exp <= now:
-        status_label, status_cls, days_label = "Expired", "expired", "Expired"
-        expires_label = exp.strftime("%b %d, %Y")
+        status_label, status_cls, days_label = W("expired"), "expired", W("expired")
+        expires_label = _sub_expires(lang, exp)
     elif used >= vol:
         left = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp else 0
-        status_label, status_cls = "Out of volume", "limited"
-        days_label = f"{left} days left" if exp else ""
-        expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
+        status_label, status_cls = W("limited"), "limited"
+        days_label = W("days_left").format(n=left) if exp else ""
+        expires_label = _sub_expires(lang, exp) if exp else W("no_expiry")
     else:
         left = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp else 0
-        status_label, status_cls = "Active", "ok"
-        days_label = f"{left} days left" if exp else ""
-        expires_label = exp.strftime("%b %d, %Y") if exp else "No expiry"
+        status_label, status_cls = W("active"), "ok"
+        days_label = W("days_left").format(n=left) if exp else ""
+        expires_label = _sub_expires(lang, exp) if exp else W("no_expiry")
     enc = urlquote(sub_url, safe="")
     app = load_appearance()
     last_at_raw = udict.get("last_fetch_at")
@@ -3791,22 +3861,25 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     except (ValueError, AttributeError):
         last_at = None
     if last_at is None:
-        last_seen_label = "Never yet"
+        last_seen_label = W("never")
     else:
         secs = max(0, int((utcnow() - last_at).total_seconds()))
         if secs < 90:
-            last_seen_label = "Just now"
+            last_seen_label = W("just_now")
         elif secs < 3600:
-            last_seen_label = f"{secs // 60} min ago"
+            last_seen_label = W("min_ago").format(n=secs // 60)
         elif secs < 86400:
-            last_seen_label = f"{secs // 3600} h ago"
+            last_seen_label = W("h_ago").format(n=secs // 3600)
         else:
-            last_seen_label = f"{secs // 86400} d ago"
+            last_seen_label = W("d_ago").format(n=secs // 86400)
     return {
         "username": udict.get("username", ""),
         "note": udict.get("note") or "",
         "brand_name": app.get("brand_name") or "ZEFIRA",
         "dash_note": app.get("dash_note") or "",
+        "lang": lang,
+        "direction": "rtl" if lang == "fa" else "ltr",
+        "last_active_pre": W("last_active"),
         "status_label": status_label,
         "status_cls": status_cls,
         "volume_label": f"{used:g} / {vol:g} GB",

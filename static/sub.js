@@ -3,7 +3,7 @@
 // Copy buttons on the public subscription dashboard.
 // No innerHTML anywhere: all values come from data attributes / textareas.
 document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
-  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.dataset.label = btn.textContent;
   btn.addEventListener("click", async () => {
     const sel = btn.getAttribute("data-copy-target");
     const src = sel ? document.querySelector(sel) : null;
@@ -30,7 +30,7 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
         }
       } catch (_) {}
     }
-    btn.textContent = done ? "Copied ✓" : "Copy failed";
+    btn.textContent = done ? t("sub.copied") : t("sub.copyFailed");
     setTimeout(() => { btn.textContent = btn.dataset.label; }, 1500);
   });
 });
@@ -40,3 +40,5 @@ document.querySelectorAll(".fill[data-w]").forEach((el) => {
   const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute("data-w")) || 0));
   el.style.width = pct + "%";
 });
+
+try { mountLangSwitcher("#lang-mount-sub"); } catch (_) {}

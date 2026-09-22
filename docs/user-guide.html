@@ -7,134 +7,136 @@
 <meta name="referrer" content="no-referrer">
 <title>Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1>Users <span class="z">&amp;</span> Plans</h1>
-<p class="subtitle">Everything about selling and managing accounts.</p>
+<h1><span data-i18n="usr.titleA">Users</span> <span class="z">&amp;</span> <span data-i18n="usr.titleB">Plans</span></h1>
+<p class="subtitle" data-i18n="usr.subtitle">Everything about selling and managing accounts.</p>
 
-<h2 id="creating-a-user">Creating a user</h2>
+<h2 id="creating-a-user" data-i18n="usr.creating">Creating a user</h2>
 <ol>
-  <li>Open <b>Users → New user</b>.</li>
-  <li>Pick a username (English letters, digits, <code>_</code>, 3–32 chars).</li>
-  <li>Select one or more protocols — any mix of VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5.</li>
-  <li>Set <b>volume</b> (GB) and <b>duration</b> (days).</li>
-  <li>Optional: note, device limit, start-on-first-use. Save.</li>
+  <li><span data-i18n="usr.s1a">Open</span> <b data-i18n="usr.s1b">Users → New user</b>.</li>
+  <li><span data-i18n="usr.s2a">Pick a username (English letters, digits,</span> <code>_</code><span data-i18n="usr.s2b">, 3–32 chars).</span></li>
+  <li data-i18n="usr.s3">Select one or more protocols — any mix of VLESS, REALITY, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5.</li>
+  <li><span data-i18n="usr.s4a">Set</span> <b data-i18n="usr.s4b">volume</b> <span data-i18n="usr.s4c">(GB) and</span> <b data-i18n="usr.s4d">duration</b> <span data-i18n="usr.s4e">(days).</span></li>
+  <li data-i18n="usr.s5">Optional: note, device limit, start-on-first-use. Save.</li>
 </ol>
-<p>The panel generates all secrets instantly (UUIDs, X25519 keys, OpenVPN certificates from its own CA, L2TP passwords + IPsec PSKs, Cisco/SOCKS5 passwords) and shows the subscription link + QR.</p>
+<p data-i18n="usr.gen">The panel generates all secrets instantly (UUIDs, X25519 keys, OpenVPN certificates from its own CA, L2TP passwords + IPsec PSKs, Cisco/SOCKS5 passwords) and shows the subscription link + QR.</p>
 
-<h2 id="plan-mechanics">Plan mechanics</h2>
+<h2 id="plan-mechanics" data-i18n="usr.plan">Plan mechanics</h2>
 <table>
-<tr><th>Option</th><th>What it does</th></tr>
-<tr><td>Volume (GB)</td><td>Traffic quota. At 100% the subscription stops working until you add volume or reset usage.</td></tr>
-<tr><td>Duration (days)</td><td>Expiry date counted from creation — unless start-on-first-use is on.</td></tr>
-<tr><td>Start on first use</td><td>Expiry countdown begins at the user's first subscription fetch. Ideal for pre-sold codes.</td></tr>
-<tr><td>Device limit</td><td>Informational cap shown in Clash configs (<code># zefira-device-limit</code>); enforced by compatible clients.</td></tr>
-<tr><td>Active toggle</td><td>Instantly disables every protocol without deleting the account.</td></tr>
+<tr><th data-i18n="usr.thOpt">Option</th><th data-i18n="usr.thDoes">What it does</th></tr>
+<tr><td data-i18n="usr.optVol">Volume (GB)</td><td data-i18n="usr.optVolD">Traffic quota. At 100% the subscription stops working until you add volume or reset usage.</td></tr>
+<tr><td data-i18n="usr.optDur">Duration (days)</td><td data-i18n="usr.optDurD">Expiry date counted from creation — unless start-on-first-use is on.</td></tr>
+<tr><td data-i18n="usr.optSofu">Start on first use</td><td data-i18n="usr.optSofuD">Expiry countdown begins at the user's first subscription fetch. Ideal for pre-sold codes.</td></tr>
+<tr><td data-i18n="usr.optDev">Device limit</td><td><span data-i18n="usr.optDevA">Informational cap shown in Clash configs (</span><code># zefira-device-limit</code><span data-i18n="usr.optDevB">); enforced by compatible clients.</span></td></tr>
+<tr><td data-i18n="usr.optAct">Active toggle</td><td data-i18n="usr.optActD">Instantly disables every protocol without deleting the account.</td></tr>
 </table>
 
-<h2 id="managing-users">Managing users</h2>
+<h2 id="managing-users" data-i18n="usr.managing">Managing users</h2>
 <ul>
-  <li><b>Edit (pencil button):</b> change note, total volume, exact expiry, device limit, or reset usage to zero.</li>
-  <li><b>Extend / top-up:</b> edit a user to add days, add volume, reset usage, change note or device limit, set an exact expiry. Extending an expired account counts from today.</li>
-  <li><b>Reset token:</b> rotates the subscription token <i>and</i> all protocol secrets — use when a link leaks.</li>
-  <li><b>Search:</b> the Users search box matches username and note (special characters are escaped safely).</li>
-  <li><b>Dashboard:</b> totals, expiring-soon (7 days), out-of-volume, disabled and pending-start counters.</li>
+  <li><b data-i18n="usr.editB">Edit (pencil button):</b> <span data-i18n="usr.editT">change note, total volume, exact expiry, device limit, or reset usage to zero.</span></li>
+  <li><b data-i18n="usr.extB">Extend / top-up:</b> <span data-i18n="usr.extT">edit a user to add days, add volume, reset usage, change note or device limit, set an exact expiry. Extending an expired account counts from today.</span></li>
+  <li><b data-i18n="usr.rstB">Reset token:</b> <span data-i18n="usr.rstA">rotates the subscription token</span> <i data-i18n="usr.rstAnd">and</i> <span data-i18n="usr.rstC">all protocol secrets — use when a link leaks.</span></li>
+  <li><b data-i18n="usr.searchB">Search:</b> <span data-i18n="usr.searchT">the Users search box matches username and note (special characters are escaped safely).</span></li>
+  <li><b data-i18n="usr.dashB">Dashboard:</b> <span data-i18n="usr.dashT">totals, expiring-soon (7 days), out-of-volume, disabled and pending-start counters.</span></li>
 </ul>
 
-<h2 id="ai-assistant">AI assistant</h2>
-<p>The <b>?</b> bubble (bottom-right of every panel page) chats with an assistant that knows this panel inside-out and answers <b>panel questions only</b> — great for beginners. <b>Groq is the default provider (free and fast):</b> sign up at <b>console.groq.com → API Keys</b>, create a key (<code>gsk_…</code>), then in Zefira go to <b>Settings → AI Assistant</b>, pick <b>Groq</b>, set model <code>qwen/qwen3.8-27b</code> (reliable default; <code>openai/gpt-oss-20b</code> also works for plain Q&amp;A but insists on native tool-calls, which the panel deliberately disables in favor of its provider-agnostic text protocol), paste the key and <b>leave the base URL empty</b> — the panel already knows Groq lives at <code>https://api.groq.com/openai/v1</code>. Enable, save, open the bubble and ask. (Pasting <code>api.groq.com</code> or <code>…/v1</code> by hand is auto-corrected; a bare wrong URL is what causes the classic provider <b>404</b>.) OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama still work via OpenAI-compatible / native modes. The key is stored encrypted and never shown back; chats are rate-limited (30/hour); Groq's free tier is rate-limited too, so a <b>429</b> means wait a bit.</p>
-<p><b>It can also act — just ask:</b> create users, extend days, add volume, reset usage, pause/enable accounts, find users, show stats, hand over subscription links. Examples: <i>“make user ali with 50 gig 30 days vless”</i>, <i>“extend sara 15 days”</i>, <i>“top up reza 20 gig”</i>, <i>“reset usage of omid”</i>, <i>“pause karim”</i>, <i>“link of mina?”</i>, <i>“how many users do I have?”</i> Missing details are asked, never guessed (max 3 operations per turn). Every action runs through the same validation as the panel buttons and is audit-logged (<code>AI_CREATE</code>/<code>AI_PATCH</code>) with your name; new users trigger the usual Telegram notification.</p>
-<p><b>Off-limits for the AI</b> (it explains which button to press instead): deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes.</p>
+<h2 id="ai-assistant" data-i18n="usr.ai">AI assistant</h2>
+<p><span data-i18n="usr.aiA">The</span> <b>?</b> <span data-i18n="usr.aiB">bubble (bottom-right of every panel page) chats with an assistant that knows this panel inside-out and answers</span> <b data-i18n="usr.aiC">panel questions only</b> <span data-i18n="usr.aiD">— great for beginners.</span> <b data-i18n="usr.aiE">Groq is the default provider (free and fast):</b> <span data-i18n="usr.aiF">sign up at</span> <b>console.groq.com → API Keys</b><span data-i18n="usr.aiG">, create a key (</span><code>gsk_…</code><span data-i18n="usr.aiH">), then in Zefira go to</span> <b data-i18n="usr.aiI">Settings → AI Assistant</b><span data-i18n="usr.aiJ">, pick</span> <b>Groq</b><span data-i18n="usr.aiK">, set model</span> <code>qwen/qwen3.8-27b</code> <span data-i18n="usr.aiL">(reliable default;</span> <code>openai/gpt-oss-20b</code> <span data-i18n="usr.aiM">also works for plain Q&amp;A but insists on native tool-calls, which the panel deliberately disables in favor of its provider-agnostic text protocol), paste the key and</span> <b data-i18n="usr.aiN">leave the base URL empty</b> <span data-i18n="usr.aiO">— the panel already knows Groq lives at</span> <code>https://api.groq.com/openai/v1</code><span data-i18n="usr.aiP">. Enable, save, open the bubble and ask. (Pasting</span> <code>api.groq.com</code> <span data-i18n="usr.aiQ">or</span> <code>…/v1</code> <span data-i18n="usr.aiR">by hand is auto-corrected; a bare wrong URL is what causes the classic provider</span> <b>404</b><span data-i18n="usr.aiS">.) OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama still work via OpenAI-compatible / native modes. The key is stored encrypted and never shown back; chats are rate-limited (30/hour); Groq's free tier is rate-limited too, so a</span> <b>429</b> <span data-i18n="usr.aiT">means wait a bit.</span></p>
+<p><b data-i18n="usr.actB">It can also act — just ask:</b> <span data-i18n="usr.actA">create users, extend days, add volume, reset usage, pause/enable accounts, find users, show stats, hand over subscription links. Examples:</span> <i>“make user ali with 50 gig 30 days vless”</i>, <i>“extend sara 15 days”</i>, <i>“top up reza 20 gig”</i>, <i>“reset usage of omid”</i>, <i>“pause karim”</i>, <i>“link of mina?”</i>, <i>“how many users do I have?”</i> <span data-i18n="usr.actC">Missing details are asked, never guessed (max 3 operations per turn). Every action runs through the same validation as the panel buttons and is audit-logged (</span><code>AI_CREATE</code>/<code>AI_PATCH</code><span data-i18n="usr.actD">) with your name; new users trigger the usual Telegram notification.</span></p>
+<p><b data-i18n="usr.offB">Off-limits for the AI</b> <span data-i18n="usr.offT">(it explains which button to press instead): deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes.</span></p>
 
-<h2 id="bots-integrations">Bots &amp; integrations</h2>
-<p><b>Settings → API Tokens</b> issues <code>zfp_…</code> bearer tokens for Telegram bots, reseller dashboards and scripts. Send <code>Authorization: Bearer …</code> instead of cookies (then no CSRF header is needed either). Pick a scope at creation:</p>
+<h2 id="bots-integrations" data-i18n="usr.bots">Bots &amp; integrations</h2>
+<p><b data-i18n="usr.tokB">Settings → API Tokens</b> <span data-i18n="usr.tokA">issues</span> <code>zfp_…</code> <span data-i18n="usr.tokC">bearer tokens for Telegram bots, reseller dashboards and scripts. Send</span> <code>Authorization: Bearer …</code> <span data-i18n="usr.tokD">instead of cookies (then no CSRF header is needed either). Pick a scope at creation:</span></p>
 <table>
-<tr><th>Scope</th><th>Can</th><th>Use for</th></tr>
-<tr><td><code>bot</code></td><td>List/search users, lookup by username, create users (incl. start-on-first-use), read stats &amp; templates, own subscription links, QR, <b>developer resets</b> (usage + token renewal)</td><td>Reseller bots — least privilege, safe to ship</td></tr>
-<tr><td><code>full</code> (default)</td><td>Everything the creating admin can do (except password-gated actions, which still need the password)</td><td>Your own dashboards &amp; scripts only</td></tr>
+<tr><th data-i18n="usr.thScope">Scope</th><th data-i18n="usr.thCan">Can</th><th data-i18n="usr.thUse">Use for</th></tr>
+<tr><td><code>bot</code></td><td><span data-i18n="usr.botCanA">List/search users, lookup by username, create users (incl. start-on-first-use), read stats &amp; templates, own subscription links, QR,</span> <b data-i18n="usr.botCanB">developer resets</b> <span data-i18n="usr.botCanC">(usage + token renewal)</span></td><td data-i18n="usr.botUse">Reseller bots — least privilege, safe to ship</td></tr>
+<tr><td><code>full</code> <span data-i18n="usr.fullDef">(default)</span></td><td data-i18n="usr.fullCan">Everything the creating admin can do (except password-gated actions, which still need the password)</td><td data-i18n="usr.fullUse">Your own dashboards &amp; scripts only</td></tr>
 </table>
-<p>Tokens are shown <b>once</b>, can be revoked instantly, are included in backups, and a <code>bot</code> token gets <code>403</code> on deletes, patches, backup/restore, settings, tokens and updates. Guard them like passwords.</p>
-<p><b>Telegram reseller bot in 5 minutes:</b> 1) message <b>@BotFather</b> → <code>/newbot</code>, copy the token; 2) in Zefira create a <code>bot</code>-scoped API token; 3) open <code>examples/telegram-bot-python</code> (or <code>-node</code>), set <code>TELEGRAM_BOT_TOKEN</code>, <code>ZEFIRA_URL</code>, <code>ZEFIRA_API_TOKEN</code>; 4) run it — customers get <code>/buy</code> plans keyboard, instant account + subscription link, <code>/my</code> quota view. Panel-side notifications (user create/delete, brute-force lockouts) are separate: <b>Settings → Telegram Notifications</b> with any bot token + chat ID (message the bot once first, then Send Test).</p>
+<p><span data-i18n="usr.guardA">Tokens are shown</span> <b data-i18n="usr.guardOnce">once</b><span data-i18n="usr.guardB">, can be revoked instantly, are included in backups, and a</span> <code>bot</code> <span data-i18n="usr.guardC">token gets</span> <code>403</code> <span data-i18n="usr.guardD">on deletes, patches, backup/restore, settings, tokens and updates. Guard them like passwords.</span></p>
+<p><b data-i18n="usr.tgB">Telegram reseller bot in 5 minutes:</b> <span data-i18n="usr.tgA">1) message</span> <b>@BotFather</b> → <code>/newbot</code><span data-i18n="usr.tgCopy">, copy the token;</span> <span data-i18n="usr.tgC">2) in Zefira create a</span> <code>bot</code><span data-i18n="usr.tgD">-scoped API token;</span> <span data-i18n="usr.tgE">3) open</span> <code>examples/telegram-bot-python</code> <span data-i18n="usr.tgF">(or</span> <code>-node</code><span data-i18n="usr.tgG">), set</span> <code>TELEGRAM_BOT_TOKEN</code>, <code>ZEFIRA_URL</code>, <code>ZEFIRA_API_TOKEN</code><span data-i18n="usr.tgH">; 4) run it — customers get</span> <code>/buy</code> <span data-i18n="usr.tgI">plans keyboard, instant account + subscription link,</span> <code>/my</code> <span data-i18n="usr.tgJ">quota view. Panel-side notifications (user create/delete, brute-force lockouts) are separate:</span> <b data-i18n="usr.tgK">Settings → Telegram Notifications</b> <span data-i18n="usr.tgL">with any bot token + chat ID (message the bot once first, then Send Test).</span></p>
 
-<h2 id="panel-updates">Panel updates</h2>
-<p><b>Update</b> (left menu, above Settings) compares this server with GitHub: current vs latest commit, and the exact incoming changes. <b>Update now</b> asks for your password, then pulls the code, reinstalls dependencies and restarts the panel — watch it poll until it reports the new version. Updates are refused if you have local code changes, and every step is audit-logged.</p>
+<h2 id="panel-updates" data-i18n="usr.upd">Panel updates</h2>
+<p><b data-i18n="usr.updB1">Update</b> <span data-i18n="usr.updA">(left menu, above Settings) compares this server with GitHub: current vs latest commit, and the exact incoming changes.</span> <b data-i18n="usr.updB2">Update now</b> <span data-i18n="usr.updC">asks for your password, then pulls the code, reinstalls dependencies and restarts the panel — watch it poll until it reports the new version. Updates are refused if you have local code changes, and every step is audit-logged.</span></p>
 
-<h2 id="appearance-branding">Appearance &amp; branding</h2><p>The <b>Personalize</b> menu (left sidebar) holds everything visual: <b>Appearance &amp; Branding</b> personalizes colors (a live <code>/theme.css</code> recolors the panel, login page and every user dashboard), the brand name shown in place of ZEFIRA, and a message pinned on top of all subscription pages — empty color resets to the default red-black. The <b>Menu Layout</b> card reorders the left menu and hides unused sections (Dashboard, Users, Inbounds, Personalize, Settings always stay); <b>User Dashboard Layout</b> reorders or hides the usage, link, configs and apps cards on every customer page. All of it is included in backups.</p>
+<h2 id="appearance-branding" data-i18n="usr.appear">Appearance &amp; branding</h2><p><span data-i18n="usr.appA">The</span> <b data-i18n="usr.appB1">Personalize</b> <span data-i18n="usr.appC">menu (left sidebar) holds everything visual:</span> <b data-i18n="usr.appB2">Appearance &amp; Branding</b> <span data-i18n="usr.appD">personalizes colors (a live</span> <code>/theme.css</code> <span data-i18n="usr.appE">recolors the panel, login page and every user dashboard), the brand name shown in place of ZEFIRA, and a message pinned on top of all subscription pages — empty color resets to the default red-black. The</span> <b data-i18n="usr.appB3">Menu Layout</b> <span data-i18n="usr.appF">card reorders the left menu and hides unused sections (Dashboard, Users, Inbounds, Personalize, Settings always stay);</span> <b data-i18n="usr.appB4">User Dashboard Layout</b> <span data-i18n="usr.appG">reorders or hides the usage, link, configs and apps cards on every customer page. All of it is included in backups.</span></p>
 
-<h2 id="account-security">Account security</h2><ul>
-  <li><b>Change password</b> (Settings) logs out every other session immediately.</li>
-  <li><b>Backup download</b> asks for your password; there is no password-less export.</li>
+<h2 id="account-security" data-i18n="usr.sec">Account security</h2><ul>
+  <li><b data-i18n="usr.secChB">Change password</b> <span data-i18n="usr.secChT">(Settings) logs out every other session immediately.</span></li>
+  <li><b data-i18n="usr.secBkB">Backup download</b> <span data-i18n="usr.secBkT">asks for your password; there is no password-less export.</span></li>
 </ul>
 
-<h2 id="templates">Templates</h2>
-<p>Save recurring plans (<b>Templates</b>) — name, protocols, volume, days, first-use and device limit — then create users from a template in one click. Template names allow letters, digits, spaces, <code>_</code> and <code>-</code>.</p>
+<h2 id="templates" data-i18n="usr.tpl">Templates</h2>
+<p><span data-i18n="usr.tplA">Save recurring plans (</span><b data-i18n="usr.tplB">Templates</b><span data-i18n="usr.tplC">) — name, protocols, volume, days, first-use and device limit — then create users from a template in one click. Template names allow letters, digits, spaces,</span> <code>_</code> <span data-i18n="usr.tplD">and</span> <code>-</code>.</p>
 
-<h2 id="inbounds">Inbounds</h2>
-<p>Extra ports per protocol (<b>Inbounds</b>): give VLESS port 443 <i>and</i> 8443, each with its own host. Subscription links and Clash configs include every enabled inbound automatically, labeled with the inbound name.</p>
+<h2 id="inbounds" data-i18n="usr.ib">Inbounds</h2>
+<p><span data-i18n="usr.ibA">Extra ports per protocol (</span><b data-i18n="usr.ibB">Inbounds</b><span data-i18n="usr.ibC">): give VLESS port 443</span> <i data-i18n="usr.ibAnd">and</i> <span data-i18n="usr.ibD">8443, each with its own host. Subscription links and Clash configs include every enabled inbound automatically, labeled with the inbound name.</span></p>
 
-<h2 id="server-nodes">Server nodes</h2>
-<p><b>Nodes</b> (left menu) registers your remote VPN servers: name, address, check port, note. The panel probes each server every 5 minutes (plus on-demand <b>Check now</b>) and shows live status, latency in ms and uptime %.</p>
-<p>Pin any inbound to a node from the Inbounds section (per-row dropdown, or at creation). Links served from a node that goes <b>offline</b> (or is disabled) are automatically left out of subscriptions until it recovers — unchecked nodes keep serving. Deleting a node returns its inbounds to the local panel.</p>
+<h2 id="server-nodes" data-i18n="usr.nodes">Server nodes</h2>
+<p><b data-i18n="usr.nodeB1">Nodes</b> <span data-i18n="usr.nodeA">(left menu) registers your remote VPN servers: name, address, check port, note. The panel probes each server every 5 minutes (plus on-demand</span> <b data-i18n="usr.nodeB2">Check now</b><span data-i18n="usr.nodeC">) and shows live status, latency in ms and uptime %.</span></p>
+<p><span data-i18n="usr.pinA">Pin any inbound to a node from the Inbounds section (per-row dropdown, or at creation). Links served from a node that goes</span> <b data-i18n="usr.pinB">offline</b> <span data-i18n="usr.pinC">(or is disabled) are automatically left out of subscriptions until it recovers — unchecked nodes keep serving. Deleting a node returns its inbounds to the local panel.</span></p>
 
-<h2 id="tunnels-backpack">Tunnels (BackPack)</h2><p>Register Iran ⇄ Kharej tunnels: transport, both IPs, tunnel port, forwarded ports, UDP flag. Zefira stores an encrypted token per tunnel, generates a step-by-step setup guide for both servers, and can probe the Iran endpoint (<b>Check now</b>) with automatic online/offline status.</p>
+<h2 id="tunnels-backpack" data-i18n="usr.tun">Tunnels (BackPack)</h2><p><span data-i18n="usr.tunA">Register Iran ⇄ Kharej tunnels: transport, both IPs, tunnel port, forwarded ports, UDP flag. Zefira stores an encrypted token per tunnel, generates a step-by-step setup guide for both servers, and can probe the Iran endpoint (</span><b data-i18n="usr.tunB">Check now</b><span data-i18n="usr.tunC">) with automatic online/offline status.</span></p>
 
-<h2 id="anti-censorship-settings">Anti-censorship settings</h2>
+<h2 id="anti-censorship-settings" data-i18n="usr.anti">Anti-censorship settings</h2>
 <table>
-<tr><th>Setting</th><th>Effect</th></tr>
-<tr><td>REALITY keys</td><td>Generate an X25519 keypair; private key stays encrypted, reveal is audit-logged.</td></tr>
-<tr><td>REALITY SNI list</td><td>Comma-separated SNIs, rotated across the generated links.</td></tr>
-<tr><td>Obfuscated host</td><td>Replaces the real domain inside configs with a decoy host.</td></tr>
-<tr><td>Per-user subdomain</td><td>Prefixes a per-user hash (<code>a1b2c3d4.domain</code>) so links are not correlatable.</td></tr>
-<tr><td>CDN SNI spoofing</td><td>Uses a separate CDN domain for TLS SNI.</td></tr>
-<tr><td>Block direct IP</td><td>Returns 403 for panel/API access via raw IP — domain only.</td></tr>
+<tr><th data-i18n="usr.antiSet">Setting</th><th data-i18n="usr.antiEff">Effect</th></tr>
+<tr><td data-i18n="usr.setReality">REALITY keys</td><td data-i18n="usr.setRealityD">Generate an X25519 keypair; private key stays encrypted, reveal is audit-logged.</td></tr>
+<tr><td data-i18n="usr.setSni">REALITY SNI list</td><td data-i18n="usr.setSniD">Comma-separated SNIs, rotated across the generated links.</td></tr>
+<tr><td data-i18n="usr.setObf">Obfuscated host</td><td data-i18n="usr.setObfD">Replaces the real domain inside configs with a decoy host.</td></tr>
+<tr><td data-i18n="usr.setPer">Per-user subdomain</td><td><span data-i18n="usr.setPerA">Prefixes a per-user hash (</span><code>a1b2c3d4.domain</code><span data-i18n="usr.setPerB">) so links are not correlatable.</span></td></tr>
+<tr><td data-i18n="usr.setCdn">CDN SNI spoofing</td><td data-i18n="usr.setCdnD">Uses a separate CDN domain for TLS SNI.</td></tr>
+<tr><td data-i18n="usr.setBlock">Block direct IP</td><td data-i18n="usr.setBlockD">Returns 403 for panel/API access via raw IP — domain only.</td></tr>
 </table>
 
-<h2 id="site-blocker">Site blocker</h2>
-<p>Append blocked domains to every Clash config (<code>DOMAIN-SUFFIX,…,REJECT</code>), plus a one-click porn preset (15 major domains). Max 500 custom entries.</p>
+<h2 id="site-blocker" data-i18n="usr.block">Site blocker</h2>
+<p><span data-i18n="usr.blockA">Append blocked domains to every Clash config (</span><code>DOMAIN-SUFFIX,…,REJECT</code><span data-i18n="usr.blockB">), plus a one-click porn preset (15 major domains). Max 500 custom entries.</span></p>
 
-<h2 id="backup-restore">Backup &amp; restore</h2>
+<h2 id="backup-restore" data-i18n="usr.bak">Backup &amp; restore</h2>
 <ul>
-  <li><b>Download Backup</b> exports users, admins (password hashes), settings, templates and blocklist as JSON — asks for your password first.</li>
-  <li><b>Restore</b> asks for your current password, wipes users, then re-imports — bad rows are skipped, good rows kept, and every setting is re-validated.</li>
+  <li><b data-i18n="usr.bakDlB">Download Backup</b> <span data-i18n="usr.bakDlT">exports users, admins (password hashes), settings, templates and blocklist as JSON — asks for your password first.</span></li>
+  <li><b data-i18n="usr.bakRsB">Restore</b> <span data-i18n="usr.bakRsT">asks for your current password, wipes users, then re-imports — bad rows are skipped, good rows kept, and every setting is re-validated.</span></li>
 </ul>
-<div class="callout warn">Backups contain password hashes and encrypted secrets — store them like passwords, never in a public place.</div>
+<div class="callout warn" data-i18n="usr.bakWarn">Backups contain password hashes and encrypted secrets — store them like passwords, never in a public place.</div>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="{{ lang }}" dir="{{ direction }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,21 +14,23 @@
       <div class="login-logo">
         <img src="/static/logo.png" alt="Zefira" width="64" height="64" class="logo-round">
         <h1 data-brand>ZEFIRA</h1>
-        <p>Multi-Protocol Proxy Sales Panel</p>
+        <p data-i18n="login.subtitle">Multi-Protocol Proxy Sales Panel</p>
       </div>
       <label class="field">
-        <span>Username</span>
+        <span data-i18n="login.username">Username</span>
         <input type="text" name="username" minlength="3" maxlength="64" required autofocus spellcheck="false">
       </label>
       <label class="field">
-        <span>Password</span>
+        <span data-i18n="login.password">Password</span>
         <input type="password" name="password" minlength="8" maxlength="128" required>
       </label>
       <div id="login-error" class="login-error" role="alert"></div>
-      <button type="submit" id="login-btn" class="btn btn-primary btn-block">Sign in</button>
-      <p class="login-foot"><span data-brand>ZEFIRA</span> PANEL &copy; 2026 &mdash; Secured Connection</p>
+      <button type="submit" id="login-btn" class="btn btn-primary btn-block" data-i18n="login.signin">Sign in</button>
+      <p class="login-foot"><span data-brand>ZEFIRA</span> <span data-i18n="login.foot">PANEL © 2026 — Secured Connection</span></p>
+      <div class="login-lang"><span id="lang-mount-login"></span></div>
     </form>
   </main>
+  <script src="/static/i18n.js?v={{ asset_v }}" defer></script>
   <script src="/static/auth.js?v={{ asset_v }}" defer></script>
 </body>
 </html>

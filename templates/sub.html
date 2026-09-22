@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="{{ lang }}" dir="{{ direction }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +17,7 @@
         {% if note %}<p class="muted">{{ note }}</p>{% endif %}
         <span class="badge {{ status_cls }}">{{ status_label }}</span>
       </div>
+      <span class="sub-lang" id="lang-mount-sub"></span>
     </div>
     {% if dash_note %}
     <div class="card sub-span sub-note">{{ dash_note }}</div>
@@ -25,19 +26,19 @@
     {% for b in blocks %}
     {% if b.id == "usage" %}
     <div class="card">
-      <div class="card-head"><h2>Usage</h2></div>
+      <div class="card-head"><h2 data-i18n="sub.usage">Usage</h2></div>
       <div class="sub-usage">
         <div class="ring-wrap">
           <svg class="ring" viewBox="0 0 120 120" width="110" height="110" role="img" aria-label="Usage {{ volume_pct }} percent">
             <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
             <circle class="ring-fg{% if volume_pct >= 90 %} danger{% endif %}" cx="60" cy="60" r="54" transform="rotate(-90 60 60)" stroke-dasharray="339.3" stroke-dashoffset="{{ ring_offset }}"></circle>
           </svg>
-          <div class="ring-center"><b>{{ volume_pct }}%</b><span>used</span></div>
+          <div class="ring-center"><b>{{ volume_pct }}%</b><span data-i18n="sub.used">used</span></div>
         </div>
         <div class="sub-usage-info">
           <p class="sub-vol">{{ volume_label }}</p>
           <p class="hint">{{ expires_label }}{% if days_label %} · {{ days_label }}{% endif %}</p>
-          <p class="hint">Last active: {{ last_seen_label }}{% if last_seen_ip %} · <span dir="ltr">{{ last_seen_ip }}</span>{% endif %}</p>
+          <p class="hint">{{ last_active_pre }} {{ last_seen_label }}{% if last_seen_ip %} · <span dir="ltr">{{ last_seen_ip }}</span>{% endif %}</p>
           <div class="proto-wrap">
             {% for p in proto_labels %}<span class="badge proto">{{ p }}</span>{% endfor %}
           </div>
@@ -46,13 +47,13 @@
     </div>
     {% elif b.id == "link" %}
     <div class="card">
-      <div class="card-head"><h2>Subscription link</h2></div>
+      <div class="card-head"><h2 data-i18n="sub.link">Subscription link</h2></div>
       <p class="mono sub-url">{{ sub_url }}</p>
       <div class="reality-actions">
-        <button type="button" class="btn btn-sm btn-primary" data-copy="{{ sub_url }}" data-label="Copy link">Copy link</button>
-        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ clash_url }}" data-label="Copy Clash link">Copy Clash link</button>
+        <button type="button" class="btn btn-sm btn-primary" data-copy="{{ sub_url }}" data-label="Copy link" data-i18n="sub.copyLink">Copy link</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ clash_url }}" data-label="Copy Clash link" data-i18n="sub.copyClash">Copy Clash link</button>
       </div>
-      <p class="hint">Paste it into your app, scan the QR, or use one-tap import:</p>
+      <p class="hint" data-i18n="sub.pasteHint">Paste it into your app, scan the QR, or use one-tap import:</p>
       <div class="sub-qr-row">
         <div class="qr-box"><img src="data:image/svg+xml;base64,{{ qr_b64 }}" alt="Subscription QR"></div>
         <div class="btn-col">
@@ -69,31 +70,32 @@
       {% for link in b.links %}
       <div class="sub-link-row">
         <p class="mono sub-url">{{ link }}</p>
-        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ link }}" data-label="Copy">Copy</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy="{{ link }}" data-label="Copy" data-i18n="sub.copy">Copy</button>
       </div>
       {% endfor %}
       {% if b.config %}
       <textarea class="sub-config" id="cfg-{{ outer }}-{{ b.links|length }}" readonly rows="8">{{ b.config }}</textarea>
       <div class="reality-actions">
-        <button type="button" class="btn btn-sm btn-ghost" data-copy-target="#cfg-{{ outer }}-{{ b.links|length }}" data-label="Copy config">Copy config</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-copy-target="#cfg-{{ outer }}-{{ b.links|length }}" data-label="Copy config" data-i18n="sub.copyConfig">Copy config</button>
       </div>
       {% endif %}
     </div>
     {% elif b.id == "apps" %}
     <div class="card sub-span">
-      <div class="card-head"><h2>Apps</h2></div>
-      <p class="hint">Official downloads — pick your platform:</p>
+      <div class="card-head"><h2 data-i18n="sub.apps">Apps</h2></div>
+      <p class="hint" data-i18n="sub.appsHint">Official downloads — pick your platform:</p>
       <div class="app-grid">
         <div class="app-tile"><b>Android</b><span><a href="https://github.com/2dust/v2rayNG/releases" target="_blank" rel="noopener">v2rayNG</a> · <a href="https://github.com/MatsuriDayo/NekoBoxForAndroid/releases" target="_blank" rel="noopener">NekoBox</a></span></div>
         <div class="app-tile"><b>iOS</b><span><a href="https://apps.apple.com/app/id1490021179" target="_blank" rel="noopener">Streisand</a> · <a href="https://apps.apple.com/app/id6448898396" target="_blank" rel="noopener">FoXray</a> · <a href="https://apps.apple.com/app/id932747118" target="_blank" rel="noopener">Shadowrocket</a></span></div>
         <div class="app-tile"><b>Windows</b><span><a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" rel="noopener">NekoRay</a> · <a href="https://github.com/clash-verge-rev/clash-verge-rev/releases" target="_blank" rel="noopener">Clash Verge</a> · <a href="https://github.com/hiddify/hiddify-app/releases" target="_blank" rel="noopener">Hiddify</a></span></div>
         <div class="app-tile"><b>macOS / Linux</b><span><a href="https://github.com/clash-verge-rev/clash-verge-rev/releases" target="_blank" rel="noopener">Clash Verge</a> · <a href="https://github.com/hiddify/hiddify-app/releases" target="_blank" rel="noopener">Hiddify</a></span></div>
       </div>
-      <p class="hint">Keep this page private — anyone with your link uses your volume.</p>
+      <p class="hint" data-i18n="sub.keepPrivate">Keep this page private — anyone with your link uses your volume.</p>
     </div>
     {% endif %}
     {% endfor %}
   </main>
+  <script src="/static/i18n.js?v={{ asset_v }}" defer></script>
   <script src="/static/sub.js?v={{ asset_v }}" defer></script>
 </body>
 </html>

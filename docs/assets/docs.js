@@ -42,11 +42,11 @@ if (navSearch) {
 document.querySelectorAll("pre").forEach(function (pre) {
   var btn = document.createElement("button");
   btn.className = "copy-btn";
-  btn.textContent = "Copy";
+  btn.textContent = t("docs.copy");
   btn.addEventListener("click", function () {
-    navigator.clipboard.writeText(pre.innerText.replace(/^Copy\n/, "")).then(function () {
-      btn.textContent = "Copied ✓";
-      setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+    navigator.clipboard.writeText(pre.innerText.replace(new RegExp("^" + t("docs.copy") + "\n"), "")).then(function () {
+      btn.textContent = t("docs.copied");
+      setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
     });
   });
   pre.appendChild(btn);
@@ -90,9 +90,9 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var trigger = document.createElement("button");
   trigger.className = "sp-trigger";
   trigger.type = "button";
-  trigger.setAttribute("aria-label", "Search docs (Ctrl+K)");
+  trigger.setAttribute("aria-label", t("docs.palSearchAria"));
   var isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-  trigger.innerHTML = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg><span>Search</span><kbd>" + (isMac ? "⌘K" : "Ctrl K") + "</kbd>";
+  trigger.innerHTML = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg><span>" + t("docs.palSearch") + "</span><kbd>" + (isMac ? "⌘K" : "Ctrl K") + "</kbd>";
   var anchor = topbar.querySelector(".gh");
   topbar.insertBefore(trigger, anchor || topbar.querySelector(".spacer"));
 
@@ -100,11 +100,11 @@ document.querySelectorAll("pre").forEach(function (pre) {
   overlay.className = "sp-overlay";
   overlay.hidden = true;
   overlay.innerHTML =
-    "<div class='sp-modal' role='dialog' aria-modal='true' aria-label='Search documentation'>" +
+    "<div class='sp-modal' role='dialog' aria-modal='true' aria-label='" + t("docs.palSearch") + "'>" +
     "<div class='sp-input-row'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#ff2740' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>" +
-    "<input id='sp-input' type='text' placeholder='Search documentation…' autocomplete='off' spellcheck='false'></div>" +
+    "<input id='sp-input' type='text' placeholder='" + t("docs.palSearchPh") + "' autocomplete='off' spellcheck='false'></div>" +
     "<div class='sp-results' id='sp-results'></div>" +
-    "<div class='sp-foot'><span><kbd>↑↓</kbd>navigate</span><span><kbd>↵</kbd>open</span><span><kbd>esc</kbd>close</span></div></div>";
+    "<div class='sp-foot'><span><kbd>↑↓</kbd>" + t("docs.palNav") + "</span><span><kbd>↵</kbd>" + t("docs.palOpen") + "</span><span><kbd>esc</kbd>" + t("docs.palClose") + "</span></div></div>";
   document.body.appendChild(overlay);
   var input = overlay.querySelector("#sp-input");
   var resultsBox = overlay.querySelector("#sp-results");
@@ -117,7 +117,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
     if (!items.length) {
       var empty = document.createElement("div");
       empty.className = "sp-empty";
-      empty.textContent = index === null ? "Loading index…" : (lastQ ? "No results for “" + lastQ + "”" : "Type to search " + (index ? index.length : 69) + " doc sections…");
+      empty.textContent = index === null ? t("docs.palLoading") : (lastQ ? t("docs.palNoRes", {q: lastQ}) : t("docs.palType", {n: index ? index.length : 69}));
       resultsBox.appendChild(empty);
       return;
     }
@@ -209,14 +209,14 @@ document.querySelectorAll("pre").forEach(function (pre) {
     modal.className = "dn-modal";
     modal.setAttribute("role", "dialog");
     modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-label", "Donate");
+    modal.setAttribute("aria-label", t("docs.dnTitle"));
     var head = document.createElement("div");
     head.className = "dn-head";
-    head.textContent = "Support Zefira";
+    head.textContent = t("docs.dnTitle");
     var x = document.createElement("button");
     x.type = "button";
     x.textContent = "×";
-    x.setAttribute("aria-label", "Close");
+    x.setAttribute("aria-label", t("ai.close"));
     x.addEventListener("click", close);
     head.appendChild(x);
     bodyEl = document.createElement("div");
@@ -225,7 +225,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
     foot.className = "dn-foot";
     var more = document.createElement("a");
     more.href = "donate.html";
-    more.textContent = "Full donate page →";
+    more.textContent = t("docs.dnFull");
     foot.appendChild(more);
     modal.appendChild(head);
     modal.appendChild(bodyEl);
@@ -244,15 +244,15 @@ document.querySelectorAll("pre").forEach(function (pre) {
     c.title = addr;
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = "Copy";
+    btn.textContent = t("docs.copy");
     btn.addEventListener("click", async function () {
       try {
         await navigator.clipboard.writeText(addr);
-        btn.textContent = "Copied ✓";
+        btn.textContent = t("docs.copied");
       } catch (_) {
-        btn.textContent = "Copy failed";
+        btn.textContent = t("docs.copyFailed");
       }
-      setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+      setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
     });
     r.appendChild(b);
     r.appendChild(c);
@@ -280,7 +280,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
       p.className = "hint";
       var a = document.createElement("a");
       a.href = "donate.html";
-      a.textContent = "See the donate page for wallets.";
+      a.textContent = t("docs.dnSee");
       p.appendChild(a);
       bodyEl.appendChild(p);
     }
@@ -311,16 +311,16 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var fab = document.createElement("button");
   fab.className = "sup-fab";
   fab.type = "button";
-  fab.setAttribute("aria-label", "Get support");
+  fab.setAttribute("aria-label", t("docs.supFab"));
   fab.textContent = "?";
   var panel = document.createElement("div");
   panel.className = "sup-panel";
   panel.hidden = true;
   var head = document.createElement("div");
   head.className = "sup-head";
-  head.textContent = "Need help?";
+  head.textContent = t("docs.supHead");
   var sub = document.createElement("small");
-  sub.textContent = "Answers, community and bug reports.";
+  sub.textContent = t("docs.supSub");
   head.appendChild(sub);
   var links = document.createElement("div");
   links.className = "sup-links";
@@ -341,19 +341,19 @@ document.querySelectorAll("pre").forEach(function (pre) {
     }
     return el;
   }
-  links.appendChild(row("Ask AI assistant", "docs answers, offline", null, function () {
+  links.appendChild(row(t("docs.supAskAi"), t("docs.supAskAiHint"), null, function () {
     closePanel();
     if (window.__zefiraSiteAI) window.__zefiraSiteAI.open();
   }));
-  links.appendChild(row("Search the docs", "Ctrl K", null, function () {
+  links.appendChild(row(t("docs.supSearch"), t("docs.supCtrlK"), null, function () {
     closePanel();
     if (window.__zefiraSearch) window.__zefiraSearch.open();
   }));
-  links.appendChild(row("Support page", null, "support.html", null));
-  links.appendChild(row("FAQ & troubleshooting", null, "faq.html", null));
-  links.appendChild(row("Ask the community", null, "https://github.com/mrlurix/zefira-panel/discussions", null));
-  links.appendChild(row("Report a bug", null, "https://github.com/mrlurix/zefira-panel/issues", null));
-  links.appendChild(row("Donate", null, null, function () {
+  links.appendChild(row(t("docs.supSupport"), null, "support.html", null));
+  links.appendChild(row(t("docs.supFaq"), null, "faq.html", null));
+  links.appendChild(row(t("docs.supCommunity"), null, "https://github.com/mrlurix/zefira-panel/discussions", null));
+  links.appendChild(row(t("docs.supBug"), null, "https://github.com/mrlurix/zefira-panel/issues", null));
+  links.appendChild(row(t("docs.supDonate"), null, null, function () {
     closePanel();
     if (window.__zefiraDonate) window.__zefiraDonate.open();
   }));
@@ -378,3 +378,5 @@ document.querySelectorAll("pre").forEach(function (pre) {
     if (!panel.hidden && !panel.contains(e.target) && e.target !== fab && !fab.contains(e.target)) closePanel();
   });
 })();
+
+try { mountLangSwitcher("#docs-lang-mount"); } catch (_) {}

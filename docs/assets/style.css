@@ -604,3 +604,22 @@ table { display: block; width: 100%; overflow-x: auto; }
 .dn-row button:hover { color: var(--text); border-color: var(--red); }
 .dn-foot { padding: 10px 16px 14px; border-top: 1px solid var(--border); font-size: 13px; }
 .dn-foot a { color: var(--red); text-decoration: none; }
+
+/* ---------- i18n: language switcher + RTL ---------- */
+.lang-sel {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.lang-sel:focus { outline: none; border-color: var(--red); }
+[dir="rtl"] .content, [dir="rtl"] .landing { direction: rtl; text-align: right; }
+[dir="rtl"] .sidebar { text-align: right; }
+[dir="rtl"] pre, [dir="rtl"] code, [dir="rtl"] .dn-row code { direction: ltr; unicode-bidi: isolate; text-align: left; }
+[dir="rtl"] table { direction: rtl; }
+[dir="rtl"] th, [dir="rtl"] td { text-align: right; }
+[dir="rtl"] .dn-head button { margin-left: 0; margin-right: auto; }

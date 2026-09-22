@@ -7,88 +7,90 @@
 <meta name="referrer" content="no-referrer">
 <title>Configuration — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">C</span>onfiguration</h1>
-<p class="subtitle">Environment variables and panel settings.</p>
+<h1><span class="z" data-i18n="cfg.titleZ">C</span><span data-i18n="cfg.titleRest">onfiguration</span></h1>
+<p class="subtitle" data-i18n="cfg.subtitle">Environment variables and panel settings.</p>
 
-<h2 id="environment-variables">Environment variables</h2>
-<p>Set in <code>/opt/zefira/.env</code> (installer-managed, mode 600) or exported before start:</p>
+<h2 id="environment-variables" data-i18n="cfg.envTitle">Environment variables</h2>
+<p><span data-i18n="cfg.envIntro">Set in</span> <code>/opt/zefira/.env</code> <span data-i18n="cfg.envIntro2">(installer-managed, mode 600) or exported before start:</span></p>
 <table>
-<tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
-<tr><td><code>ZEFIRA_ADMIN_USERNAME</code></td><td><code>admin</code></td><td>First-run admin (lowercased, validated)</td></tr>
-<tr><td><code>ZEFIRA_ADMIN_PASSWORD</code></td><td>random</td><td>First-run password, <b>one-time</b>: auto-scrubbed from <code>.env</code> on first boot (random if empty)</td></tr>
-<tr><td><code>ZEFIRA_DOMAIN</code></td><td>—</td><td>Public domain baked into configs &amp; links</td></tr>
-<tr><td><code>ZEFIRA_PORT</code></td><td><code>8000</code></td><td>Panel listen port (systemd unit)</td></tr>
-<tr><td><code>ZEFIRA_SUB_PORT</code></td><td><code>443</code></td><td>Port in VLESS/VMess/Trojan/SS links</td></tr>
-<tr><td><code>ZEFIRA_HY2_PORT</code></td><td><code>8443</code></td><td>Port in Hysteria2 links</td></tr>
-<tr><td><code>ZEFIRA_WG_PORT</code></td><td><code>51820</code></td><td>WireGuard endpoint port</td></tr>
-<tr><td><code>ZEFIRA_DNS</code></td><td><code>1.1.1.1</code></td><td>DNS in WireGuard configs</td></tr>
-<tr><td><code>ZEFIRA_OVPN_PORT</code> / <code>ZEFIRA_OVPN_PROTO</code></td><td><code>1194</code> / <code>udp</code></td><td>OpenVPN endpoint</td></tr>
-<tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> or <code>postgresql+psycopg2://…</code> (MySQL: use <code>utf8mb4</code> charset, or emoji notes break inserts)</td></tr>
-<tr><td><code>SUBSCRIPTION_PATH</code></td><td><code>/sub</code></td><td>Subscription URL prefix</td></tr>
-<tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td>Login session lifetime, seconds (clamped to 5 min – 7 days, default 8h)</td></tr>
-<tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td>empty</td><td>CIDRs allowed to send <code>X-Forwarded-For</code>. <code>0.0.0.0/0</code>, multicast and overly-broad ranges (&lt; /8 v4, &lt; /32 v6) are refused/ignored. Example: <code>127.0.0.1</code></td></tr>
-<tr><td><code>ZEFIRA_ALLOW_UPDATE</code></td><td><code>1</code></td><td><code>0</code> disables the in-panel updater entirely</td></tr>
-<tr><td><code>ZEFIRA_ALLOW_CUSTOM_REPO</code></td><td><code>0</code></td><td><code>1</code> allows <code>ZEFIRA_UPDATE_REPO/BRANCH</code> overrides (default: pinned to <code>mrlurix/zefira-panel@main</code>)</td></tr>
-<tr><td><code>TG_BOT_TOKEN</code> / <code>TG_CHAT_ID</code></td><td>empty</td><td>Telegram notifications</td></tr>
+<tr><th data-i18n="cfg.thVar">Variable</th><th data-i18n="cfg.thDefault">Default</th><th data-i18n="cfg.thPurpose">Purpose</th></tr>
+<tr><td><code>ZEFIRA_ADMIN_USERNAME</code></td><td><code>admin</code></td><td data-i18n="cfg.adminUser">First-run admin (lowercased, validated)</td></tr>
+<tr><td><code>ZEFIRA_ADMIN_PASSWORD</code></td><td data-i18n="cfg.random">random</td><td><span data-i18n="cfg.adminPassA">First-run password,</span> <b data-i18n="cfg.oneTime">one-time</b><span data-i18n="cfg.adminPassB">: auto-scrubbed from</span> <code>.env</code> <span data-i18n="cfg.adminPassC">on first boot (random if empty)</span></td></tr>
+<tr><td><code>ZEFIRA_DOMAIN</code></td><td>—</td><td data-i18n="cfg.domain">Public domain baked into configs &amp; links</td></tr>
+<tr><td><code>ZEFIRA_PORT</code></td><td><code>8000</code></td><td data-i18n="cfg.port">Panel listen port (systemd unit)</td></tr>
+<tr><td><code>ZEFIRA_SUB_PORT</code></td><td><code>443</code></td><td data-i18n="cfg.subPort">Port in VLESS/VMess/Trojan/SS links</td></tr>
+<tr><td><code>ZEFIRA_HY2_PORT</code></td><td><code>8443</code></td><td data-i18n="cfg.hy2Port">Port in Hysteria2 links</td></tr>
+<tr><td><code>ZEFIRA_WG_PORT</code></td><td><code>51820</code></td><td data-i18n="cfg.wgPort">WireGuard endpoint port</td></tr>
+<tr><td><code>ZEFIRA_DNS</code></td><td><code>1.1.1.1</code></td><td data-i18n="cfg.dns">DNS in WireGuard configs</td></tr>
+<tr><td><code>ZEFIRA_OVPN_PORT</code> / <code>ZEFIRA_OVPN_PROTO</code></td><td><code>1194</code> / <code>udp</code></td><td data-i18n="cfg.ovpn">OpenVPN endpoint</td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>SQLite</td><td><code>mysql+pymysql://…</code> <span data-i18n="cfg.orWord">or</span> <code>postgresql+psycopg2://…</code> <span data-i18n="cfg.dbNoteA">(MySQL: use</span> <code>utf8mb4</code> <span data-i18n="cfg.dbNoteB">charset, or emoji notes break inserts)</span></td></tr>
+<tr><td><code>SUBSCRIPTION_PATH</code></td><td><code>/sub</code></td><td data-i18n="cfg.subPath">Subscription URL prefix</td></tr>
+<tr><td><code>ZEFIRA_SESSION_TTL</code></td><td><code>28800</code></td><td data-i18n="cfg.ttl">Login session lifetime, seconds (clamped to 5 min – 7 days, default 8h)</td></tr>
+<tr><td><code>ZEFIRA_TRUSTED_PROXIES</code></td><td data-i18n="cfg.empty">empty</td><td><span data-i18n="cfg.trustedA">CIDRs allowed to send</span> <code>X-Forwarded-For</code><span data-i18n="cfg.trustedB">.</span> <code>0.0.0.0/0</code><span data-i18n="cfg.trustedC">, multicast and overly-broad ranges (&lt; /8 v4, &lt; /32 v6) are refused/ignored. Example:</span> <code>127.0.0.1</code></td></tr>
+<tr><td><code>ZEFIRA_ALLOW_UPDATE</code></td><td><code>1</code></td><td><code>0</code> <span data-i18n="cfg.allowUpdate">disables the in-panel updater entirely</span></td></tr>
+<tr><td><code>ZEFIRA_ALLOW_CUSTOM_REPO</code></td><td><code>0</code></td><td><code>1</code> <span data-i18n="cfg.allowCustom">allows</span> <code>ZEFIRA_UPDATE_REPO/BRANCH</code> <span data-i18n="cfg.allowCustom2">overrides (default: pinned to</span> <code>mrlurix/zefira-panel@main</code><span data-i18n="cfg.allowCustom3">)</span></td></tr>
+<tr><td><code>TG_BOT_TOKEN</code> / <code>TG_CHAT_ID</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.tg">Telegram notifications</td></tr>
 </table>
 
-<h2 id="panel-settings">Panel settings</h2>
-<p><b>Settings → Server / Hosts</b> edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart). L2TP/IPsec, Cisco AnyConnect and SOCKS5 each have their own port field; their credentials are generated per user (L2TP also gets a per-user IPsec PSK) and delivered as config text files plus dashboard cards — SOCKS5 additionally ships as <code>socks5://</code> links and a Clash proxy. <b>Settings → Tunnel</b> sets the public URL and trusted proxies — the latter decides whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs.</p>
+<h2 id="panel-settings" data-i18n="cfg.panelSettings">Panel settings</h2>
+<p><b data-i18n="cfg.settingsPath">Settings → Server / Hosts</b> <span data-i18n="cfg.settingsText">edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart).</span> <b data-i18n="cfg.l2tpLine">L2TP/IPsec, Cisco AnyConnect and SOCKS5 each have their own port field; their credentials are generated per user (L2TP also gets a per-user IPsec PSK) and delivered as config text files plus dashboard cards — SOCKS5 additionally ships as</b> <code>socks5://</code> <span data-i18n="cfg.l2tpLine2">links and a Clash proxy.</span> <b data-i18n="cfg.tunnelPath">Settings → Tunnel</b> <span data-i18n="cfg.tunnelText">sets the public URL and trusted proxies — the latter decides whose</span> <code>X-Forwarded-For</code> <span data-i18n="cfg.tunnelText2">is believed for rate limiting and audit logs.</span></p>
 
-<h2 id="https-ssl">HTTPS / SSL</h2>
+<h2 id="https-ssl" data-i18n="cfg.httpsTitle">HTTPS / SSL</h2>
 <ul>
-  <li><b>During install</b> (step 7): Nginx reverse proxy + Let's Encrypt with auto-renew cron.</li>
-  <li><b>From the panel</b> (Settings → SSL): issue or renew a certificate for <code>domain</code> or <code>sub.domain</code> — standalone HTTP-01 on port 80, expiry shown in the panel.</li>
+  <li><b data-i18n="cfg.duringInstall">During install</b><span data-i18n="cfg.duringInstallT"> (step 7): Nginx reverse proxy + Let's Encrypt with auto-renew cron.</span></li>
+  <li><b data-i18n="cfg.fromPanel">From the panel</b><span data-i18n="cfg.fromPanelT"> (Settings → SSL): issue or renew a certificate for</span> <code>domain</code> <span data-i18n="cfg.fromPanelOr">or</span> <code>sub.domain</code> <span data-i18n="cfg.fromPanelT2">— standalone HTTP-01 on port 80, expiry shown in the panel.</span></li>
 </ul>
-<div class="callout info">Behind Nginx the panel honors <code>X-Forwarded-Proto</code> from localhost/trusted proxies, so cookies get the <code>Secure</code> flag and HSTS is emitted.</div>
+<div class="callout info"><span data-i18n="cfg.behindNginx">Behind Nginx the panel honors</span> <code>X-Forwarded-Proto</code> <span data-i18n="cfg.behindNginx2">from localhost/trusted proxies, so cookies get the</span> <code>Secure</code> <span data-i18n="cfg.behindNginx3">flag and HSTS is emitted.</span></div>
 
-<h2 id="data-locations">Data locations</h2>
+<h2 id="data-locations" data-i18n="cfg.dataTitle">Data locations</h2>
 <table>
-<tr><th>Path</th><th>Content</th></tr>
-<tr><td><code>/opt/zefira/.env</code></td><td>Secrets (600)</td></tr>
-<tr><td><code>/opt/zefira/instance/zefira.db</code></td><td>SQLite database (600)</td></tr>
-<tr><td><code>/opt/zefira/instance/secret.key</code></td><td>JWT + encryption master key (600) — lose it and encrypted secrets become unreadable</td></tr>
-<tr><td><code>/opt/zefira/instance/ca.key</code> / <code>ca.crt</code></td><td>OpenVPN certificate authority</td></tr>
+<tr><th data-i18n="cfg.thPath">Path</th><th data-i18n="cfg.thContent">Content</th></tr>
+<tr><td><code>/opt/zefira/.env</code></td><td data-i18n="cfg.envFile">Secrets (600)</td></tr>
+<tr><td><code>/opt/zefira/instance/zefira.db</code></td><td data-i18n="cfg.dbFile">SQLite database (600)</td></tr>
+<tr><td><code>/opt/zefira/instance/secret.key</code></td><td data-i18n="cfg.keyFile">JWT + encryption master key (600) — lose it and encrypted secrets become unreadable</td></tr>
+<tr><td><code>/opt/zefira/instance/ca.key</code> / <code>ca.crt</code></td><td data-i18n="cfg.caFile">OpenVPN certificate authority</td></tr>
 </table>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

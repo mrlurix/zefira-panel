@@ -7,83 +7,85 @@
 <meta name="referrer" content="no-referrer">
 <title>Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
-  <span class="ver">Docs</span>
+  <span class="ver" data-i18n="docs.topDocs">Docs</span>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <input id="nav-search" type="search" placeholder="Search docs…">
-  <div class="nav-group">Getting Started</div>
-  <a href="index.html">← Home</a>
-  <a href="installation.html">Installation</a>
-  <div class="nav-group">Panel Guide</div>
-  <a href="user-guide.html">Users &amp; Plans</a>
-  <a href="subscription.html">Subscriptions &amp; Clients</a>
-  <a href="setup-guides.html">Setup guides</a>
-  <div class="nav-group">Server</div>
-  <a href="configuration.html">Configuration</a>
-  <a href="security.html">Security</a>
-  <div class="nav-group">Reference</div>
-  <a href="api.html">API</a>
-  <a href="faq.html">FAQ &amp; Troubleshooting</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="support.html">Support</a>
-  <a href="donate.html">Donate</a>
+  <input id="nav-search" type="search" data-i18n-ph="docs.searchPh" placeholder="Search docs…">
+  <div class="nav-group" data-i18n="docs.gStart">Getting Started</div>
+  <a href="index.html" data-i18n="docs.nHome">← Home</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Installation</a>
+  <div class="nav-group" data-i18n="docs.gGuide">Panel Guide</div>
+  <a href="user-guide.html" data-i18n="docs.nUsers">Users &amp; Plans</a>
+  <a href="subscription.html" data-i18n="docs.nSubs">Subscriptions &amp; Clients</a>
+  <a href="setup-guides.html" data-i18n="docs.nSetupGuides">Setup guides</a>
+  <div class="nav-group" data-i18n="docs.gServer">Server</div>
+  <a href="configuration.html" data-i18n="docs.nConfiguration">Configuration</a>
+  <a href="security.html" data-i18n="docs.nSecurity">Security</a>
+  <div class="nav-group" data-i18n="docs.gRef">Reference</div>
+  <a href="api.html" data-i18n="docs.nApi">API</a>
+  <a href="faq.html" data-i18n="docs.nFaq">FAQ &amp; Troubleshooting</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="support.html" data-i18n="docs.nSupport">Support</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 <main class="content">
 
-<h1><span class="z">S</span>ecurity</h1>
-<p class="subtitle">How Zefira defends itself — and how to keep it that way.</p>
+<h1><span class="z" data-i18n="sec.titleZ">S</span><span data-i18n="sec.titleRest">ecurity</span></h1>
+<p class="subtitle" data-i18n="sec.subtitle">How Zefira defends itself — and how to keep it that way.</p>
 
-<h2 id="built-in-defenses">Built-in defenses</h2>
+<h2 id="built-in-defenses" data-i18n="sec.defTitle">Built-in defenses</h2>
 <table>
-<tr><th>Layer</th><th>Implementation</th></tr>
-<tr><td>Passwords</td><td>scrypt hashing (N=2^14), 10+ chars with letters + digits enforced on change</td></tr>
-<tr><td>Sessions</td><td>JWT in HttpOnly + SameSite=Strict cookies, <code>Secure</code> behind HTTPS, versioned (logout / password change kills all sessions)</td></tr>
-<tr><td>Brute force</td><td>8 tries / 15 min per IP+user, plus a loose global per-user bucket (lockout-DoS resistant); identical 401s + dummy-hash timing for unknown users</td></tr>
-<tr><td>CSRF</td><td>Mutating <code>/api</code> calls require <code>X-Requested-With: XMLHttpRequest</code> (Bearer tokens exempt: they cannot be sent cross-origin without a preflight the panel never passes)</td></tr>
-<tr><td>Headers</td><td>CSP, <code>frame-ancestors 'none'</code>, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</td></tr>
-<tr><td>Input</td><td>Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore) enforced on <b>actual streamed bytes</b> — chunked bodies without <code>Content-Length</code> cannot bypass it</td></tr>
-<tr><td>SSRF</td><td>AI <code>base_url</code> rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; node probes filter link-local/metadata dials; create/patch reject metadata addresses</td></tr>
-<tr><td>Quota</td><td>Subscriptions with <code>used_gb &gt;= volume_gb</code> 404 like expired/disabled (raw, Clash and dashboard). <code>device_limit</code> is advisory only — shown in panel + Clash comment, never blocks</td></tr>
-<tr><td>Tokens</td><td>API tokens are <code>full</code> (default) or <code>bot</code> least-privilege (<code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, username lookup, <code>POST /api/users</code>, <code>GET /api/templates</code>, QR, developer resets). Bot tokens can create and renew users including <code>start_on_first_use</code> (server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</td></tr>
-<tr><td>Restore</td><td>Admin hashes must be scrypt with <code>N&gt;=2^14</code> (weak/forged hashes skipped); zero-volume users skipped; <code>trusted_proxies</code> and AI URL re-validated strictly on import; token scopes preserved</td></tr>
-<tr><td>Secrets</td><td>Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key. <code>ZEFIRA_ADMIN_PASSWORD</code> is one-time: scrubbed from <code>.env</code> on first boot</td></tr>
-<tr><td>Sensitive exports</td><td>Backup download is POST-only with password confirm (no GET, so no CSRF-able download); <code>{"encrypt": true}</code> returns a scrypt + Fernet blob restorable via <code>POST /api/restore-encrypted</code>; access logs omit subscription tokens</td></tr>
-<tr><td>Service</td><td>Non-root systemd (<code>User=zefira</code>, <code>ProtectSystem=strict</code>, <code>UMask=0077</code>); updater pinned to <code>mrlurix/zefira-panel@main</code>, fixed service name, <code>ZEFIRA_ALLOW_UPDATE=0</code> kill-switch</td></tr>
-<tr><td>Proxies</td><td><code>trusted_proxies</code> refuses <code>0.0.0.0/0</code>, multicast and overly-broad ranges at input and ignores them at runtime (XFF spoofing = rate-limit bypass)</td></tr>
-<tr><td>Visibility</td><td>Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
+<tr><th data-i18n="sec.thLayer">Layer</th><th data-i18n="sec.thImpl">Implementation</th></tr>
+<tr><td data-i18n="sec.layerPasswords">Passwords</td><td data-i18n="sec.passwordsText">scrypt hashing (N=2^14), 10+ chars with letters + digits enforced on change</td></tr>
+<tr><td data-i18n="sec.layerSessions">Sessions</td><td><span data-i18n="sec.sessionsA">JWT in HttpOnly + SameSite=Strict cookies,</span> <code>Secure</code> <span data-i18n="sec.sessionsB">behind HTTPS, versioned (logout / password change kills all sessions)</span></td></tr>
+<tr><td data-i18n="sec.layerBrute">Brute force</td><td data-i18n="sec.bruteText">8 tries / 15 min per IP+user, plus a loose global per-user bucket (lockout-DoS resistant); identical 401s + dummy-hash timing for unknown users</td></tr>
+<tr><td data-i18n="sec.layerCsrf">CSRF</td><td><span data-i18n="sec.csrfA">Mutating</span> <code>/api</code> <span data-i18n="sec.csrfB">calls require</span> <code>X-Requested-With: XMLHttpRequest</code> <span data-i18n="sec.csrfC">(Bearer tokens exempt: they cannot be sent cross-origin without a preflight the panel never passes)</span></td></tr>
+<tr><td data-i18n="sec.layerHeaders">Headers</td><td><span data-i18n="sec.headersA">CSP,</span> <code>frame-ancestors 'none'</code><span data-i18n="sec.headersB">, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</span></td></tr>
+<tr><td data-i18n="sec.layerInput">Input</td><td><span data-i18n="sec.inputA">Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore) enforced on</span> <b data-i18n="sec.inputBold">actual streamed bytes</b> <span data-i18n="sec.inputB">— chunked bodies without</span> <code>Content-Length</code> <span data-i18n="sec.inputC">cannot bypass it</span></td></tr>
+<tr><td data-i18n="sec.layerSsrf">SSRF</td><td><span data-i18n="sec.ssrfA">AI</span> <code>base_url</code> <span data-i18n="sec.ssrfB">rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; node probes filter link-local/metadata dials; create/patch reject metadata addresses</span></td></tr>
+<tr><td data-i18n="sec.layerQuota">Quota</td><td><span data-i18n="sec.quotaA">Subscriptions with</span> <code>used_gb &gt;= volume_gb</code> <span data-i18n="sec.quotaB">404 like expired/disabled (raw, Clash and dashboard).</span> <code>device_limit</code> <span data-i18n="sec.quotaC">is advisory only — shown in panel + Clash comment, never blocks</span></td></tr>
+<tr><td data-i18n="sec.layerTokens">Tokens</td><td><span data-i18n="sec.tokensA">API tokens are</span> <code>full</code> <span data-i18n="sec.tokensB">(default) or</span> <code>bot</code> <span data-i18n="sec.tokensC">least-privilege (</span><code>GET /api/me</code><span data-i18n="sec.tokensD">,</span> <code>GET /api/stats</code><span data-i18n="sec.tokensE">,</span> <code>GET /api/users</code><span data-i18n="sec.tokensF">, username lookup,</span> <code>POST /api/users</code><span data-i18n="sec.tokensG">,</span> <code>GET /api/templates</code><span data-i18n="sec.tokensH">, QR, developer resets). Bot tokens can create and renew users including</span> <code>start_on_first_use</code> <span data-i18n="sec.tokensI">(server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</span></td></tr>
+<tr><td data-i18n="sec.layerRestore">Restore</td><td><span data-i18n="sec.restoreA">Admin hashes must be scrypt with</span> <code>N&gt;=2^14</code> <span data-i18n="sec.restoreB">(weak/forged hashes skipped); zero-volume users skipped;</span> <code>trusted_proxies</code> <span data-i18n="sec.restoreC">and AI URL re-validated strictly on import; token scopes preserved</span></td></tr>
+<tr><td data-i18n="sec.layerSecrets">Secrets</td><td><span data-i18n="sec.secretsA">Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key.</span> <code>ZEFIRA_ADMIN_PASSWORD</code> <span data-i18n="sec.secretsB">is one-time: scrubbed from</span> <code>.env</code> <span data-i18n="sec.secretsC">on first boot</span></td></tr>
+<tr><td data-i18n="sec.layerExports">Sensitive exports</td><td><span data-i18n="sec.exportsA">Backup download is POST-only with password confirm (no GET, so no CSRF-able download);</span> <code>{"encrypt": true}</code> <span data-i18n="sec.exportsB">returns a scrypt + Fernet blob restorable via</span> <code>POST /api/restore-encrypted</code><span data-i18n="sec.exportsC">; access logs omit subscription tokens</span></td></tr>
+<tr><td data-i18n="sec.layerService">Service</td><td><span data-i18n="sec.serviceA">Non-root systemd (</span><code>User=zefira</code><span data-i18n="sec.serviceB">,</span> <code>ProtectSystem=strict</code><span data-i18n="sec.serviceC">,</span> <code>UMask=0077</code><span data-i18n="sec.serviceD">); updater pinned to</span> <code>mrlurix/zefira-panel@main</code><span data-i18n="sec.serviceE">, fixed service name,</span> <code>ZEFIRA_ALLOW_UPDATE=0</code> <span data-i18n="sec.serviceF">kill-switch</span></td></tr>
+<tr><td data-i18n="sec.layerProxies">Proxies</td><td><code>trusted_proxies</code> <span data-i18n="sec.proxiesA">refuses</span> <code>0.0.0.0/0</code><span data-i18n="sec.proxiesB">, multicast and overly-broad ranges at input and ignores them at runtime (XFF spoofing = rate-limit bypass)</span></td></tr>
+<tr><td data-i18n="sec.layerVisibility">Visibility</td><td data-i18n="sec.visibilityText">Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
 </table>
 
-<h2 id="penetration-test-suite">Penetration-test suite</h2>
-<p><code>security_test.py</code> attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently <b>117/117 passing</b>:</p>
+<h2 id="penetration-test-suite" data-i18n="sec.pentTitle">Penetration-test suite</h2>
+<p><code>security_test.py</code> <span data-i18n="sec.pentA">attacks a live panel: auth boundary, JWT forgery (alg=none, tampering, bad signature), rate limits, CSRF, mass assignment, backup/restore atomicity, fuzzing, XSS sources, header checks — currently</span> <b data-i18n="sec.pentBold">117/117 passing</b><span data-i18n="sec.pentB">:</span></p>
 <pre>.venv\Scripts\python security_test.py http://127.0.0.1:8000 admin YOUR_PASSWORD</pre>
-<div class="callout warn">Restore/atomicity tests wipe users. The suite refuses to run against a panel with users unless you pass <code>--allow-live</code> — back up first.</div>
+<div class="callout warn"><span data-i18n="sec.warnA">Restore/atomicity tests wipe users. The suite refuses to run against a panel with users unless you pass</span> <code>--allow-live</code> <span data-i18n="sec.warnB">— back up first.</span></div>
 
-<h2 id="operator-checklist">Operator checklist</h2>
+<h2 id="operator-checklist" data-i18n="sec.checkTitle">Operator checklist</h2>
 <ul>
-  <li>Change the password right after first login (the installer password is auto-scrubbed from <code>.env</code> on first boot, but rotate it anyway).</li>
-  <li>Serve the panel over HTTPS (installer step 7 or Settings → SSL).</li>
-  <li>Keep <code>/opt/zefira/instance/secret.key</code> backed up <b>offline</b> — without it, encrypted data is unrecoverable.</li>
-  <li>Behind a proxy, set <code>trusted_proxies</code> to specific IPs (e.g. <code>127.0.0.1</code>) — never <code>0.0.0.0/0</code> (refused) — so rate limits and audit IPs see real clients.</li>
-  <li>Never share backup JSON files — they hold password hashes and secrets. Use <code>{"encrypt": true}</code> for off-server storage.</li>
-  <li>Give reseller bots <code>bot</code>-scoped tokens, never <code>full</code>.</li>
-  <li>Service runs as user <code>zefira</code> (non-root). Verify with <code>systemctl show zefira -p User</code>.</li>
+  <li><span data-i18n="sec.op1A">Change the password right after first login (the installer password is auto-scrubbed from</span> <code>.env</code> <span data-i18n="sec.op1B">on first boot, but rotate it anyway).</span></li>
+  <li data-i18n="sec.op2">Serve the panel over HTTPS (installer step 7 or Settings → SSL).</li>
+  <li><span data-i18n="sec.op3A">Keep</span> <code>/opt/zefira/instance/secret.key</code> <span data-i18n="sec.op3B">backed up</span> <b data-i18n="sec.op3Bold">offline</b> <span data-i18n="sec.op3C">— without it, encrypted data is unrecoverable.</span></li>
+  <li><span data-i18n="sec.op4A">Behind a proxy, set</span> <code>trusted_proxies</code> <span data-i18n="sec.op4B">to specific IPs (e.g.</span> <code>127.0.0.1</code><span data-i18n="sec.op4C">) — never</span> <code>0.0.0.0/0</code> <span data-i18n="sec.op4D">(refused) — so rate limits and audit IPs see real clients.</span></li>
+  <li><span data-i18n="sec.op5A">Never share backup JSON files — they hold password hashes and secrets. Use</span> <code>{"encrypt": true}</code> <span data-i18n="sec.op5B">for off-server storage.</span></li>
+  <li><span data-i18n="sec.op6A">Give reseller bots</span> <code>bot</code><span data-i18n="sec.op6B">-scoped tokens, never</span> <code>full</code><span data-i18n="sec.op6C">.</span></li>
+  <li><span data-i18n="sec.op7A">Service runs as user</span> <code>zefira</code> <span data-i18n="sec.op7B">(non-root). Verify with</span> <code>systemctl show zefira -p User</code><span data-i18n="sec.op7C">.</span></li>
 </ul>
 
 </main>
 </div>
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

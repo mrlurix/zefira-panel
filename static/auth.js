@@ -37,9 +37,9 @@ form.addEventListener("submit", async (e) => {
     }
     let data = null;
     try { data = await res.json(); } catch (_) {}
-    showError((data && typeof data.detail === "string" && data.detail) || "Could not reach the server");
+    showError((data && typeof data.detail === "string" && data.detail) || t("login.unreachable"));
   } catch (_) {
-    showError("Could not reach the server");
+    showError(t("login.unreachable"));
   } finally {
     btn.disabled = false;
   }
@@ -49,5 +49,6 @@ form.addEventListener("submit", async (e) => {
 fetch("/api/appearance").then((r) => r.json()).then((a) => {
   const b = ((a && a.brand_name) || "").trim() || "ZEFIRA";
   document.querySelectorAll("[data-brand]").forEach((el) => { el.textContent = b; });
-  document.title = "Sign in | " + b;
-}).catch(() => {});
+  document.title = t("login.brandTitle", { brand: b });
+  mountLangSwitcher("#lang-mount-login");
+}).catch(() => { try { mountLangSwitcher("#lang-mount-login"); } catch (_) {} });

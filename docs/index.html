@@ -8,22 +8,23 @@
 <title>Zefira — Multi-protocol VPN sales panel</title>
 <meta name="description" content="Zefira: hardened multi-protocol VPN sales panel. VLESS, REALITY, WireGuard, OpenVPN, Clash subs, one-line install.">
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <header class="topbar">
-  <button id="nav-toggle" aria-label="Menu">☰</button>
+  <button id="nav-toggle" aria-label="Menu" data-i18n-aria="docs.menuAria">☰</button>
   <a class="brand" href="index.html"><img src="assets/logo.png" alt="Zefira"><b>ZEF<span>IRA</span></b></a>
+  <span id="docs-lang-mount"></span>
   <span class="spacer"></span>
-  <a class="gh" href="installation.html">Docs</a>
-  <a class="gh" href="changelog.html">Changelog</a>
-  <a class="gh" href="donate.html">Donate</a>
+  <a class="gh" href="installation.html" data-i18n="docs.nInstallation">Docs</a>
+  <a class="gh" href="changelog.html" data-i18n="docs.changelog">Changelog</a>
+  <a class="gh" href="donate.html" data-i18n="docs.donate">Donate</a>
   <a class="gh" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub ↗</a>
 </header>
 <nav class="sidebar mob-menu" id="sidebar">
-  <a href="installation.html">Docs</a>
-  <a href="changelog.html">Changelog</a>
-  <a href="donate.html">Donate</a>
+  <a href="installation.html" data-i18n="docs.nInstallation">Docs</a>
+  <a href="changelog.html" data-i18n="docs.nChangelog">Changelog</a>
+  <a href="donate.html" data-i18n="docs.nDonate">Donate</a>
 </nav>
 
 <main class="landing">
@@ -31,9 +32,9 @@
   <section class="hero-xl">
     <img src="assets/logo.png" alt="Zefira logo">
     <h1>ZEF<span>IRA</span></h1>
-    <p class="tagline">Sell VPN like a business. 11 protocols, one link per customer,<br>installed on your server in 5 minutes.</p>
+    <p class="tagline"><span data-i18n="idx.tagA">Sell VPN like a business. 11 protocols, one link per customer,</span><br><span data-i18n="idx.tagB">installed on your server in 5 minutes.</span></p>
     <div class="cta">
-      <a class="btn primary" href="installation.html">Get Started →</a>
+      <a class="btn primary" href="installation.html" data-i18n="idx.heroStart">Get Started →</a>
       <a class="btn ghost" href="https://github.com/mrlurix/zefira-panel" target="_blank" rel="noopener">GitHub</a>
     </div>
     <pre class="oneline">bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)</pre>
@@ -45,68 +46,69 @@
       <span class="badge">VLESS</span><span class="badge">REALITY</span><span class="badge">VMess</span><span class="badge">Trojan</span><span class="badge">Shadowsocks</span><span class="badge">Hysteria2</span><span class="badge">WireGuard</span><span class="badge">OpenVPN</span><span class="badge">L2TP</span><span class="badge">Cisco</span><span class="badge">SOCKS5</span>
     </div>
     <div class="stats">
-      <div><b>11</b><span>Protocols</span></div>
-      <div><b>1-line</b><span>Installer</span></div>
-      <div><b>AI</b><span>Assistant built-in</span></div>
-      <div><b>117/117</b><span>Pentest checks</span></div>
+      <div><b>11</b><span data-i18n="idx.statProto">Protocols</span></div>
+      <div><b>1-line</b><span data-i18n="idx.statInstaller">Installer</span></div>
+      <div><b>AI</b><span data-i18n="idx.statAi">Assistant built-in</span></div>
+      <div><b>117/117</b><span data-i18n="idx.statPentest">Pentest checks</span></div>
     </div>
   </section>
 
   <!-- FEATURES -->
   <section class="wrap">
-    <h2 id="everything-you-need-to-sell">Everything you need to sell</h2>
+    <h2 id="everything-you-need-to-sell" data-i18n="idx.featTitle">Everything you need to sell</h2>
     <div class="feat-grid">
-      <div class="feat"><b>Users &amp; plans</b><p>Volume + expiry, start-on-first-use, device limits, templates, one-click extend and top-up.</p></div>
-      <div class="feat"><b>One link per customer</b><p>Browsers open a personal dashboard (usage, QR, apps); clients get raw sub, Clash YAML or ZIP bundle.</p></div>
-      <div class="feat"><b>Anti-censorship</b><p>REALITY with SNI rotation, obfuscated host, per-user subdomains, CDN SNI spoofing.</p></div>
-      <div class="feat"><b>Security first</b><p>scrypt passwords, rate limits, CSRF + CSP, audit log, session-kill logout.</p></div>
-      <div class="feat"><b>Tunnels</b><p>BackPack Iran ⇄ Kharej tunnels with auto-generated setup guides and reachability checks.</p></div>
-      <div class="feat"><b>Backup &amp; SSL</b><p>JSON backup/restore and one-click Let's Encrypt certificates with auto-renew.</p></div>
+      <div class="feat"><b data-i18n="idx.f1t">Users &amp; plans</b><p data-i18n="idx.f1d">Volume + expiry, start-on-first-use, device limits, templates, one-click extend and top-up.</p></div>
+      <div class="feat"><b data-i18n="idx.f2t">One link per customer</b><p data-i18n="idx.f2d">Browsers open a personal dashboard (usage, QR, apps); clients get raw sub, Clash YAML or ZIP bundle.</p></div>
+      <div class="feat"><b data-i18n="idx.f3t">Anti-censorship</b><p data-i18n="idx.f3d">REALITY with SNI rotation, obfuscated host, per-user subdomains, CDN SNI spoofing.</p></div>
+      <div class="feat"><b data-i18n="idx.f4t">Security first</b><p data-i18n="idx.f4d">scrypt passwords, rate limits, CSRF + CSP, audit log, session-kill logout.</p></div>
+      <div class="feat"><b data-i18n="idx.f5t">Tunnels</b><p data-i18n="idx.f5d">BackPack Iran ⇄ Kharej tunnels with auto-generated setup guides and reachability checks.</p></div>
+      <div class="feat"><b data-i18n="idx.f6t">Backup &amp; SSL</b><p data-i18n="idx.f6d">JSON backup/restore and one-click Let's Encrypt certificates with auto-renew.</p></div>
     </div>
   </section>
 
   <!-- SCREENSHOTS -->
   <section class="wrap">
-    <h2 id="take-a-look">Take a look</h2>
+    <h2 id="take-a-look" data-i18n="idx.shotsTitle">Take a look</h2>
     <div class="shots">
-      <figure><img src="assets/shot-dashboard.png" alt="Zefira dashboard" loading="lazy"><figcaption>Dashboard</figcaption></figure>
-      <figure><img src="assets/shot-user-dashboard.png" alt="User subscription dashboard" loading="lazy"><figcaption>User dashboard</figcaption></figure>
-      <figure><img src="assets/shot-appearance.png" alt="Appearance settings" loading="lazy"><figcaption>Personalization</figcaption></figure>
-      <figure><img src="assets/shot-login.png" alt="Zefira login" loading="lazy"><figcaption>Login</figcaption></figure>
+      <figure><img src="assets/shot-dashboard.png" alt="Zefira dashboard" loading="lazy"><figcaption data-i18n="idx.capDash">Dashboard</figcaption></figure>
+      <figure><img src="assets/shot-user-dashboard.png" alt="User subscription dashboard" loading="lazy"><figcaption data-i18n="idx.capUser">User dashboard</figcaption></figure>
+      <figure><img src="assets/shot-appearance.png" alt="Appearance settings" loading="lazy"><figcaption data-i18n="idx.capPers">Personalization</figcaption></figure>
+      <figure><img src="assets/shot-login.png" alt="Zefira login" loading="lazy"><figcaption data-i18n="idx.capLogin">Login</figcaption></figure>
     </div>
   </section>
 
   <!-- HOW IT WORKS -->
   <section class="wrap">
-    <h2 id="recent-changes">Recent changes</h2>
+    <h2 id="recent-changes" data-i18n="idx.recentTitle">Recent changes</h2>
     <div class="feat-grid">
-      <div class="feat"><b>AI assistant</b><p>Panel-only helper (Groq, OpenAI, Anthropic, Gemini, Ollama) that teaches beginners.</p></div>
-      <div class="feat"><b>One-click updates · Sep 15</b><p>Update section compares your server with GitHub and upgrades on password confirm.</p></div>
-      <div class="feat"><b>User dashboard · Sep 13</b><p>Browser subscription page with usage ring, last-seen IP, imports and QR.</p></div>
+      <div class="feat"><b data-i18n="idx.r1t">AI assistant</b><p data-i18n="idx.r1d">Panel-only helper (Groq, OpenAI, Anthropic, Gemini, Ollama) that teaches beginners.</p></div>
+      <div class="feat"><b data-i18n="idx.r2t">One-click updates · Sep 15</b><p data-i18n="idx.r2d">Update section compares your server with GitHub and upgrades on password confirm.</p></div>
+      <div class="feat"><b data-i18n="idx.r3t">User dashboard · Sep 13</b><p data-i18n="idx.r3d">Browser subscription page with usage ring, last-seen IP, imports and QR.</p></div>
     </div>
     <div class="cta">
-      <a class="btn ghost" href="changelog.html">Full changelog →</a>
-      <a class="btn ghost" href="support.html">Get support</a>
+      <a class="btn ghost" href="changelog.html" data-i18n="idx.changelogBtn">Full changelog →</a>
+      <a class="btn ghost" href="support.html" data-i18n="idx.supportBtn">Get support</a>
     </div>
   </section>
 
   <!-- HOW IT WORKS -->
   <section class="wrap">
-    <h2 id="up-and-running-in-3-steps">Up and running in 3 steps</h2>
+    <h2 id="up-and-running-in-3-steps" data-i18n="idx.stepsTitle">Up and running in 3 steps</h2>
     <div class="steps">
-      <div class="step"><b>1</b><p>Run the one-line installer on your server</p></div>
-      <div class="step"><b>2</b><p>Create a user, pick protocols and volume</p></div>
-      <div class="step"><b>3</b><p>Send the customer one link + QR code</p></div>
+      <div class="step"><b>1</b><p data-i18n="idx.s1">Run the one-line installer on your server</p></div>
+      <div class="step"><b>2</b><p data-i18n="idx.s2">Create a user, pick protocols and volume</p></div>
+      <div class="step"><b>3</b><p data-i18n="idx.s3">Send the customer one link + QR code</p></div>
     </div>
     <div class="cta">
-      <a class="btn primary" href="installation.html">Read the installation guide →</a>
-      <a class="btn ghost" href="api.html">API reference</a>
+      <a class="btn primary" href="installation.html" data-i18n="idx.installGuide">Read the installation guide →</a>
+      <a class="btn ghost" href="api.html" data-i18n="idx.apiRef">API reference</a>
     </div>
   </section>
 </main>
 
 <footer>Zefira · MIT License · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/docs.js?v=20"></script>
-<script src="assets/support-ai.js?v=2"></script>
+<script src="assets/i18n.js?v=21"></script>
+<script src="assets/docs.js?v=21"></script>
+<script src="assets/support-ai.js?v=3"></script>
 </body>
 </html>

@@ -384,6 +384,38 @@ thead th {
   top: 0;
   background: var(--card);
 }
+[dir="rtl"] thead th { text-align: right; }
+
+/* ---------- i18n: language switcher + RTL ---------- */
+.lang-sel {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.lang-sel:focus { outline: none; border-color: var(--red); }
+.login-lang { margin-top: 14px; text-align: center; }
+.sub-head { position: relative; }
+.sub-lang { position: absolute; top: 0; inset-inline-end: 0; }
+[dir="rtl"] .sidebar { border-right: none; border-left: 1px solid var(--border); }
+[dir="rtl"] .nav-btn { border-left: none; border-right: 3px solid transparent; text-align: right; }
+[dir="rtl"] .nav-btn.active {
+  border-right-color: var(--red);
+  background: linear-gradient(-90deg, rgba(255, 39, 64, .12), transparent);
+}
+[dir="rtl"] .search-box.has-icon input { padding-left: 14px; padding-right: 40px; }
+[dir="rtl"] .sec-list li::before,
+[dir="rtl"] .audit-list li.bad span::before,
+[dir="rtl"] .audit-list li:not(.bad) span::before { margin-left: 0; margin-right: 8px; }
+[dir="rtl"] .ai-fab { right: auto; left: 22px; }
+[dir="rtl"] .ai-chat { right: auto; left: 22px; }
+[dir="rtl"] .mono, [dir="rtl"] code, [dir="rtl"] pre, [dir="rtl"] .sub-url,
+[dir="rtl"] .qr-box, [dir="rtl"] input[type="number"] { direction: ltr; unicode-bidi: isolate; }
+[dir="rtl"] .topbar h1::after { background: linear-gradient(-90deg, var(--red), transparent); }
 
 tbody td {
   padding: 13px 12px;
