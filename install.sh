@@ -331,7 +331,10 @@ Restart=always
 RestartSec=3
 # Least privilege + filesystem lockdown (update still works: /opt/zefira
 # is owned by zefira, pip installs into its own .venv).
-NoNewPrivileges=true
+# NOTE: no NoNewPrivileges=true here on purpose: the in-panel updater
+# restarts the service via the sudoers-scoped `sudo -n systemctl restart
+# zefira`, and NoNewPrivileges would neuter setuid sudo (silent failure).
+# The sudoers rule below is already scoped to that single command.
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
@@ -436,7 +439,7 @@ fi
 echo "==> [6/6] Firewall ..."
 command -v ufw >/dev/null && ufw allow "$PORT/tcp" 2>/dev/null || true
 command -v firewall-cmd >/dev/null && firewall-cmd --add-port="$PORT/tcp" --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
-if [[ "$SETUP_NGINX" == "y" ]]; then
+if [[ "$SETUP_NGINX" == [yY] ]]; then
     command -v ufw >/dev/null && ufw allow 80/tcp 2>/dev/null && ufw allow 443/tcp 2>/dev/null || true
 fi
 
