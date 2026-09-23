@@ -81,7 +81,7 @@ class UserResetIn(BaseModel):
 class TelegramSettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    bot_token: str = Field(default="", max_length=120)
+    bot_token: str = Field(default="", max_length=120, pattern=r"^(?:|\d+:[A-Za-z0-9_-]{1,100})\z")
     chat_id: str = Field(default="", max_length=40, pattern=r"^(?:|@?[a-zA-Z0-9_]{4,64}|[-0-9]{3,25})\z")
 
 

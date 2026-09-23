@@ -54,7 +54,7 @@ for page in sorted(DOCS.glob("*.html")):
     heads = list(HEAD_RE.finditer(html))
     for idx, h in enumerate(heads):
         attrs, inner = h.group(2), h.group(3)
-        aid = re.search(r'id="([^"]+)"', attrs).group(1)
+        aid = re.search(r"id\s*=\s*[\"']([^\"']+)[\"']", attrs).group(1)
         body_html = html[h.end():heads[idx + 1].start() if idx + 1 < len(heads) else len(html)]
         entries.append({
             "u": f"{page.name}#{aid}",

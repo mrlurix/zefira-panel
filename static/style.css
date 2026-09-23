@@ -519,6 +519,10 @@ td strong { font-weight: 700; letter-spacing: .3px; }
   z-index: 50;
   animation: fadein .2s ease;
 }
+/* Lock background scroll while any dialog is open (no JS needed). */
+body:has(#modal-overlay:not(.hidden)),
+body:has(#edit-modal:not(.hidden)),
+body:has(#qr-modal:not(.hidden)) { overflow: hidden; }
 
 .modal {
   width: min(430px, calc(100vw - 40px));

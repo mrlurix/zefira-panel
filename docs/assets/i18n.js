@@ -1261,6 +1261,7 @@ function zLocaleTag() {
 function mountLangSwitcher(sel) {
   const host = typeof sel === "string" ? document.querySelector(sel) : sel;
   if (!host) return;
+  if (host.querySelector("select.lang-sel")) return;
   const s = document.createElement("select");
   s.className = "lang-sel";
   s.setAttribute("aria-label", "Language");

@@ -2250,8 +2250,24 @@ def _github_json(path: str) -> tuple:
             f"https://api.github.com{path}",
             headers={"User-Agent": "zefira-panel", "Accept": "application/vnd.github+json"},
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return True, json.loads(resp.read().decode("utf-8", "replace"))
+
+        # Same shape as the AI fetch guard: never follow redirects (a 302
+        # to an attacker host would otherwise be fetched), and cap the body
+        # (diverged-branch compares can be MBs of JSON).
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=10) as resp:
+            raw = resp.read(2_000_000)
+            if len(raw) >= 2_000_000:
+                return False, "GitHub response too large"
+            return True, json.loads(raw.decode("utf-8", "replace"))
+    except urllib.error.HTTPError as he:
+        if he.code in (301, 302, 303, 307, 308):
+            return False, "GitHub returned a redirect (blocked)"
+        return False, f"GitHub HTTP {he.code}"
     except Exception as exc:
         return False, str(exc)[:150]
 
@@ -2961,6 +2977,11 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
         if data.blocked_sites is not None:
             for bs in data.blocked_sites:
                 try:
+                    # Same 500 cap as live add: a crafted backup must not
+                    # stuff the Clash output with unlimited rules.
+                    if restored_blocked >= 500:
+                        skipped += 1
+                        continue
                     dom = str(bs.get("domain", "")).strip().lower()
                     if not dom or not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", dom):
                         skipped += 1
@@ -3347,6 +3368,10 @@ def api_telegram_put(data: TelegramSettingsIn, request: Request, admin: Admin = 
 
 @app.post("/api/telegram/test")
 def api_telegram_test(data: TelegramTestIn, request: Request, admin: Admin = Depends(require_admin)):
+    # Rate-limited like other sensitive actions: each call blocks a worker
+    # for up to 8s AND sends a real message (spam + thread exhaustion).
+    if not sensitive_limiter.hit(f"tgtest|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     token = decrypt_text(cached_setting("tg_bot_token"))
     chat = cached_setting("tg_chat_id") or ""
     if not token or not chat:
@@ -3502,6 +3527,10 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
             now = utcnow()
             if user.expires_at and user.expires_at.year >= PENDING_YEAR:
                 base = now
+                # Leaving pending: a real expiry now exists, so drop the
+                # start-on-first-use flags like set_expires_at does.
+                user.start_on_first_use = False
+                user.duration_days = None
             elif user.expires_at and user.expires_at > now:
                 base = user.expires_at
             else:
@@ -3681,6 +3710,8 @@ def api_user_config(user_id: int, admin: Admin = Depends(require_admin)):
         user = _get_user_or_404(s, user_id)
         udict = user.to_full_dict()
     uname = udict["username"]
+    # Header-safe filename even for legacy rows outside USERNAME_RE.
+    safe_uname = re.sub(r"[^A-Za-z0-9_-]", "_", uname or "")[:32] or "client"
     files = protocols.build_files(udict, load_srv(), load_inbounds())
     if not files:
         raise HTTPException(status_code=500, detail="Config generation failed")
@@ -3700,7 +3731,7 @@ def api_user_config(user_id: int, admin: Admin = Depends(require_admin)):
         content=zipbytes,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="zefira-{uname}-configs.zip"',
+            "Content-Disposition": f'attachment; filename="zefira-{safe_uname}-configs.zip"',
             "Cache-Control": "no-store",
         },
     )

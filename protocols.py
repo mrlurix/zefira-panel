@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import json
+import re
 import secrets as pysecrets
 import uuid as uuidlib
 import zipfile
@@ -50,17 +51,43 @@ DEFAULT_SRV = {
 }
 
 
+_HOST_RE = re.compile(r"\A[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\Z")
+
+
+def _safe_host(host, fallback):
+    """Builder-level hostname allowlist (defense in depth).
+
+    API + restore layers already validate hosts, but builders also run on
+    hand-edited DB rows and env values. Never interpolate a hostile
+    hostname (spaces, newlines, @, :, /) into links or configs: fall back
+    to a validated value instead of emitting corrupt output.
+    """
+    h = (host or "").strip()
+    if h and _HOST_RE.fullmatch(h):
+        return h
+    f = (fallback or "").strip()
+    if f and _HOST_RE.fullmatch(f):
+        return f
+    return "localhost"
+
+
+def _safe_filename(username: str) -> str:
+    """Filenames reach Content-Disposition headers and zip entries: strip
+    everything outside [A-Za-z0-9_-] (same idiom as _issue_client_cert)."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", username or "")[:32] or "client"
+
+
 def _effective_host(secret: str, srv: dict) -> str:
     if srv.get("_is_inbound_variant"):
-        base = srv["domain"]
+        base = _safe_host(srv.get("domain"), "localhost")
         per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
         if per_user:
             prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
-            return f"{prefix}.{base}"
+            return _safe_host(f"{prefix}.{base}", base)
         return base
     obf = (srv.get("obfuscated_host") or "").strip()
     if not obf:
-        return srv["domain"]
+        return _safe_host(srv.get("domain"), "localhost")
     if "://" in obf:
         try:
             from urllib.parse import urlparse
@@ -72,12 +99,12 @@ def _effective_host(secret: str, srv: dict) -> str:
             pass
     obf = obf.strip().strip("/")
     if not obf:
-        return srv["domain"]
+        return _safe_host(srv.get("domain"), "localhost")
     per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
     if per_user:
         prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
-        return f"{prefix}.{obf}"
-    return obf
+        return _safe_host(f"{prefix}.{obf}", _safe_host(srv.get("domain"), "localhost"))
+    return _safe_host(obf, _safe_host(srv.get("domain"), "localhost"))
 
 
 def _cdn_sni(srv: dict) -> str | None:
@@ -95,7 +122,9 @@ def _cdn_sni(srv: dict) -> str | None:
                 cdn = h
         except Exception:
             pass
-    return cdn.strip().strip("/") or None
+    cdn = cdn.strip().strip("/")
+    cdn = _safe_host(cdn, "")
+    return cdn or None
 
 
 def generate_reality_keypair() -> tuple:
@@ -177,9 +206,13 @@ def serialize_secrets(secret_map: dict) -> str:
 
 
 def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict) -> str | None:
+    from urllib.parse import quote as _q
+
     host = _effective_host(secret, srv)
     cdn = _cdn_sni(srv)
-    sni = cdn or host
+    # Query values are percent-encoded (no-op for valid hosts/SNIs, fatal
+    # for smuggled &/#/spaces from hand-edited rows).
+    sni = _q(cdn or host, safe="")
     # Remark is exactly the username (plus inbound label when present) so
     # client apps show a clean, familiar name instead of a generated one.
     name = username
@@ -211,7 +244,9 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
             f"&type=ws&host={host}&path=%2Fzefira&allowInsecure=0#{name}"
         )
     if protocol == "ss":
-        userinfo = _b64(f"aes-256-gcm:{secret}")
+        # SIP002 mandates URL-safe base64 without padding (strict clients
+        # misparse the +/= of standard base64).
+        userinfo = base64.urlsafe_b64encode(f"aes-256-gcm:{secret}".encode()).decode().rstrip("=")
         return f"ss://{userinfo}@{host}:{srv['sub_port']}#{username}"
     if protocol == "hysteria2":
         return (
@@ -222,10 +257,17 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
 
 
 def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | None:
+    from urllib.parse import quote as _q
+
     host = _effective_host(secret, srv)
     pub = srv.get("reality_pub") or "REPLACE_WITH_REALITY_PUBLIC_KEY"
+    # Hand-edited DB could smuggle extra link params via the public key
+    # (generated keys are always 43-char base64url): refuse, don't splice.
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", pub or ""):
+        pub = "REPLACE_WITH_REALITY_PUBLIC_KEY"
     sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
     sni = sni_list[(index - 1) % len(sni_list)] if sni_list else host
+    sni = _q(sni, safe="")
     sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
     name = username
     return (
@@ -426,8 +468,16 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
     lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": names}))
     lines.append("rules:")
     if blocked:
-        for d in blocked:
-            lines.append(f"  - DOMAIN-SUFFIX,{d},REJECT")
+        # Builder-level filter (defense in depth): only plain hostnames
+        # become rules, capped — a hand-edited DB row with newlines or
+        # commas must not inject extra YAML rules. Live + restore paths
+        # already validate, this is the last gate before client output.
+        clean_blocked = [
+            d for d in blocked
+            if isinstance(d, str) and _HOST_RE.fullmatch(d.strip().lower())
+        ][:600]
+        for d in clean_blocked:
+            lines.append(f"  - DOMAIN-SUFFIX,{d.strip().lower()},REJECT")
     lines.append('  - MATCH,Zefira')
     return "\n".join(lines) + "\n"
 
@@ -471,11 +521,12 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
     uid = int(u.get("id", 0) or 0)
     addr = f"10.7.{(uid // 250) % 250}.{(uid % 250) + 2}"
     host = _effective_host(secret, srv)
+    dns = _safe_host(srv.get("dns"), "1.1.1.1")
     lines = [
         "[Interface]",
         f"PrivateKey = {secret}",
         f"Address = {addr}/32",
-        f"DNS = {srv.get('dns', '1.1.1.1')}",
+        f"DNS = {dns}",
         "MTU = 1420",
         f"# Client PublicKey = {base64.b64encode(pub).decode()}",
         "",
@@ -566,10 +617,13 @@ def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
     if "-----BEGIN CERTIFICATE-----" not in cert_pem or "-----BEGIN PRIVATE KEY-----" not in key_pem:
         raise ValueError("invalid openvpn secret")
     host = _effective_host(blob, srv)
+    proto = srv.get("ovpn_proto", "udp")
+    if proto not in ("udp", "tcp"):
+        proto = "udp"
     lines = [
         "client",
         "dev tun",
-        f"proto {srv.get('ovpn_proto', 'udp')}",
+        f"proto {proto}",
         f"remote {host} {srv['ovpn_port']}",
         "resolv-retry infinite",
         "nobind",
@@ -626,6 +680,10 @@ def _srvs_for(proto: str, srv: dict, inbounds: list) -> list:
 def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
     protos = u.get("protocols") or ["vless"]
     secrets_map = u.get("secret_map") or {}
+    # Filenames land in Content-Disposition headers and zip entries: keep
+    # them to a strict charset even if a legacy/hand-edited row carries a
+    # username outside USERNAME_RE (header injection / zip-slip class).
+    safe_user = _safe_filename(u.get("username", ""))
     files = []
     links = []
     for p in protos:
@@ -655,22 +713,22 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
                     links.append(link)
         elif p == "wireguard":
             try:
-                files.append((f"{u['username']}-wg.conf", _wg_config(u, srv, sec)))
+                files.append((f"{safe_user}-wg.conf", _wg_config(u, srv, sec)))
             except ValueError:
                 continue
         elif p == "openvpn":
             try:
-                files.append((f"{u['username']}.ovpn", _ovpn_config(u, srv, sec)))
+                files.append((f"{safe_user}.ovpn", _ovpn_config(u, srv, sec)))
             except ValueError:
                 continue
         elif p == "l2tp":
             try:
-                files.append((f"{u['username']}-l2tp.txt", _l2tp_config(u, srv, sec)))
+                files.append((f"{safe_user}-l2tp.txt", _l2tp_config(u, srv, sec)))
             except ValueError:
                 continue
         elif p == "cisco":
             try:
-                files.append((f"{u['username']}-cisco.txt", _cisco_config(u, srv, sec)))
+                files.append((f"{safe_user}-cisco.txt", _cisco_config(u, srv, sec)))
             except ValueError:
                 continue
         elif p == "socks5":
@@ -678,7 +736,7 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
             if link:
                 links.append(link)
     if links:
-        files.insert(0, (f"{u['username']}-subscription.txt", "\n".join(links) + "\n"))
+        files.insert(0, (f"{safe_user}-subscription.txt", "\n".join(links) + "\n"))
     return files
 
 
