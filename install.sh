@@ -14,6 +14,7 @@ if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
 fi
 TARGET="/opt/zefira"
 SERVICE="zefira"
+ZEFIRA_VERSION="1.13.0"
 TOTAL_STEPS=7
 
 if [[ "${1:-}" == "--uninstall" ]]; then
@@ -37,17 +38,23 @@ INTERACTIVE=0
 # ---------- pretty output ----------
 if [[ -t 1 ]]; then
     C_RED=$'\e[31m'; C_GRN=$'\e[32m'; C_YEL=$'\e[33m'
-    C_BLU=$'\e[34m'; C_BLD=$'\e[1m';  C_RST=$'\e[0m'
+    C_BLU=$'\e[34m'; C_BLD=$'\e[1m';  C_DIM=$'\e[2m'; C_RST=$'\e[0m'
 else
-    C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_BLD=""; C_RST=""
+    C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_BLD=""; C_DIM=""; C_RST=""
 fi
 banner() {
-    echo "${C_BLD}${C_BLU}╔════════════════════════════════════════════╗${C_RST}"
-    echo "${C_BLD}${C_BLU}║${C_RST}              ${C_BLD}Z E F I R A${C_RST}               ${C_BLD}${C_BLU}║${C_RST}"
-    echo "${C_BLD}${C_BLU}║${C_RST}      Proxy Sales Panel · Installer      ${C_BLD}${C_BLU}║${C_RST}"
-    echo "${C_BLD}${C_BLU}╚════════════════════════════════════════════╝${C_RST}"
+    echo "${C_RED}${C_BLD}███████ ███████ ███████ ███████ ██████   ███${C_RST}"
+    echo "${C_RED}${C_BLD}     ██ ██ ██   ███   ██   ██  ██ ██${C_RST}"
+    echo "${C_RED}${C_BLD}    ██  ██ ██   ███   ██   ██ ██   ██${C_RST}"
+    echo "${C_RED}${C_BLD}   ██   ██████ ██████   ███   ██████ ███████${C_RST}"
+    echo "${C_RED}${C_BLD}  ██   ██ ██   ███   ██ ██  ██   ██ ██   ██${C_RST}"
+    echo "${C_RED}${C_BLD} ██    ██ ██   ███   ██  ██ ██   ██ ██   ██${C_RST}"
+    echo "${C_RED}${C_BLD}███████ ███████ ██ ███████ ██   ██ ██   ██${C_RST}"
+    echo "${C_BLD}Zefira${C_RST} ${C_RED}v${ZEFIRA_VERSION}${C_RST}"
+    echo "${C_DIM}GitHub : https://github.com/mrlurix/zefira-panel${C_RST}"
+    echo "${C_DIM}────────────────────────────────────────${C_RST}"
 }
-step()  { echo; echo "${C_BLD}${C_BLU}━━━ Step $1/${TOTAL_STEPS} · $2 ━━━${C_RST}"; }
+step()  { echo; echo " ${C_RED}$1)${C_RST} ${C_BLD}$2${C_RST}  ${C_DIM}$3${C_RST}"; }
 ok()    { echo "${C_GRN}[ok]${C_RST} $*"; }
 warn()  { echo "${C_YEL}[!]${C_RST} $*"; }
 fail()  { echo "${C_RED}[x]${C_RST} $*"; }
@@ -86,13 +93,13 @@ banner
 echo "Detected OS: $(grep -m1 PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '\"' || uname -s)"
 
 # ---------- Step 1/7 · Port ----------
-step 1 "Panel port"
+step 1 "Panel port" "local port the panel listens on"
 PORT=$(ask "Panel port" "8000")
 PORT=$(echo "$PORT" | tr -cd '0-9'); [[ -z "$PORT" ]] && PORT=8000
 if ((PORT < 1 || PORT > 65535)); then echo "[!] Invalid port: $PORT"; exit 1; fi
 
 # ---------- Step 2/7 · Domain ----------
-step 2 "Domain (for links and SSL)"
+step 2 "Domain (for links and SSL)" "empty = server IP, no SSL"
 DOMAIN=""
 if [[ $INTERACTIVE -eq 1 ]]; then
     read -rp "Domain (empty = use server IP, no SSL) []: " DOMAIN
@@ -104,7 +111,7 @@ fi
 if [[ -n "$DOMAIN" ]] && ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid ZEFIRA_DOMAIN: $DOMAIN"; exit 1; fi
 
 # ---------- Step 3/7 · Admin ----------
-step 3 "Admin account"
+step 3 "Admin account" "username + strong password"
 gen_pass() { head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16; }
 # The panel strips surrounding whitespace at login, so normalize here too —
 # otherwise a trailing space locks the operator out with no error message.
@@ -141,7 +148,7 @@ else
 fi
 
 # ---------- Step 4/7 · Database ----------
-step 4 "Database"
+step 4 "Database" "SQLite default, or MySQL / MariaDB / PostgreSQL"
 DB_CHOICE=1; DB_URL=""
 if [[ $INTERACTIVE -eq 1 ]]; then
     echo "  1) SQLite (default, no setup)"
@@ -182,7 +189,7 @@ if [[ -n "$DB_URL" && "$DB_URL" != sqlite* ]]; then
 fi
 
 # ---------- Step 5/7 · Subscription path ----------
-step 5 "Subscription path"
+step 5 "Subscription path" "URL prefix for user links"
 if [[ $INTERACTIVE -eq 1 ]]; then
     SUB_PATH=$(ask "Subscription path" "/sub")
     [[ "$SUB_PATH" != /* ]] && SUB_PATH="/$SUB_PATH"
@@ -193,7 +200,7 @@ if ! is_valid_subpath "$SUB_PATH" || [[ "$SUB_PATH" == "/" ]]; then echo "[!] In
 if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username"; exit 1; fi
 
 # ---------- Step 6/7 · Telegram ----------
-step 6 "Telegram notifications (optional)"
+step 6 "Telegram notifications (optional)" "bot token + chat ID"
 TG_TOKEN=""; TG_CHAT=""
 if [[ $INTERACTIVE -eq 1 ]]; then
     read -rp "Telegram bot token (empty to skip) []: " TG_TOKEN
@@ -203,7 +210,7 @@ else
 fi
 
 # ---------- Step 7/7 · Nginx + SSL certificate ----------
-step 7 "Nginx reverse proxy + SSL certificate"
+step 7 "Nginx reverse proxy + SSL certificate" "needs a domain, port 80 free"
 SETUP_NGINX="n"; USE_SSL="n"; EMAIL=""
 if [[ -z "$DOMAIN" ]]; then
     echo "No domain given — skipping Nginx and SSL (panel will run on http://SERVER_IP:$PORT)."
@@ -423,7 +430,7 @@ IP=$(curl -fsS4 https://api.ipify.org 2>/dev/null || echo SERVER_IP)
 if [[ "$SSL_DONE" == "yes" ]]; then URL="https://$DOMAIN"; elif [[ -n "$DOMAIN" && "$SETUP_NGINX" == "y" ]]; then URL="http://$DOMAIN"; else URL="http://$IP:$PORT"; fi
 echo
 echo "${C_BLD}${C_GRN}╔════════════════════════════════════════════╗${C_RST}"
-echo "${C_BLD}${C_GRN}║${C_RST}          ${C_BLD}ZEFIRA INSTALLED${C_RST}              ${C_BLD}${C_GRN}║${C_RST}"
+echo "${C_BLD}${C_GRN}║${C_RST}          ${C_BLD}${C_RED}ZEFIRA INSTALLED${C_RST}              ${C_BLD}${C_GRN}║${C_RST}"
 echo "${C_BLD}${C_GRN}╚════════════════════════════════════════════╝${C_RST}"
 echo "  URL      : $URL"
 echo "  Local    : http://127.0.0.1:$PORT"
