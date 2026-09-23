@@ -403,13 +403,18 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
         sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
         sni = sni_list[0] if sni_list else host_eff
         sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
+        # Same 43-char allowlist as the link builder: a hand-edited row
+        # must not smuggle anything into the Clash document either.
+        rpub = srv.get("reality_pub") or ""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", rpub):
+            rpub = ""
         n = f"Zefira-{u['username']}-REALITY"
         names.append(n)
         proxies.append({
             "name": n, "type": "vless", "server": host_eff, "port": int(srv["reality_port"]),
             "uuid": sec, "flow": "xtls-rprx-vision",
             "tls": True, "servername": sni, "client-fingerprint": "chrome",
-            "reality-opts": {"public-key": srv.get("reality_pub") or "", "short-id": sid},
+            "reality-opts": {"public-key": rpub, "short-id": sid},
         })
     if "trojan" in protos and secrets_map.get("trojan"):
         sec = secrets_map["trojan"]
@@ -585,7 +590,7 @@ def _issue_client_cert(username: str):
     ca_cert, ca_key = _ensure_ca()
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     now = datetime.now(timezone.utc)
-    safe = "".join(ch for ch in username if ch.isalnum() or ch in "-_")[:32] or "client"
+    safe = "".join(ch for ch in username if ch.isascii() and (ch.isalnum() or ch in "-_"))[:32] or "client"
     cert = (
         x509.CertificateBuilder()
         .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, safe)]))

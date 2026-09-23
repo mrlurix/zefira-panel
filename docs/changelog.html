@@ -45,6 +45,12 @@
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
 
+<h2 id="v1131"><span>v1.13.1</span> <span data-i18n="chg.v1131">— White-hat rounds 5–7 hardening</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1131a_lead">Abuse bounds:</b> <span data-i18n="chg.v1131a">user creation is rate-limited (120/hour) and capped at 10,000 users, so a leaked bot token can no longer flood the database or rotate the audit trail away; restores take a safety snapshot first.</span></li>
+  <li><b data-i18n="chg.v1131b_lead">Stricter builders:</b> <span data-i18n="chg.v1131b">AI action arguments are strictly typed (no "false"-string flips), volume totals clamp at the documented cap, and link/config builders re-validate hosts, keys and filenames at the last gate. Shadowsocks links are now spec-correct URL-safe base64 — re-copy the link if a strict client complains.</span></li>
+</ul>
+
 <h2 id="v1130"><span>v1.13.0</span> <span data-i18n="chg.v1130">— BackPack v1.8.2 support</span></h2>
 <ul>
   <li><b data-i18n="chg.v1130a_lead">New UDP transport:</b> <span data-i18n="chg.v1130a">plain UDP joins the tunnel transport list (raw, lowest overhead) alongside KCP/QUIC.</span></li>
@@ -190,7 +196,7 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=24"></script>
+<script src="assets/i18n.js?v=25"></script>
 <script src="assets/docs.js?v=23"></script>
 <script src="assets/support-ai.js?v=4"></script>
 </body>

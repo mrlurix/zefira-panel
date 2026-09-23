@@ -14,8 +14,9 @@ if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
 fi
 TARGET="/opt/zefira"
 SERVICE="zefira"
-ZEFIRA_VERSION="1.13.0"
-TOTAL_STEPS=7
+# Single source of truth is the VERSION file; keep the literal as fallback
+# for pipe-installs where no checkout exists yet.
+ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.13.1)"
 
 if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl stop "$SERVICE" 2>/dev/null || true
@@ -27,6 +28,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl daemon-reload 2>/dev/null || true
     rm -rf "$TARGET"
     echo "[zefira] uninstalled (system user 'zefira' kept for safety; userdel zefira to remove)."
+    echo "[zefira] manual leftovers, if applicable: certbot delete --cert-name <domain> ; ufw delete allow <port>/tcp ; journalctl --vacuum-time=1s (logs)."
     exit 0
 fi
 
@@ -74,7 +76,7 @@ ask_secret() {
     read -r -sp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
 }
 urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$1"; }
-is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; }
+is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] && [[ "$1" != *".."* ]]; }
 is_valid_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; }
 is_valid_dbident() { [[ "$1" =~ ^[A-Za-z0-9_.-]{1,253}$ ]]; }
 # Quote a value for systemd EnvironmentFile (double quotes + escape \, ", $, `).
@@ -364,9 +366,9 @@ EOF
                 SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
                 SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
                 {
-                    echo "ZEFIRA_SSL_CERT=$SSL_CERT"
-                    echo "ZEFIRA_SSL_KEY=$SSL_KEY"
-                    echo "ZEFIRA_SSL_DOMAIN=$DOMAIN"
+                    echo "ZEFIRA_SSL_CERT=$(env_escape "$SSL_CERT")"
+                    echo "ZEFIRA_SSL_KEY=$(env_escape "$SSL_KEY")"
+                    echo "ZEFIRA_SSL_DOMAIN=$(env_escape "$DOMAIN")"
                 } >> "$ENV_FILE"
                 # Deploy the cert: without a 443 block the panel would stay
                 # plain HTTP behind nginx (false HTTPS: no Secure cookies, no
@@ -376,6 +378,9 @@ EOF
 server {
     listen 80;
     server_name $DOMAIN;
+    server_tokens off;
+    # HSTS on the redirect itself; app responses carry the panel's own HSTS.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     location / {
         return 301 https://\$host\$request_uri;
     }
@@ -383,6 +388,7 @@ server {
 server {
     listen 443 ssl;
     server_name $DOMAIN;
+    server_tokens off;
     ssl_certificate $SSL_CERT;
     ssl_certificate_key $SSL_KEY;
     ssl_protocols TLSv1.2 TLSv1.3;

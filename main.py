@@ -1988,6 +1988,28 @@ def _ai_user_summary(u) -> str:
     )
 
 
+def _parse_ai_bool(value):
+    """Strict bool for model-controlled args.
+
+    Plain bool("false") is True — a model emitting the STRING "false" for
+    start_on_first_use would silently flip billing semantics. Accept only
+    unambiguous forms, reject the rest (fail closed, ask the user).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value in (0, 1):
+            return bool(value)
+        raise ValueError("must be true/false")
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "1", "yes", "y", "on"):
+            return True
+        if v in ("false", "0", "no", "n", "off", ""):
+            return False
+    raise ValueError("must be true/false")
+
+
 def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str):
     """Execute one allowlisted panel operation. Returns (ok, result_text).
 
@@ -2044,13 +2066,17 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
         return True, f"{base}{sub_path}/{info['token']}"
     if tool == "create_user":
         try:
+            sofu = _parse_ai_bool(args.get("start_on_first_use", False))
+        except ValueError:
+            return False, "start_on_first_use must be true/false"
+        try:
             data = UserCreateIn(
                 username=args.get("username", ""),
                 protocols=args.get("protocols") or [],
                 note=args.get("note", ""),
                 volume_gb=args.get("volume_gb"),
                 days=args.get("days"),
-                start_on_first_use=bool(args.get("start_on_first_use", False)),
+                start_on_first_use=sofu,
                 device_limit=args.get("device_limit"),
             )
         except ValidationError as exc:
@@ -2115,17 +2141,27 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
         )
     if tool in ("extend_user", "add_volume", "reset_usage", "set_active"):
         # Scalar args first (fail fast, no DB touch on garbage).
+        # Strict types: bools must not coerce (int(True)==1, float(True)==1.0)
+        # and fractional days must not silently truncate.
         days = gb = None
         if tool == "extend_user":
+            raw_days = args.get("days", 0)
+            if isinstance(raw_days, bool):
+                return False, "days must be 1-3650"
             try:
-                days = int(args.get("days", 0))
+                days = int(raw_days)
             except (TypeError, ValueError):
+                return False, "days must be 1-3650"
+            if isinstance(raw_days, float) and not raw_days.is_integer():
                 return False, "days must be 1-3650"
             if not 1 <= days <= 3650:
                 return False, "days must be 1-3650"
         elif tool == "add_volume":
+            raw_gb = args.get("gb", 0)
+            if isinstance(raw_gb, bool):
+                return False, "gb must be 0.01-100000"
             try:
-                gb = float(args.get("gb", 0))
+                gb = float(raw_gb)
             except (TypeError, ValueError):
                 return False, "gb must be 0.01-100000"
             if not 0.01 <= gb <= 100000:
@@ -2152,7 +2188,9 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
                 user.expires_at = base + timedelta(days=days)
                 change = f"+{days}d"
             elif tool == "add_volume":
-                user.volume_gb = max(0.01, user.volume_gb + gb)
+                # Clamp the total like create/set paths cap at 100000:
+                # repeated top-ups must not grow quota without bound.
+                user.volume_gb = min(100000, max(0.01, user.volume_gb + gb))
                 change = f"vol+{gb:g}"
             elif tool == "reset_usage":
                 user.used_gb = 0.0
@@ -3640,7 +3678,7 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
             user.expires_at = base + timedelta(days=data.extend_days)
             changes.append(f"+{data.extend_days}d")
         if data.add_volume_gb is not None:
-            user.volume_gb = max(0.01, user.volume_gb + data.add_volume_gb)
+            user.volume_gb = min(100000, max(0.01, user.volume_gb + data.add_volume_gb))
             changes.append(f"vol+{data.add_volume_gb}")
         if data.add_used_gb is not None:
             user.used_gb = max(0.0, user.used_gb + data.add_used_gb)
