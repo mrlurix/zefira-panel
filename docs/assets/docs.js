@@ -197,118 +197,6 @@ document.querySelectorAll("pre").forEach(function (pre) {
   window.__zefiraSearch = { open: open, close: close, isOpen: isOpen };
 })();
 
-// Donate modal: wallet addresses stay editable in ONE place (donate.html);
-// this modal fetches and parses that page, so nothing is duplicated.
-(function () {
-  var overlay = null, bodyEl = null, loaded = false;
-  function esc(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-  function build() {
-    overlay = document.createElement("div");
-    overlay.className = "dn-overlay";
-    overlay.hidden = true;
-    var modal = document.createElement("div");
-    modal.className = "dn-modal";
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-label", t("docs.dnTitle"));
-    var head = document.createElement("div");
-    head.className = "dn-head";
-    head.textContent = t("docs.dnTitle");
-    var x = document.createElement("button");
-    x.type = "button";
-    x.textContent = "×";
-    x.setAttribute("aria-label", t("ai.close"));
-    x.addEventListener("click", close);
-    head.appendChild(x);
-    bodyEl = document.createElement("div");
-    bodyEl.className = "dn-body";
-    var foot = document.createElement("div");
-    foot.className = "dn-foot";
-    var more = document.createElement("a");
-    more.href = "donate.html";
-    more.textContent = t("docs.dnFull");
-    foot.appendChild(more);
-    modal.appendChild(head);
-    modal.appendChild(bodyEl);
-    modal.appendChild(foot);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-  }
-  function row(label, addr) {
-    var r = document.createElement("div");
-    r.className = "dn-row";
-    var b = document.createElement("b");
-    b.textContent = label;
-    var c = document.createElement("code");
-    c.textContent = addr;
-    c.title = addr;
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = t("docs.copy");
-    btn.addEventListener("click", async function () {
-      try {
-        await navigator.clipboard.writeText(addr);
-        btn.textContent = t("docs.copied");
-      } catch (_) {
-        btn.textContent = t("docs.copyFailed");
-      }
-      setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
-    });
-    r.appendChild(b);
-    r.appendChild(c);
-    r.appendChild(btn);
-    return r;
-  }
-  async function loadWallets() {
-    if (loaded) return;
-    try {
-      const res = await fetch("donate.html");
-      const html = await res.text();
-      const re = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<pre>([\s\S]*?)<\/pre>/g;
-      let m, n = 0;
-      while ((m = re.exec(html)) && n < 8) {
-        const label = m[1].replace(/<[^>]+>/g, "").trim();
-        const addr = m[2].replace(/<[^>]+>/g, "").trim();
-        if (label && addr && addr.length < 200) {
-          bodyEl.appendChild(row(label, addr));
-          n++;
-        }
-      }
-      if (!n) throw new Error("empty");
-    } catch (_) {
-      var p = document.createElement("p");
-      p.className = "hint";
-      var a = document.createElement("a");
-      a.href = "donate.html";
-      a.textContent = t("docs.dnSee");
-      p.appendChild(a);
-      bodyEl.appendChild(p);
-    }
-    loaded = true;
-  }
-  function open() {
-    if (!overlay) build();
-    loadWallets();
-    overlay.hidden = false;
-    requestAnimationFrame(function () { requestAnimationFrame(function () { overlay.classList.add("show"); }); });
-  }
-  function close() {
-    if (!overlay) return;
-    overlay.classList.remove("show");
-    setTimeout(function () { overlay.hidden = true; }, 180);
-  }
-  window.__zefiraDonate = { open: open, close: close };
-  document.querySelectorAll('a[href="donate.html"]').forEach(function (a) {
-    a.addEventListener("click", function (e) { e.preventDefault(); open(); });
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && overlay && !overlay.hidden) close();
-  });
-})();
-
 // Floating support bubble (bottom corner) — static links only, no backend.
 (function () {
   var fab = document.createElement("button");
@@ -356,10 +244,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   links.appendChild(row(t("docs.supFaq"), null, "faq.html", null));
   links.appendChild(row(t("docs.supCommunity"), null, "https://github.com/mrlurix/zefira-panel/discussions", null));
   links.appendChild(row(t("docs.supBug"), null, "https://github.com/mrlurix/zefira-panel/issues", null));
-  links.appendChild(row(t("docs.supDonate"), null, null, function () {
-    closePanel();
-    if (window.__zefiraDonate) window.__zefiraDonate.open();
-  }));
+  links.appendChild(row(t("docs.supDonate"), null, "donate.html", null));
   panel.appendChild(head);
   panel.appendChild(links);
   document.body.appendChild(fab);
