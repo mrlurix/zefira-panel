@@ -80,7 +80,7 @@ There is a test suite with 117 checks that hits the running panel from the outsi
 python security_test.py http://127.0.0.1:8000 admin YOURPASS
 ```
 
-It should print `117/117 checks passed` or similar - if not, open an issue.
+It should print `119/119 checks passed` or similar - if not, open an issue.
 
 ### API
 
@@ -92,7 +92,7 @@ MIT - see [LICENSE](LICENSE). Do what you want, just keep the notice.
 
 ### Donation
 
-If Zefira helps you, consider supporting it: full details (wallets + contact) on the [donate page](https://mrlurix.github.io/zefira-panel/donate.html).
+If Zefira helps you, consider supporting it: wallet addresses on the [donate page](https://mrlurix.github.io/zefira-panel/donate.html).
 
 ```text
 TRX BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18

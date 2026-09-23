@@ -13,7 +13,7 @@
     if (KB) { cb(KB); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=6").then(function (r) { return r.json(); }).then(function (j) {
+    fetch("assets/site-knowledge.json?v=7").then(function (r) { return r.json(); }).then(function (j) {
       KB = j; cb(KB);
     }).catch(function () { cb(null); });
   }
@@ -22,9 +22,13 @@
   // Two-letter words ("is", "of", "do", "to"…) match everywhere as
   // substrings and drown real keywords, defeating the off-topic guard.
   // Drop them except a tiny allowlist of meaningful short tokens.
+  // CJK (Chinese) has no spaces: keep runs of 2+ chars as one token.
+  // Cyrillic (Russian) tokenizes like Latin (length >= 3, no stop list:
+  // the score>=3 answer threshold keeps common words from matching).
   var KEEP2 = { ai: 1, qr: 1, dns: 1, ip: 1, os: 1 };
   function words(q) {
-    return q.toLowerCase().split(/[^a-z0-9\u0600-\u06FF_]+/).filter(function (w) {
+    return q.toLowerCase().split(/[^a-z0-9_\u0600-\u06FF\u4e00-\u9fff\u0400-\u04FF]+/).filter(function (w) {
+      if (/^[\u4e00-\u9fff]+$/.test(w)) return w.length >= 2;
       if (w.length >= 3) return !STOP[w];
       return !!KEEP2[w];
     });
@@ -32,17 +36,30 @@
 
   function rank(q) {
     var ws = words(q), out = [], i, k;
-    if (!ws.length) return out;
+    // CJK has no spaces: a 4-char question never equals a 2-char keyword.
+    // Also score overlapping bigrams so 如何捐赠 can hit 捐赠.
+    var toks = [];
+    for (i = 0; i < ws.length; i++) {
+      toks.push(ws[i]);
+      if (/^[\u4e00-\u9fff]{2,}$/.test(ws[i])) {
+        for (k = 0; k + 1 < ws[i].length; k++) toks.push(ws[i].slice(k, k + 2));
+      }
+    }
+    if (!toks.length) return out;
     for (i = 0; i < KB.length; i++) {
       var e = KB[i], score = 0;
       var title = (e.title || "").toLowerCase();
       var keys = (e.keywords || "").toLowerCase();
       var text = (e.text || "").toLowerCase();
-      for (k = 0; k < ws.length; k++) {
-        var w = ws[k];
+      // Localized leads carry the same facts in fa/zh/ru: match them too
+      // (slightly lower weight than the English canonical fields).
+      var loc = ((e.fa || "") + " " + (e.zh || "") + " " + (e.ru || "")).toLowerCase();
+      for (k = 0; k < toks.length; k++) {
+        var w = toks[k];
         if (title.indexOf(w) >= 0) score += 4;
         if (keys.indexOf(w) >= 0) score += 3;
         if (text.indexOf(w) >= 0) score += 1;
+        if (loc.indexOf(w) >= 0) score += 2;
       }
       if (score > 0) out.push({ e: e, score: score });
     }

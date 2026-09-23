@@ -26,7 +26,7 @@ from jinja2 import Environment as _JinjaEnv
 from jinja2 import FileSystemLoader as _JinjaLoader
 from jinja2 import select_autoescape as _autoescape
 from pydantic import ValidationError
-from sqlalchemy import select, text as sqltext
+from sqlalchemy import func, select, text as sqltext
 from sqlalchemy.exc import IntegrityError
 
 import protocols
@@ -124,6 +124,13 @@ ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
 lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
 ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
 sensitive_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
+# User creation is audited (and audit prunes to the last 2000 rows): an
+# unleashed creator (e.g. a leaked bot token) could mass-create users to
+# rotate the audit trail away AND spam Telegram notifications. Bound it.
+user_create_limiter = SlidingWindowLimiter(max_events=120, window_seconds=3600)
+# Serialize restores: two concurrent full-wipes interleave badly, and a
+# second restore right after the first is never legitimate operator flow.
+restore_lock = threading.Lock()
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
@@ -824,6 +831,7 @@ async def lifespan(_: FastAPI):
 def _srvnode_monitor_loop() -> None:
     """Background health checks for server nodes (every 5 min)."""
     time_mod.sleep(60)
+    consec_failures = 0
     while True:
         try:
             with db.s() as s:
@@ -831,6 +839,7 @@ def _srvnode_monitor_loop() -> None:
                     (n.id, n.address, n.check_port)
                     for n in s.scalars(select(ServerNode).where(ServerNode.enabled == True)).all()  # noqa: E712
                 ]
+            consec_failures = 0
             for nid, host, port in items:
                 try:
                     online, latency = probe_host(host, port)
@@ -846,7 +855,13 @@ def _srvnode_monitor_loop() -> None:
                 except Exception as exc:
                     log.debug("srvnode monitor write failed: %s", exc)
         except Exception as exc:
-            log.debug("srvnode monitor cycle failed: %s", exc)
+            # Probe failures are recorded per-node (truthful status), but a
+            # broken cycle itself (DB down, etc.) must surface: warn hourly.
+            consec_failures += 1
+            if consec_failures == 1 or consec_failures % 12 == 0:
+                log.warning("srvnode monitor cycle failed %dx: %s", consec_failures, exc)
+            else:
+                log.debug("srvnode monitor cycle failed: %s", exc)
         time_mod.sleep(300)
 
 
@@ -1431,7 +1446,23 @@ def api_templates_create(data: TemplateCreateIn, request: Request, admin: Admin 
             ))
             action = "created"
         audit(s, "TEMPLATE_SAVE", f"{data.name} {action} by {admin.username}", client_ip(request))
-        s.commit()
+        try:
+            s.commit()
+        except IntegrityError:
+            # Concurrent double-create: the loser re-reads and updates
+            # instead of 500ing (same pattern as tokens/tunnels/users).
+            s.rollback()
+            with db.s() as s2:
+                row = s2.scalar(select(UserTemplate).where(UserTemplate.name == data.name))
+                if row is None:
+                    raise HTTPException(status_code=409, detail="Template conflict, retry")
+                row.protocols = ",".join(proto_list)
+                row.volume_gb = data.volume_gb
+                row.days = data.days
+                row.start_on_first_use = data.start_on_first_use
+                row.device_limit = data.device_limit
+                audit(s2, "TEMPLATE_SAVE", f"{data.name} updated by {admin.username}", client_ip(request))
+                s2.commit()
     return {"ok": True}
 
 
@@ -2029,6 +2060,8 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
             return False, f"invalid args ({problems})"
         if not USERNAME_RE.match(data.username):
             return False, "invalid username (a-z, 0-9, _ ; 3-32 chars)"
+        if not user_create_limiter.hit(f"ucreate|{admin.id}"):
+            return False, "too many users created lately, wait a while"
         proto_list = list(dict.fromkeys(data.protocols))
         now = utcnow()
         expires = (
@@ -2037,6 +2070,8 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
             else now + timedelta(days=data.days)
         )
         with db.s() as s:
+            if s.scalar(select(func.count()).select_from(VpnUser)) >= 10000:
+                return False, "user limit reached (10000)"
             if s.scalar(select(VpnUser.id).where(VpnUser.username == data.username)):
                 return False, f"username {data.username!r} is already taken"
             try:
@@ -2387,7 +2422,9 @@ def _do_update(admin_name: str, ip: str) -> None:
             raise RuntimeError(f"pip failed: {exc}")
         if proc.returncode != 0:
             tail = (proc.stderr or proc.stdout or "").strip().splitlines()
-            raise RuntimeError(f"pip failed: {(tail[-1] if tail else 'unknown error')[:200]}")
+            raise RuntimeError(f"pip failed: {(tail[-1] if tail else 'unknown error')[:200]} "
+                               "(code updated but deps not installed: run "
+                               "'.venv/bin/pip install -r requirements.txt' manually before restarting)")
         with db.s() as s:
             audit(s, "UPDATE_DONE", f"{repo}@{branch} by {admin_name}, restarting", ip)
             s.commit()
@@ -2775,6 +2812,50 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
     )
 
 
+def _snapshot_db_before_restore() -> None:
+    """Best-effort safety copy before a destructive restore.
+
+    Restoring from the wrong file succeeds atomically — without this, the
+    previous dataset would be unrecoverable except from an external copy.
+    Never fails the restore: all errors are swallowed to debug log.
+    """
+    try:
+        from config import INSTANCE_DIR
+        import shutil as _shutil
+
+        db_path = INSTANCE_DIR / "zefira.db"
+        if not db_path.exists():
+            return
+        stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+        dest = INSTANCE_DIR / f"zefira.db.pre-restore-{stamp}"
+        # SQLite online backup API: consistent copy even mid-write, and it
+        # folds WAL content in (a raw file copy could miss the -wal file).
+        import sqlite3 as _sql
+
+        src = _sql.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+        try:
+            dst = _sql.connect(str(dest), timeout=10)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+        try:
+            os.chmod(dest, 0o600)
+        except OSError:
+            pass
+        # Keep only the last 2 safety copies.
+        olds = sorted(INSTANCE_DIR.glob("zefira.db.pre-restore-*"))
+        for old in olds[:-2]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    except Exception as exc:
+        log.debug("pre-restore snapshot failed: %s", exc)
+
+
 def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
     """Shared restore transaction (plaintext + encrypted paths).
 
@@ -2782,6 +2863,16 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
     All hardening lives here: volume sanity, scrypt-strong admin hashes,
     strict trusted_proxies, SSRF-blocked AI URLs, and bot/full token scopes.
     """
+    if not restore_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="A restore is already running")
+    try:
+        return _apply_restore_tx_locked(data, request, admin)
+    finally:
+        if restore_lock.locked():
+            restore_lock.release()
+
+
+def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     now = utcnow()
     added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = 0
     prepared_users = []
@@ -2861,6 +2952,7 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
         seen_tokens.add(pu.token)
         deduped.append(pu)
     prepared_users = deduped
+    _snapshot_db_before_restore()
     with db.s() as s:
         for u in s.scalars(select(VpnUser)).all():
             s.delete(u)
@@ -3458,6 +3550,12 @@ def api_users(q: str = "", admin: Admin = Depends(require_admin)):
 
 @app.post("/api/users")
 def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends(require_admin)):
+    # Bounded creation: floods rotate the 2000-row audit trail away and
+    # spam Telegram per create. Keyed per token/admin so one leaked bot
+    # credential cannot burn the shared budget.
+    caller = f"ucreate|{getattr(request.state, 'token_id', None) or admin.id}"
+    if not user_create_limiter.hit(caller):
+        raise HTTPException(status_code=429, detail="Too many users created, wait a while")
     if not USERNAME_RE.match(data.username):
         raise HTTPException(status_code=400, detail="Username: English letters, digits and _ only (3-32 chars)")
     proto_list = list(dict.fromkeys(data.protocols))
@@ -3468,6 +3566,8 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
         else now + timedelta(days=data.days)
     )
     with db.s() as s:
+        if s.scalar(select(func.count()).select_from(VpnUser)) >= 10000:
+            raise HTTPException(status_code=413, detail="User limit reached (10000)")
         exists = s.scalar(select(VpnUser.id).where(VpnUser.username == data.username))
         if exists:
             raise HTTPException(status_code=409, detail="This username is already taken")

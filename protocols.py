@@ -885,6 +885,12 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
 
 
 BACKPACK_VERSION = "v1.8.2"
+# Pinned, hash-verified BackPack installer (white-hat: piping a floating
+# branch to bash turns an upstream compromise into RCE-as-root on both
+# tunnel servers). Bump deliberately per BackPack release: take the commit
+# SHA, download install.sh at that commit, record its sha256 here.
+BACKPACK_PIN_COMMIT = "5e1d15734550c7133fe512ab62475ce1482cf1da"
+BACKPACK_PIN_SHA256 = "478789edc3ca702724ca643bfc3785123da0d4983e80f060726d8e258d82ab18"
 
 
 def backpack_guide(node: dict, token: str) -> str:
@@ -904,8 +910,12 @@ def backpack_guide(node: dict, token: str) -> str:
  Transport   : {tlabel}
 ================================================================
 
-STEP 0 - Install BackPack on BOTH servers (Iran + Kharej):
-    bash <(curl -fsSL https://raw.githubusercontent.com/AminMGMT/BackPack/main/install.sh)
+STEP 0 - Install BackPack {BACKPACK_VERSION} on BOTH servers (Iran + Kharej).
+NEVER pipe an unpinned URL to bash (upstream compromise = RCE as root).
+Download the pinned copy, verify its hash, then run it:
+    curl -fsSL -o /tmp/bp-install.sh https://raw.githubusercontent.com/AminMGMT/BackPack/{BACKPACK_PIN_COMMIT}/install.sh
+    echo "{BACKPACK_PIN_SHA256}  /tmp/bp-install.sh" | sha256sum -c -
+    sudo bash /tmp/bp-install.sh
 
 ----------------------------------------------------------------
 STEP 1 - IRAN SERVER (entry point):  {node['iran_ip']}

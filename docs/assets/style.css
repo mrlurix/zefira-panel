@@ -573,45 +573,6 @@ table { display: block; width: 100%; overflow-x: auto; }
   .sup-panel { right: 14px; left: 14px; bottom: 74px; width: auto; }
 }
 
-/* ---------- donate modal (like the search palette) ---------- */
-.dn-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(3, 3, 6, .72);
-  backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 12vh 18px 18px;
-  opacity: 0;
-  transition: opacity .18s ease;
-}
-.dn-overlay.show { opacity: 1; }
-.dn-overlay[hidden] { display: none; }
-.dn-modal {
-  width: min(480px, 100%);
-  background: var(--card);
-  border: 1px solid var(--border-red);
-  border-radius: 14px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, .65), 0 0 34px var(--red-glow);
-  overflow: hidden;
-  transform: translateY(-14px) scale(.98);
-  transition: transform .22s cubic-bezier(.2, .9, .3, 1.2);
-}
-.dn-overlay.show .dn-modal { transform: none; }
-.dn-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 16px; }
-.dn-head button { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 7px; font-size: 15px; padding: 1px 10px; cursor: pointer; font-family: inherit; }
-.dn-head button:hover { color: var(--text); border-color: var(--red); }
-.dn-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
-.dn-row { display: flex; align-items: center; gap: 10px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; }
-.dn-row b { font-size: 13px; white-space: nowrap; }
-.dn-row code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: #ffb3bb; }
-.dn-row button { background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 7px; font-size: 12px; padding: 4px 12px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
-.dn-row button:hover { color: var(--text); border-color: var(--red); }
-.dn-foot { padding: 10px 16px 14px; border-top: 1px solid var(--border); font-size: 13px; }
-.dn-foot a { color: var(--red); text-decoration: none; }
-
 /* ---------- i18n: language switcher + RTL ---------- */
 .lang-sel {
   background: var(--card);
@@ -641,7 +602,7 @@ table { display: block; width: 100%; overflow-x: auto; }
 [dir="rtl"] .sup-links small { margin-left: 0; margin-right: auto; }
 [dir="rtl"] .sp-foot kbd { margin-right: 0; margin-left: 4px; }
 [dir="rtl"] .sup-panel { transform-origin: bottom left; }
-[dir="rtl"] pre, [dir="rtl"] code, [dir="rtl"] .dn-row code { direction: ltr; unicode-bidi: isolate; text-align: left; }
+[dir="rtl"] pre, [dir="rtl"] code { direction: ltr; unicode-bidi: isolate; text-align: left; }
 [dir="rtl"] table { direction: rtl; }
 [dir="rtl"] th, [dir="rtl"] td { text-align: right; }
 [dir="rtl"] .dn-head button { margin-left: 0; margin-right: auto; }

@@ -2,8 +2,9 @@
 
 Zefira takes security seriously: scrypt password hashing, HttpOnly
 SameSite cookies, rate-limited login, CSRF + CSP headers, encrypted secrets
-at rest, audit logging, and a `security_test.py` penetration suite (112/112
-checks) that runs against a live panel.
+at rest, audit logging, and a `security_test.py` penetration suite (119/119
+checks, plus 60/60 functional and a permanent i18n-coverage suite) that
+runs against a live panel.
 
 ## Reporting a vulnerability
 
@@ -23,3 +24,7 @@ Please include:
 - Never share backup JSON files: they contain password hashes and secrets.
 - Back up `instance/secret.key` offline — without it, encrypted data
   (tunnel tokens, REALITY keys, Telegram/AI credentials) is unrecoverable.
+- One panel = one reseller trust domain: any `bot`-scoped API token can
+  list all users and renew anyone's plan (by design for a single
+  reseller). Never give bot tokens to two independent resellers on the
+  same panel.

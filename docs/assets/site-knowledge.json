@@ -2,7 +2,7 @@
   {
     "id": "donate",
     "title": "How to donate",
-    "keywords": "donate donation wallet wallets address addresses network networks bep20 bep-20 copy send transfer pay payment support money help contribute star github funding دونیت پرداخت کمک حمایت کیف پول آدرس شبکه",
+    "keywords": "donate donation wallet wallets address addresses network networks bep20 bep-20 copy send transfer pay payment support money help contribute star github funding دونیت پرداخت کمک حمایت کیف پول آدرس شبکه 捐赠 捐款 地址 网络 задонатить донат адрес сеть кошелёк",
     "text": "TRX, ETH and USDC on BEP-20 share one address:\n\n0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18\n\nAlways double-check the address AND the network before sending — crypto transfers cannot be reversed.",
     "fa": "TRX، ETH و USDC روی BEP-20 یک آدرس مشترک دارند:\n\n0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18\n\nحتماً آدرس و شبکه را چک کن — برگشت ندارد.",
     "links": [
@@ -32,16 +32,16 @@
     "id": "changelog",
     "title": "Changelog — what is new",
     "keywords": "changelog change log version versions new update updates release history news latest v1 تغییر نسخه جدید آپدیت",
-    "text": "Latest releases:\n\nv1.8.1 — encrypted backups from the panel button, bot renewal docs.\nv1.8.0 — developer reset API (lookup by username + combo reset) for bots.\nv1.7.0 — the panel AI assistant can act (create/top-up/extend users).\nv1.6.0 — L2TP/IPsec, Cisco AnyConnect and SOCKS5 protocols.\n\nThe panel itself shows incoming changes under Update before you upgrade.",
-    "fa": "آخرین نسخه‌ها: 1.8.1 (بکاپ رمزنگاری‌شده)، 1.8.0 (Reset API برای بات‌ها)، 1.7.0 (دستیار هوشمند اجراکننده)، 1.6.0 (پروتکل‌های L2TP/Cisco/SOCKS5). جزئیات کامل در صفحه changelog.",
+    "text": "Latest releases:\n\nv1.13.0 — BackPack v1.8.2 support (UDP transport, Direct mode docs).\nv1.12.0 — panel and docs in Persian, Chinese and Russian.\nv1.11.1 — bot-scope security audit.\n\nThe panel itself shows incoming changes under Update before you upgrade.",
+    "fa": "آخرین نسخه‌ها: 1.13.0 (پشتیبانی BackPack v1.8.2)، 1.12.0 (فارسی/چینی/روسی)، 1.11.1 (ممیزی امنیتی). جزئیات کامل در صفحه changelog.",
     "links": [
       {
         "label": "Full changelog",
         "href": "changelog.html"
       }
     ],
-    "zh": "最近更新:加密备份、机器人重置 API、会干活的 AI、L2TP/Cisco/SOCKS5。详情看更新日志页。",
-    "ru": "Свежее: шифрованные бэкапы, reset API для ботов, действующий AI, L2TP/Cisco/SOCKS5. Подробности — в чейнджлоге."
+    "zh": "最近更新：v1.13.0（支持 BackPack v1.8.2）、v1.12.0（波斯语/中文/俄语）、v1.11.1（安全审计）。详情看更新日志页。",
+    "ru": "Свежее: v1.13.0 (поддержка BackPack v1.8.2), v1.12.0 (персидский/китайский/русский), v1.11.1 (аудит). Подробности — в чейнджлоге."
   },
   {
     "id": "github",

@@ -37,6 +37,6 @@ Docs, the support page, or GitHub Discussions.
   for / accept passwords, tokens, backups, or secret.key contents.
 
 ## Style
-Same language as the user (English default; Persian if asked in
-Persian). Concise, beginner-friendly, exact page/menu names. End with
-at most one pointer link (docs page or GitHub URL above).
+Same language as the user (English default; Persian, Chinese or Russian
+if asked in that language). Concise, beginner-friendly, exact page/menu
+names. End with at most one pointer link (docs page or GitHub URL above).
