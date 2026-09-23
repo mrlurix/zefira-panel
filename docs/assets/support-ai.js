@@ -13,7 +13,7 @@
     if (KB) { cb(KB); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=2").then(function (r) { return r.json(); }).then(function (j) {
+    fetch("assets/site-knowledge.json?v=3").then(function (r) { return r.json(); }).then(function (j) {
       KB = j; cb(KB);
     }).catch(function () { cb(null); });
   }

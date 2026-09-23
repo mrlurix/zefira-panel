@@ -826,10 +826,14 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
     return ("\n\n".join(parts) + "\n"), "text/plain"
 
 
+BACKPACK_VERSION = "v1.8.2"
+
+
 def backpack_guide(node: dict, token: str) -> str:
     transport_labels = {
         "tcp": "TCP", "tcp-mux": "TCP Mux", "tcp-stealth": "TCP + Stealth",
-        "tcp-pck": "TCP + PCK", "kcp": "UDP + KCP + FEC", "quic": "UDP + QUIC",
+        "tcp-pck": "TCP + PCK", "udp": "UDP",
+        "kcp": "UDP + KCP + FEC", "quic": "UDP + QUIC",
         "ws": "WS", "ws-mux": "WS Mux", "wss": "WSS", "wss-mux": "WSS Mux",
         "icmp": "xDi (ICMP)", "ip-spoof": "IP Spoofing",
     }
@@ -837,7 +841,7 @@ def backpack_guide(node: dict, token: str) -> str:
     ports = node.get("forwarded_ports") or "e.g. 443:8000"
     udp = "yes" if node.get("udp_forward") else "no"
     return f"""================================================================
- ZEFIRA x BACKPACK - Tunnel Setup Guide
+ ZEFIRA x BACKPACK - Tunnel Setup Guide (for BackPack {BACKPACK_VERSION}+)
  Tunnel name : {node['name']}
  Transport   : {tlabel}
 ================================================================
@@ -881,8 +885,16 @@ From Zefira panel press "Check now" to probe {node['iran_ip']}:{node['tunnel_por
 NOTES
 -----
 * Keep the token secret - anyone holding it can join your tunnel.
+* On tcp/udp/kcp the token travels as-is: on untrusted paths prefer an
+  encrypted transport (Stealth, PCK, KCP, QUIC, WSS).
 * TCP + Stealth or WSS are the best anti-DPI transports on dirty routes.
+* WSS needs a certificate configured and answers probes with a decoy site.
+* If Iran cannot accept inbound, use Direct mode instead (wizard ->
+  Direct -> carrier): Iran dials out, no inbound port needed.
+* Not sure which transport fits? BackPack Manage -> Link Test measures
+  the route and recommends one.
 * Open/forward the tunnel port ({node['tunnel_port']}/{'udp+tcp' if udp == 'yes' else 'tcp'}) on the Iran firewall.
+* Tunnel port can be pinned to one address (IP:port) in the wizard.
 ================================================================
 """
 

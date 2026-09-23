@@ -179,16 +179,16 @@
     "id": "tunnels",
     "title": "Tunnels and server nodes",
     "keywords": "tunnel tunnels backpack iran kharej node nodes server monitor health reality anti-filter censorship sni تانل نود سرور",
-    "text": "BackPack tunnels (Iran⇄Kharej): create node in Tunnels, run the same token on both servers (Setup Iran / Setup Kharej), verify with Check-now. Server Nodes: register remotes for 5-min health checks; pin inbounds to a node — offline nodes drop out of links automatically. Anti-filter stack: REALITY keys + SNI rotation + obfuscated host + per-user subdomains + CDN SNI.",
+    "text": "BackPack tunnels (Iran⇄Kharej): create node in Tunnels, run the same token on both servers (Setup Iran / Setup Kharej), verify with Check-now. Server Nodes: register remotes for 5-min health checks; pin inbounds to a node — offline nodes drop out of links automatically. Anti-filter stack: REALITY keys + SNI rotation + obfuscated host + per-user subdomains + CDN SNI. BackPack v1.8.2 adds: plain UDP transport, Direct mode (Iran dials out, no inbound port needed — pick Direct + carrier in the wizard), Link Test transport recommendations, WSS certificate support.",
     "links": [
       {
         "label": "Setup guides",
         "href": "setup-guides.html"
       }
     ],
-    "fa": "تانل BackPack ‏(ایران⇄خارج)‏: در تانل‌ها نود بساز، همان توکن را در هر دو سرور اجرا کن (Setup Iran / Setup Kharej)، با Check-now تأیید کن. نودهای سرور: ثبت ریموت‌ها برای health-check هر 5 دقیقه؛ اینباند را به نود پین کن — نود آفلاین خودکار از لینک‌ها می‌افتد. استک ضدفیلتر: کلیدهای REALITY + چرخش SNI + هاست مبهم + ساب‌دامنه هر کاربر + جعل SNI با CDN.",
-    "zh": "BackPack 隧道（伊朗⇄境外）：在隧道页建节点，两台服务器用同一令牌运行（Setup Iran / Setup Kharej），用 Check-now 验证。服务器节点：注册远端做 5 分钟健康检查；把入站绑定到节点——离线节点自动从链接中剔除。反过滤组合：REALITY 密钥 + SNI 轮换 + 混淆主机 + 每用户子域名 + CDN SNI 伪装。",
-    "ru": "Туннели BackPack (Иран⇄Харедж): создай ноду в Туннелях, прогони тот же токен на обоих серверах (Setup Iran / Setup Kharej), проверь Check-now. Серверные ноды: регистрация удалённых для health-check каждые 5 минут; привяжи инбаунд к ноде — офлайн-ноды сами выпадают из ссылок. Антифильтр-стек: ключи REALITY + ротация SNI + обфусцированный хост + per-user поддомены + CDN SNI."
+    "fa": "تانل BackPack ‏(ایران⇄خارج)‏: در تانل‌ها نود بساز، همان توکن را در هر دو سرور اجرا کن (Setup Iran / Setup Kharej)، با Check-now تأیید کن. نودهای سرور: ثبت ریموت‌ها برای health-check هر 5 دقیقه؛ اینباند را به نود پین کن — نود آفلاین خودکار از لینک‌ها می‌افتد. استک ضدفیلتر: کلیدهای REALITY + چرخش SNI + هاست مبهم + ساب‌دامنه هر کاربر + جعل SNI با CDN. در BackPack v1.8.2: transport ساده UDP، حالت Direct (ایران dial-out می‌کند و inbound لازم نیست — در ویزارد Direct + carrier را انتخاب کن)، پیشنهاد transport با Link Test، پشتیبانی گواهی برای WSS.",
+    "zh": "BackPack 隧道（伊朗⇄境外）：在隧道页建节点，两台服务器用同一令牌运行（Setup Iran / Setup Kharej），用 Check-now 验证。服务器节点：注册远端做 5 分钟健康检查；把入站绑定到节点——离线节点自动从链接中剔除。反过滤组合：REALITY 密钥 + SNI 轮换 + 混淆主机 + 每用户子域名 + CDN SNI 伪装。BackPack v1.8.2 新增：纯 UDP 传输、Direct 模式（伊朗主动外拨、无需入站端口——在向导里选 Direct + carrier）、Link Test 传输推荐、WSS 证书支持。",
+    "ru": "Туннели BackPack (Иран⇄Харедж): создай ноду в Туннелях, прогони тот же токен на обоих серверах (Setup Iran / Setup Kharej), проверь Check-now. Серверные ноды: регистрация удалённых для health-check каждые 5 минут; привяжи инбаунд к ноде — офлайн-ноды сами выпадают из ссылок. Антифильтр-стек: ключи REALITY + ротация SNI + обфусцированный хост + per-user поддомены + CDN SNI. В BackPack v1.8.2: обычный UDP-транспорт, режим Direct (Иран звонит наружу, входящий порт не нужен — выбери Direct + carrier в визарде), рекомендации транспорта через Link Test, поддержка сертификатов для WSS."
   },
   {
     "id": "update",

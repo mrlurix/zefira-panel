@@ -261,7 +261,7 @@ class BlockToggleIn(BaseModel):
 
 HOST_PORT_PAIRS_RE = r"^(?:|[0-9]{1,5}:[0-9]{1,5}(\s*,\s*[0-9]{1,5}:[0-9]{1,5})*)\z"
 Transport = Literal[
-    "tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "kcp", "quic",
+    "tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "udp", "kcp", "quic",
     "ws", "ws-mux", "wss", "wss-mux", "icmp", "ip-spoof",
 ]
 

@@ -66,6 +66,7 @@
 <li><b data-i18n="stg.verify">Verify:</b> <span data-i18n="stg.bp5A">Status on both servers, Health Check on errors, then Zefira</span> <b data-i18n="stg.checkNow">Check now</b> <span data-i18n="stg.bp5B">probes</span> <code>iran-ip:tunnel-port</code><span data-i18n="stg.bp5C">. Keep the token secret — whoever holds it can join the tunnel.</span></li>
 </ol>
 <p><b data-i18n="stg.transportPicks">Transport picks:</b> <span data-i18n="stg.transportRest">dirty routes → TCP+Stealth or WSS/WSS-Mux. UDP apps (WireGuard, DNS, games) → enable Forward UDP with KCP/QUIC transports.</span></p>
+<p><b data-i18n="stg.directBold">No inbound to Iran?</b> <span data-i18n="stg.directText">Use BackPack Direct mode instead of a reverse tunnel: Setup Iran → Direct → pick a carrier (udp, quic, pck, sni, xdi, spoof). Iran dials out so no inbound port is needed, and forwarded ports work the same. The tunnel port can be pinned to one address (IP:port) in the wizard.</span></p>
 
 <h2 id="anti-filter-cookbook" data-i18n="stg.antiTitle">Anti-filter cookbook</h2>
 <ol>
@@ -81,7 +82,7 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=22"></script>
+<script src="assets/i18n.js?v=23"></script>
 <script src="assets/docs.js?v=22"></script>
 <script src="assets/support-ai.js?v=3"></script>
 </body>
