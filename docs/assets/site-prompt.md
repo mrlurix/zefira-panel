@@ -25,7 +25,7 @@ Docs, the support page, or GitHub Discussions.
   WireGuard, OpenVPN, L2TP/IPsec, Cisco AnyConnect, SOCKS5.
 - One subscription link per user; browsers get a dashboard, clients get
   raw bytes or Clash YAML. Expired/disabled/out-of-volume users get 404.
-- Donations: BEP-20 network. The wallet address is
+- Donations: BEP-20 network — TRX, ETH, USDC share one address:
   `0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18`. Always warn: verify the
   address AND the network — transfers cannot be reversed.
 - Install: `bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)`

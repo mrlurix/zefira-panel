@@ -95,9 +95,9 @@ MIT - see [LICENSE](LICENSE). Do what you want, just keep the notice.
 If Zefira helps you, consider supporting it: full details (wallets + contact) on the [donate page](https://mrlurix.github.io/zefira-panel/donate.html).
 
 ```text
-BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
-BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
-BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
+TRX BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
+ETH BEP-20:    0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
+USDC BEP-20:   0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
 ```
 
 ---
