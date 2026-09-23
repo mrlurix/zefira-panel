@@ -2,17 +2,31 @@
   {
     "id": "donate",
     "title": "How to donate",
-    "keywords": "donate donation support money pay payment help contribute star github funding دونیت پرداخت کمک حمایت",
-    "text": "Zefira is free and MIT-licensed — there are no paid tiers and no wallet addresses on this page. The support that helps most is free too: star the repo on GitHub so more people find it.",
-    "fa": "زفیرا رایگان است (مجوز MIT) — پلن پولی و آدرس کیف‌پولی در این صفحه نیست. بهترین حمایت هم رایگان است: به ریپو در گیت‌هاب استار بده تا افراد بیشتری پیدایش کنند.",
+    "keywords": "donate donation wallet wallets address addresses network networks bep20 bep-20 copy send transfer pay payment support money help contribute star github funding دونیت پرداخت کمک حمایت کیف پول آدرس شبکه",
+    "text": "Send any amount on BEP-20 to:\n\n0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18\n\nAlways double-check the address AND the network before sending — crypto transfers cannot be reversed.",
+    "fa": "هر مبلغی روی BEP-20 به آدرس 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18 ارسال کن. حتماً آدرس و شبکه را چک کن — برگشت ندارد.",
     "links": [
       {
         "label": "Full donate page",
         "href": "donate.html"
       }
     ],
-    "zh": "Zefira 免费（MIT 许可）——无付费档，本页无钱包地址。最有用的支持也是免费的：给 GitHub 仓库点 Star，让更多人发现它。",
-    "ru": "Zefira бесплатна (лицензия MIT) — платных тарифов и адресов кошельков здесь нет. Лучшая поддержка тоже бесплатна: поставь звезду репозиторию на GitHub, чтобы её находили."
+    "zh": "在 BEP-20 上发送任意金额到：0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18。务必核对地址和网络——无法撤销。",
+    "ru": "Отправь любую сумму в сети BEP-20 на 0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18. Проверь адрес и сеть — необратимо.",
+    "wallets": [
+      {
+        "label": "BEP-20",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      },
+      {
+        "label": "BEP-20",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      },
+      {
+        "label": "BEP-20",
+        "addr": "0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18"
+      }
+    ]
   },
   {
     "id": "changelog",
