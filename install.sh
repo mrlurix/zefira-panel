@@ -286,7 +286,12 @@ if ! id zefira >/dev/null 2>&1; then
     ok "Created system user 'zefira'"
 fi
 chown -R zefira:zefira "$TARGET"
-chmod 700 "$TARGET/instance" 2>/dev/null || true
+# ProtectSystem=strict bind-mounts ReadWritePaths when the namespace is
+# set up — BEFORE the app (which creates instance/ itself) ever runs.
+# A missing dir = 226/NAMESPACE and a dead service, so create it here.
+mkdir -p "$TARGET/instance" || { echo "[!] cannot create $TARGET/instance"; exit 1; }
+chown zefira:zefira "$TARGET/instance"
+chmod 700 "$TARGET/instance"
 chmod 600 "$TARGET/instance/zefira.db" 2>/dev/null || true
 chmod 600 "$ENV_FILE"
 # Allow the unprivileged service to restart ONLY itself after an update.
@@ -300,6 +305,10 @@ visudo -c >/dev/null 2>&1 || { rm -f /etc/sudoers.d/zefira; warn "sudoers check 
 
 # ---------- systemd ----------
 echo "==> [5/6] systemd service (non-root)..."
+# Resolve helper binaries for ExecStartPre (same merged-/usr care as systemctl).
+_MKDIR="$(command -v mkdir 2>/dev/null || echo /bin/mkdir)"
+_CHOWN="$(command -v chown 2>/dev/null || echo /bin/chown)"
+_CHMOD="$(command -v chmod 2>/dev/null || echo /bin/chmod)"
 cat > "/etc/systemd/system/$SERVICE.service" <<EOF
 [Unit]
 Description=Zefira Proxy Sales Panel
@@ -311,6 +320,12 @@ User=zefira
 Group=zefira
 WorkingDirectory=$TARGET
 EnvironmentFile=-$ENV_FILE
+# Belt and braces for ReadWritePaths below: if instance/ ever goes missing
+# (deleted by hand, fresh mount), recreate it as root before the namespace
+# is set up — otherwise systemd fails with 226/NAMESPACE.
+ExecStartPre=+$_MKDIR -p $TARGET/instance
+ExecStartPre=+$_CHOWN zefira:zefira $TARGET/instance
+ExecStartPre=+$_CHMOD 700 $TARGET/instance
 ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers --no-access-log
 Restart=always
 RestartSec=3
