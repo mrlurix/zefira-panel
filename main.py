@@ -1536,15 +1536,18 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
             scopes=scopes,
         )
         s.add(row)
+        s.flush()
+        # Audit BEFORE the single commit: if the commit fails, nothing
+        # exists server-side and retry is safe; the one-time secret is
+        # only returned after a successful commit (never lost to a 500).
+        out = row.to_dict()
+        out["token_once"] = raw
+        audit(s, "APITOKEN_CREATE", f"{data.name} [{scopes}] by {admin.username}", client_ip(request))
         try:
             s.commit()
         except IntegrityError:
             s.rollback()
             raise HTTPException(status_code=409, detail="A token with this name already exists")
-        out = row.to_dict()
-        out["token_once"] = raw
-        audit(s, "APITOKEN_CREATE", f"{data.name} [{scopes}] by {admin.username}", client_ip(request))
-        s.commit()
     log.info("API token created %s [%s] by %s", data.name, scopes, admin.username)
     return out
 
@@ -1982,7 +1985,7 @@ def _ai_user_summary(u) -> str:
     except Exception:
         exp = "?"
     return (
-        f"{u.username} [{' ,'.join(u.protocols_list())}] "
+        f"{u.username} [{','.join(u.protocols_list())}] "
         f"{u.used_gb:g}/{u.volume_gb:g}GB exp={exp} "
         f"{'active' if u.is_active else 'disabled'}"
     )
@@ -2033,9 +2036,13 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
     if tool == "panel_stats":
         with db.s() as s:
             rows = s.scalars(select(VpnUser)).all()
-            data = [(u.is_active, u.expires_at, u.volume_gb, u.used_gb) for u in rows]
+            data = [(u.is_active, u.expires_at, u.volume_gb, u.used_gb,
+                     bool(u.start_on_first_use)) for u in rows]
         now = utcnow()
-        active = sum(1 for a, e, v, used in data if a and e > now and used < v)
+        # Same buckets as /api/stats: pending SOFU users are NOT active.
+        active = sum(1 for a, e, v, used, sofu in data
+                     if a and e > now and used < v
+                     and not (sofu and e is not None and e.year >= PENDING_YEAR))
         return True, (
             f"users={len(data)} active={active} "
             f"volume={sum(v for _, _, v, _ in data):g}GB "
@@ -2181,6 +2188,9 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
                 now = utcnow()
                 if user.expires_at and user.expires_at.year >= PENDING_YEAR:
                     base = now
+                    # Leaving pending: drop SOFU flags like HTTP PATCH does.
+                    user.start_on_first_use = False
+                    user.duration_days = None
                 elif user.expires_at and user.expires_at > now:
                     base = user.expires_at
                 else:
@@ -2579,15 +2589,17 @@ def api_nodes_create(data: TunnelNodeIn, request: Request, admin: Admin = Depend
             token_enc=encrypt_text(token_plain),
         )
         s.add(node)
+        s.flush()
+        # Audit before the single commit (same pattern as API tokens): the
+        # one-time token must never be lost to a 500 after it exists.
+        out = node.to_dict()
+        out["token_once"] = token_plain
+        audit(s, "NODE_CREATE", f"{data.name} {data.transport} by {admin.username}", client_ip(request))
         try:
             s.commit()
         except IntegrityError:
             s.rollback()
             raise HTTPException(status_code=409, detail="A tunnel with this name already exists")
-        out = node.to_dict()
-        out["token_once"] = token_plain
-        audit(s, "NODE_CREATE", f"{data.name} {data.transport} by {admin.username}", client_ip(request))
-        s.commit()
     log.info("BackPack tunnel created %s by %s", data.name, admin.username)
     return out
 
@@ -2604,6 +2616,10 @@ def api_node_reveal_token(node_id: int, request: Request, admin: Admin = Depends
     with db.s() as s:
         node = _get_node_or_404(s, node_id)
         token = decrypt_text(node.token_enc)
+        if not token:
+            # Encrypted under a lost/rotated master key: fail loudly instead
+            # of handing out a blank token that silently breaks the tunnel.
+            raise HTTPException(status_code=500, detail="Stored tunnel token is undecryptable — regenerate it")
         name = node.name
         audit(s, "NODE_TOKEN_REVEAL", f"{name} by {admin.username}", client_ip(request))
         s.commit()
@@ -2641,6 +2657,8 @@ def api_node_guide(node_id: int, request: Request, admin: Admin = Depends(requir
     with db.s() as s:
         node = _get_node_or_404(s, node_id)
         token = decrypt_text(node.token_enc)
+        if not token:
+            raise HTTPException(status_code=500, detail="Stored tunnel token is undecryptable — regenerate it")
         ndict = node.to_dict()
         name = node.name
         audit(s, "NODE_GUIDE_DL", f"{name} by {admin.username}", client_ip(request))
@@ -2670,6 +2688,9 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
     online, _lat = probe_host(host, port, timeout=3.0)
     with db.s() as s:
         node = s.get(TunnelNode, node_id_val)
+        if not node:
+            # Deleted while probing: report 404, not a 500 on None.
+            raise HTTPException(status_code=404, detail="Tunnel not found")
         node.status = "online" if online else "offline"
         node.last_check = utcnow()
         out = node.to_dict()
@@ -2775,6 +2796,8 @@ def api_srvnodes_check(node_id: int, request: Request, admin: Admin = Depends(re
     online, latency = probe_host(host, port)
     with db.s() as s:
         node = s.get(ServerNode, node_id_val)
+        if not node:
+            raise HTTPException(status_code=404, detail="Server node not found")
         _record_srvnode_probe(s, node, online, latency)
         out = node.to_dict()
         audit(s, "SRVNODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
@@ -2796,7 +2819,7 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
         admins = [a.to_backup_dict() for a in s.scalars(select(Admin)).all()]
         settings = {
             r.key: r.value
-            for r in s.scalars(select(Setting).where(Setting.key.in_(SRV_KEYS | TUNNEL_KEYS | APPEARANCE_KEYS | set(AI_BACKUP_KEYS) | {"reality_priv_enc"}))).all()
+            for r in s.scalars(select(Setting).where(Setting.key.in_(SRV_KEYS | TUNNEL_KEYS | APPEARANCE_KEYS | set(AI_BACKUP_KEYS) | {"reality_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}))).all()
         }
         tpl_rows = s.scalars(select(UserTemplate)).all()
         templates_out = [
@@ -2809,9 +2832,24 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
         blocked_out = [b.to_dict() for b in blocked_rows]
         token_rows = s.scalars(select(ApiToken)).all()
         tokens_out = [t.to_backup_dict() for t in token_rows]
+        inbounds_out = [b.to_dict() for b in s.scalars(select(Inbound)).all()]
+        snodes_out = [
+            {"name": n.name, "address": n.address, "check_port": n.check_port,
+             "note": n.note, "enabled": n.enabled}
+            for n in s.scalars(select(ServerNode)).all()
+        ]
+        # Tunnel tokens are server-bound secrets: export everything EXCEPT
+        # the token. Restore mints a fresh token per tunnel (guide must be
+        # re-downloaded, both servers updated) — never silently breaks links.
+        tnodes_out = [
+            {"name": n.name, "transport": n.transport, "iran_ip": n.iran_ip,
+             "kharej_ip": n.kharej_ip, "tunnel_port": n.tunnel_port,
+             "forwarded_ports": n.forwarded_ports, "udp_forward": n.udp_forward}
+            for n in s.scalars(select(TunnelNode)).all()
+        ]
     payload = {
         "zefira_backup": True,
-        "version": 7,
+        "version": 8,
         "exported_at": utcnow().isoformat(timespec="seconds") + "Z",
         "settings": settings,
         "admins": admins,
@@ -2819,6 +2857,9 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
         "templates": templates_out,
         "blocked_sites": blocked_out,
         "api_tokens": tokens_out,
+        "inbounds": inbounds_out,
+        "server_nodes": snodes_out,
+        "tunnel_nodes": tnodes_out,
     }
     with db.s() as s:
         audit(s, "BACKUP_DL", f"{len(users)} users enc={bool(data.encrypt)} by {admin.username}", client_ip(request))
@@ -2912,7 +2953,7 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
 
 def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     now = utcnow()
-    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = 0
+    added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = restored_snodes = restored_ibs = restored_tnodes = 0
     prepared_users = []
     for ru in data.users:
         try:
@@ -2975,6 +3016,8 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 token=ru.token,
                 secret_data=secret_json,
                 is_active=ru.is_active,
+                start_on_first_use=bool(ru.start_on_first_use),
+                duration_days=ru.duration_days,
                 created_at=created,
                 expires_at=expires,
             )
@@ -3000,7 +3043,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             added_users += 1
         if data.settings:
             for k, v in data.settings.items():
-                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in AI_BACKUP_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc"}:
+                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in AI_BACKUP_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}:
                     continue
                 sval = str(v)
                 if len(sval) > 500:
@@ -3063,7 +3106,21 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                             _canon_menu_layout(sval) if k == "menu_layout" else _canon_dash_layout(sval)
                         )
                     except (TypeError, ValueError):
+                        skipped += 1
                         continue
+                elif k == "porn_block_enabled":
+                    ok = sval.lower() in ("0", "1", "true", "false", "yes", "no", "on", "off", "")
+                    if ok:
+                        sval = "1" if sval.lower() in ("1", "true", "yes", "on") else "0"
+                elif k == "tg_bot_token":
+                    # Opaque encrypted blob: import only if this host can
+                    # decrypt it, else the notification channel silently dies.
+                    if sval and not decrypt_text(sval):
+                        skipped += 1
+                        continue
+                elif k == "tg_chat_id":
+                    if sval and not re.fullmatch(r"^@?[a-zA-Z0-9_]{4,64}$|^[-0-9]{3,25}$", sval):
+                        ok = False
                 elif k == "reality_sni":
                     if not re.fullmatch(r"[a-zA-Z0-9.,\- ]{0,300}", sval):
                         ok = False
@@ -3097,6 +3154,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                                 ok = False
                                 break
                 if not ok:
+                    skipped += 1
                     continue
                 row = s.get(Setting, k)
                 if row is None:
@@ -3119,8 +3177,124 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     if s.scalar(select(BlockedSite).where(BlockedSite.domain == dom)):
                         skipped += 1
                         continue
-                    s.add(BlockedSite(domain=dom, category="custom", enabled=True))
+                    en = bs.get("enabled", True)
+                    s.add(BlockedSite(domain=dom, category="custom", enabled=en if isinstance(en, bool) else True))
                     restored_blocked += 1
+                except Exception:
+                    skipped += 1
+                    continue
+        if data.server_nodes is not None:
+            for rn in data.server_nodes:
+                try:
+                    if not isinstance(rn, dict):
+                        skipped += 1
+                        continue
+                    nname = str(rn.get("name", "")).strip()[:40]
+                    addr = str(rn.get("address", "")).strip()
+                    try:
+                        cport = int(rn.get("check_port", 443))
+                    except (TypeError, ValueError):
+                        skipped += 1
+                        continue
+                    if (not nname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", nname)
+                            or not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", addr)
+                            or not 1 <= cport <= 65535
+                            or _hostname_is_ssrf_blocked(addr)):
+                        skipped += 1
+                        continue
+                    note = str(rn.get("note", "") or "")[:200]
+                    en = rn.get("enabled", True)
+                    if s.scalar(select(ServerNode).where(ServerNode.name == nname)):
+                        skipped += 1
+                        continue
+                    s.add(ServerNode(name=nname, address=addr, check_port=cport,
+                                     note=note, enabled=en if isinstance(en, bool) else True))
+                    restored_snodes += 1
+                except Exception:
+                    skipped += 1
+                    continue
+        node_name_to_id = {
+            n.name: n.id
+            for n in s.scalars(select(ServerNode)).all()
+        }
+        if data.inbounds is not None:
+            for ri in data.inbounds:
+                try:
+                    if not isinstance(ri, dict):
+                        skipped += 1
+                        continue
+                    iname = str(ri.get("name", "")).strip()[:32]
+                    proto = str(ri.get("protocol", ""))
+                    try:
+                        iport = int(ri.get("port", 0))
+                    except (TypeError, ValueError):
+                        skipped += 1
+                        continue
+                    ihost = str(ri.get("host", "") or "")
+                    ien = ri.get("enabled", True)
+                    if (not iname or not re.fullmatch(r"[a-zA-Z0-9_\-]+", iname)
+                            or proto not in protocols.INBOUND_PROTOCOLS
+                            or not 1 <= iport <= 65535
+                            or (ihost and not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", ihost))):
+                        skipped += 1
+                        continue
+                    if s.scalar(select(Inbound).where(Inbound.name == iname)):
+                        skipped += 1
+                        continue
+                    # Node IDs differ across databases: remap by node NAME.
+                    # Unknown names unpin to local (never drop the inbound).
+                    nid = None
+                    rnode = str(ri.get("node_name", "") or ri.get("node") or "")
+                    if rnode and rnode in node_name_to_id:
+                        nid = node_name_to_id[rnode]
+                    conflict = _inbound_port_conflict(s, proto, iport, nid)
+                    if conflict:
+                        skipped += 1
+                        continue
+                    s.add(Inbound(name=iname, protocol=proto, port=iport,
+                                  host=ihost, enabled=ien if isinstance(ien, bool) else True,
+                                  node_id=nid))
+                    restored_ibs += 1
+                except Exception:
+                    skipped += 1
+                    continue
+        if data.tunnel_nodes is not None:
+            for rn in data.tunnel_nodes:
+                try:
+                    if not isinstance(rn, dict):
+                        skipped += 1
+                        continue
+                    tname = str(rn.get("name", "")).strip()[:40]
+                    ttrans = str(rn.get("transport", "tcp"))
+                    iran = str(rn.get("iran_ip", "")).strip()
+                    kharej = str(rn.get("kharej_ip", "")).strip()
+                    try:
+                        tport = int(rn.get("tunnel_port", 0))
+                    except (TypeError, ValueError):
+                        skipped += 1
+                        continue
+                    fwd = str(rn.get("forwarded_ports", "") or "")[:200]
+                    udp = rn.get("udp_forward", False)
+                    if (not tname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", tname)
+                            or ttrans not in protocols.TUNNEL_TRANSPORTS
+                            or not 1 <= tport <= 65535
+                            or _hostname_is_ssrf_blocked(iran)
+                            or _hostname_is_ssrf_blocked(kharej)):
+                        skipped += 1
+                        continue
+                    if s.scalar(select(TunnelNode).where(TunnelNode.name == tname)):
+                        skipped += 1
+                        continue
+                    # Tokens never cross hosts: mint fresh (guide download +
+                    # both-server update required, stated in the response).
+                    fresh = secrets.token_urlsafe(24)
+                    s.add(TunnelNode(
+                        name=tname, transport=ttrans, iran_ip=iran, kharej_ip=kharej,
+                        tunnel_port=tport, forwarded_ports=fwd,
+                        udp_forward=udp if isinstance(udp, bool) else False,
+                        token_enc=encrypt_text(fresh),
+                    ))
+                    restored_tnodes += 1
                 except Exception:
                     skipped += 1
                     continue
@@ -3254,7 +3428,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens}, snodes={restored_snodes}, inbounds={restored_ibs}, tunnels={restored_tnodes} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -3269,6 +3443,10 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             "restored_blocked": restored_blocked,
             "restored_templates": restored_templates,
             "restored_tokens": restored_tokens,
+            "restored_snodes": restored_snodes,
+            "restored_inbounds": restored_ibs,
+            "restored_tunnels": restored_tnodes,
+            "tunnel_note": "Tunnel tokens are never restored: fresh tokens were minted, re-download each guide and update both servers" if restored_tnodes else "",
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)
@@ -3330,6 +3508,37 @@ def api_inbounds_list(admin: Admin = Depends(require_admin)):
     return load_inbounds()
 
 
+def _inbound_port_conflict(s, protocol: str, port: int, node_id, ignore_id=None) -> str | None:
+    """Reject duplicate (protocol, port) endpoints on the same node scope.
+
+    Two listeners cannot share a port on one server; duplicates would only
+    produce dead/duplicate links. Inbounds on different nodes may reuse
+    ports (different machines). Also rejects shadowing the global server
+    port for local (unpinned) inbounds.
+    """
+    q = select(Inbound.id).where(
+        Inbound.protocol == protocol,
+        Inbound.port == port,
+        Inbound.node_id.is_(None) if node_id is None else Inbound.node_id == node_id,
+    )
+    if ignore_id is not None:
+        q = q.where(Inbound.id != ignore_id)
+    if s.scalar(q.limit(1)):
+        return f"Another {protocol} inbound already uses port {port} here"
+    if node_id is None:
+        srv = load_srv()
+        global_port = {
+            "reality": srv.get("reality_port"),
+            "hysteria2": srv.get("hy2_port"),
+        }.get(protocol, srv.get("sub_port"))
+        try:
+            if global_port is not None and int(global_port) == int(port):
+                return f"Port {port} is already the global {protocol} port"
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
 @app.post("/api/inbounds")
 def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
@@ -3338,6 +3547,9 @@ def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depend
             raise HTTPException(status_code=409, detail="An inbound with this name already exists")
         if data.node_id is not None and not s.get(ServerNode, data.node_id):
             raise HTTPException(status_code=404, detail="Server node not found")
+        conflict = _inbound_port_conflict(s, data.protocol, data.port, data.node_id)
+        if conflict:
+            raise HTTPException(status_code=409, detail=conflict)
         ib = Inbound(
             name=data.name,
             protocol=data.protocol,
@@ -3378,6 +3590,10 @@ def api_inbounds_patch(
             if data.node_id and not s.get(ServerNode, data.node_id):
                 raise HTTPException(status_code=404, detail="Server node not found")
             ib.node_id = data.node_id or None
+        if data.port is not None or "node_id" in data.model_fields_set:
+            conflict = _inbound_port_conflict(s, ib.protocol, ib.port, ib.node_id, ignore_id=ib.id)
+            if conflict:
+                raise HTTPException(status_code=409, detail=conflict)
         s.commit()
         out = ib.to_dict()
         audit(s, "INBOUND_PATCH", f"{ib.name} by {admin.username}", client_ip(request))
@@ -3573,17 +3789,21 @@ def api_users(q: str = "", admin: Admin = Depends(require_admin)):
     q = q.strip()[:64]
     q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     stmt = select(VpnUser).order_by(VpnUser.id.desc()).limit(500)
+    count_stmt = select(func.count()).select_from(VpnUser)
     if q_esc:
         like = f"%{q_esc}%"
+        cond = VpnUser.username.like(like, escape="\\") | VpnUser.note.like(like, escape="\\")
         stmt = (
             select(VpnUser)
-            .where(VpnUser.username.like(like, escape="\\") | VpnUser.note.like(like, escape="\\"))
+            .where(cond)
             .order_by(VpnUser.id.desc())
             .limit(500)
         )
+        count_stmt = select(func.count()).select_from(VpnUser).where(cond)
     with db.s() as s:
         items = [u.to_dict() for u in s.scalars(stmt)]
-    return {"items": items}
+        total = s.scalar(count_stmt) or 0
+    return {"items": items, "total": total}
 
 
 @app.post("/api/users")
@@ -4135,7 +4355,7 @@ def subscription(token: str, request: Request):
     blocked = load_blocked_for_clash()
     info = _sub_info(udict)
     if want_clash:
-        yaml_text = protocols.clash_yaml(udict, srv, blocked)
+        yaml_text = protocols.clash_yaml(udict, srv, blocked, inbounds)
         return PlainTextResponse(
             yaml_text,
             media_type="text/yaml; charset=utf-8",

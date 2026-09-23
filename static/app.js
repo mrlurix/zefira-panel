@@ -72,8 +72,49 @@ function toast(msg, ok = true) {
   }, 3200);
 }
 
+// Clipboard with fallback: navigator.clipboard only exists in secure
+// contexts (https/localhost). Over plain http://IP it is undefined and
+// every copy button silently died — fall back to select+execCommand.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    throw new Error("no clipboard API");
+  } catch (_) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return !!ok;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 function daysLeft(isoZ) {
   return Math.ceil((new Date(isoZ).getTime() - Date.now()) / 86400000);
+}
+// datetime-local pickers are wall-clock (local zone) while the server
+// speaks UTC: convert explicitly both ways so table and modal agree.
+function utcToLocalInput(isoZ) {
+  const d = new Date(isoZ);
+  if (isNaN(d.getTime())) return "";
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+function localInputToUtc(v) {
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 16);
 }
 function badge(text, cls) {
   const s = document.createElement("span");
@@ -83,6 +124,9 @@ function badge(text, cls) {
 }
 function expiryBadge(u) {
   if (!u.is_active) return badge(t("badge.disabled"), "off");
+  // Pending users have a far-future sentinel expiry, not a real date:
+  // never render "30000 days" or year-2108 for them.
+  if (u.pending_start) return badge(t("badge.notStarted"), "pending");
   const d = daysLeft(u.expires_at);
   if (d <= 0) return badge(t("badge.expired"), "expired");
   if (d <= 7) return badge(t("badge.expSoon", {d}), "warn");
@@ -186,11 +230,10 @@ function userRow(u) {
   exp.className = "exp-cell";
   exp.appendChild(expiryBadge(u));
   const dateSmall = document.createElement("small");
-  dateSmall.textContent = dateFmt.format(new Date(u.expires_at));
+  dateSmall.textContent = u.pending_start ? "\u2014" : dateFmt.format(new Date(u.expires_at));
   exp.appendChild(dateSmall);
 
   const act = document.createElement("td");
-  const subUrl = `${location.origin}/sub/${u.token}`;
   const editBtn = iconBtn(t("icon.editUser"), ICONS.edit, "");
   editBtn.dataset.act = "edit";
   editBtn.dataset.id = u.id;
@@ -199,7 +242,7 @@ function userRow(u) {
   qrBtn.dataset.id = u.id;
   const copyBtn = iconBtn(t("icon.copySub"), ICONS.copy, "accent");
   copyBtn.dataset.act = "copy";
-  copyBtn.dataset.url = subUrl;
+  copyBtn.dataset.id = u.id;
   const dlBtn = iconBtn(t("icon.dl"), ICONS.download, "accent");
   dlBtn.dataset.act = "download";
   dlBtn.dataset.id = u.id;
@@ -269,7 +312,7 @@ function renderRecent(items) {
     const c3 = document.createElement("td");
     c3.textContent = `${u.volume_gb.toFixed(0)} GB`;
     const c4 = document.createElement("td");
-    c4.textContent = dateFmt.format(new Date(u.expires_at));
+    c4.textContent = u.pending_start ? "\u2014" : dateFmt.format(new Date(u.expires_at));
     const c5 = document.createElement("td");
     c5.appendChild(statusBadge(u));
     tr.append(c1, c2, c3, c4, c5);
@@ -316,6 +359,12 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.add("active");
     $("#section-" + btn.dataset.section).classList.add("active");
     $("#page-title").textContent = t(btn.dataset.titleKey || "title.dashboard");
+    // Stop the update poller when leaving the section: no runaway
+    // requests against a restarting server, no overlapping ticks.
+    if (typeof updatePoll !== "undefined" && updatePoll && btn.dataset.section !== "update") {
+      clearInterval(updatePoll);
+      updatePoll = null;
+    }
     if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
     if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); loadApiTokens(); }
     if (btn.dataset.section === "customize") { loadAppearance(); }
@@ -336,7 +385,7 @@ $("#logout-btn").addEventListener("click", async () => {
 });
 
 const overlay = $("#modal-overlay");
-$("#add-user-btn").addEventListener("click", () => overlay.classList.remove("hidden"));
+$("#add-user-btn").addEventListener("click", () => { loadTemplates(); overlay.classList.remove("hidden"); });
 $("#modal-close").addEventListener("click", () => overlay.classList.add("hidden"));
 overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.add("hidden"); });
 
@@ -345,8 +394,8 @@ $("#qr-close").addEventListener("click", () => qrModal.classList.add("hidden"));
 qrModal.addEventListener("click", (e) => { if (e.target === qrModal) qrModal.classList.add("hidden"); });
 let currentQrUrl = "";
 $("#qr-copy-btn").addEventListener("click", async () => {
-  await navigator.clipboard.writeText(currentQrUrl);
-  toast(t("msg.linkCopied"));
+  if (await copyText(currentQrUrl)) toast(t("msg.linkCopied"));
+  else toast(t("msg.copyFailed"), false);
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { overlay.classList.add("hidden"); qrModal.classList.add("hidden"); }
@@ -357,6 +406,12 @@ $("#add-user-form").addEventListener("submit", async (e) => {
   const f = e.target;
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast(t("msg.selectProto"), false); return; }
+  const volVal = parseFloat(f.volume.value);
+  const daysVal = parseInt(f.days.value, 10);
+  if (!Number.isFinite(volVal) || volVal <= 0 || !Number.isFinite(daysVal) || daysVal < 1) {
+    toast(t("msg.badNumbers"), false);
+    return;
+  }
   const devVal = parseInt(f.device_limit.value, 10);
   try {
     await api("/api/users", {
@@ -364,8 +419,8 @@ $("#add-user-form").addEventListener("submit", async (e) => {
       body: {
         username: f.username.value.trim(),
         protocols: protos,
-        volume_gb: parseFloat(f.volume.value),
-        days: parseInt(f.days.value, 10),
+        volume_gb: volVal,
+        days: daysVal,
         note: f.note.value.trim(),
         start_on_first_use: $("#sofu-check").checked,
         device_limit: Number.isFinite(devVal) && devVal >= 1 ? devVal : null
@@ -416,12 +471,18 @@ $("#tpl-save-btn").addEventListener("click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast(t("msg.tplSelectProto"), false); return; }
-  const name = prompt(t("prm.tplName"));
+  const volVal = parseFloat(f.volume.value);
+  const daysVal = parseInt(f.days.value, 10);
+  if (!Number.isFinite(volVal) || volVal <= 0 || !Number.isFinite(daysVal) || daysVal < 1) {
+    toast(t("msg.badNumbers"), false);
+    return;
+  }
+  const name = (prompt(t("prm.tplName")) || "").trim();
   if (!name) return;
   try {
     await api("/api/templates", {
       method: "POST",
-      body: { name, protocols: protos, volume_gb: parseFloat(f.volume.value), days: parseInt(f.days.value, 10), start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = parseInt(f.device_limit.value, 10); return Number.isFinite(v) && v >= 1 ? v : null; })() }
+      body: { name, protocols: protos, volume_gb: volVal, days: daysVal, start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = parseInt(f.device_limit.value, 10); return Number.isFinite(v) && v >= 1 ? v : null; })() }
     });
     toast(t("msg.tplSaved", {name}));
     loadTemplates();
@@ -463,7 +524,7 @@ $("#export-csv-btn").addEventListener("click", () => {
       (u.protocols || []).join("|"),
       u.volume_gb,
       u.used_gb,
-      u.expires_at || "on-first-use",
+      u.expires_at && !u.pending_start ? u.expires_at : "on-first-use",
       u.is_active ? (u.pending_start ? "pending" : (u.used_gb >= u.volume_gb ? "limited" : (daysLeft(u.expires_at) <= 0 ? "expired" : "active"))) : "disabled",
       (u.note || "").replace(/[\r\n,]/g, " ")
     ]);
@@ -490,7 +551,7 @@ $("#users-table").addEventListener("click", async (e) => {
       const f = $("#edit-user-form");
       f.note.value = u.note || "";
       f.volume.value = u.volume_gb;
-      f.expires.value = u.pending_start ? "" : (u.expires_at || "").slice(0, 16);
+      f.expires.value = u.pending_start ? "" : utcToLocalInput(u.expires_at);
       f.device_limit.value = u.device_limit || "";
       f.reset_used.checked = false;
       f.dataset.uid = id;
@@ -498,12 +559,18 @@ $("#users-table").addEventListener("click", async (e) => {
       return;
     }
     if (btn.dataset.act === "copy") {
-      await navigator.clipboard.writeText(btn.dataset.url);
-      toast(t("msg.subCopied"));
+      // Fetch the server-built URL (respects custom SUBSCRIPTION_PATH);
+      // a location.origin + "/sub/" guess 404s for renamed paths.
+      try {
+        const d = await api(`/api/users/${id}/qr`);
+        if (await copyText(d.url)) toast(t("msg.subCopied"));
+        else toast(t("msg.copyFailed"), false);
+      } catch (err) { if (err.message !== "auth") toast(err.message, false); }
       return;
     }
     if (btn.dataset.act === "download") {
-      window.open(`/api/users/${id}/config`, "_blank");
+      // Check the WireGuard key BEFORE opening: otherwise the warning
+      // always arrives after the download already started.
       try {
         const u = (typeof USERS_CACHE !== "undefined" ? USERS_CACHE : []).find((x) => String(x.id) === String(id));
         if (u && (u.protocols || []).includes("wireguard")) {
@@ -514,7 +581,8 @@ $("#users-table").addEventListener("click", async (e) => {
           }
         }
       } catch (_) {}
-      toast(t("msg.downloading"));
+      const w = window.open(`/api/users/${id}/config`, "_blank");
+      toast(w ? t("msg.downloading") : t("msg.popupBlocked"), !!w);
       return;
     }
     if (btn.dataset.act === "qr") {
@@ -701,6 +769,13 @@ function renderMenuLayout() {
 function afterMenuChange() {
   renderMenuLayout();
   applyMenuLayout(MENU_STATE);
+  // If the section being viewed was just hidden, its pane goes blank
+  // with no visible nav entry: fall back to Dashboard.
+  const activeHidden = document.querySelector(".section.active.hidden");
+  if (activeHidden) {
+    const dash = document.querySelector('.nav-btn[data-section="dashboard"]');
+    if (dash) dash.click();
+  }
   saveLayout(true);
 }
 function renderDashLayout() {
@@ -770,10 +845,15 @@ $("#ap-save-btn").addEventListener("click", async () => {
 $("#ap-reset-btn").addEventListener("click", async () => {
   if (!confirm(t("cfm.appearanceReset"))) return;
   try {
+    // Full reset: colors/brand/note AND menu/dashboard layouts back to
+    // defaults (collectAppearance would otherwise re-save the customized
+    // layouts, silently keeping half the customization).
     const body = collectAppearance();
     body.theme_accent = ""; body.theme_bg = ""; body.theme_card = "";
     body.theme_text = ""; body.theme_muted = "";
     body.brand_name = ""; body.dash_note = "";
+    body.menu_layout = JSON.stringify(MENU_IDS.map((id) => ({ id, hidden: false })));
+    body.dash_layout = JSON.stringify({ order: DASH_IDS.slice(), hidden: [] });
     const r = await api("/api/appearance", { method: "PUT", body });
     applyBrand(r.brand_name);
     loadAppearance();
@@ -857,10 +937,10 @@ $("#reality-reveal-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#reality-copy-btn").addEventListener("click", async () => {
-  await navigator.clipboard.writeText(
-    `private_key: ${$("#reality-priv").value}\npublic_key: ${$("#reality-pub").value}`
-  );
-  toast(t("msg.keysCopied"));
+  const both =
+    `private_key: ${$("#reality-priv").value}\npublic_key: ${$("#reality-pub").value}`;
+  if (await copyText(both)) toast(t("msg.keysCopied"));
+  else toast(t("msg.copyFailed"), false);
 });
 
 async function loadTunnelSettings() {
@@ -957,7 +1037,7 @@ $("#node-create-btn").addEventListener("click", async () => {
         udp_forward: $("#node-udp").checked
       }
     });
-    await navigator.clipboard.writeText(node.token_once).catch(() => {});
+    if (!await copyText(node.token_once)) prompt(t("prm.tokenOnce"), node.token_once);
     toast(t("msg.tunnelCreated"));
     $("#node-name").value = ""; $("#node-iran").value = ""; $("#node-kharej").value = "";
     loadNodes();
@@ -976,8 +1056,8 @@ $("#nodes-list").addEventListener("click", async (e) => {
       loadNodes();
     } else if (btn.dataset.act === "copy") {
       const r = await api(`/api/nodes/${id}/reveal-token`, { method: "POST" });
-      await navigator.clipboard.writeText(r.token);
-      toast(t("msg.tokenCopiedSame"));
+      if (await copyText(r.token)) toast(t("msg.tokenCopiedSame"));
+      else { prompt(t("prm.tokenOnce"), r.token); toast(t("msg.tokenCopiedSame")); }
     } else if (btn.dataset.act === "download") {
       window.open(`/api/nodes/${id}/guide`, "_blank");
     } else if (btn.dataset.act === "refresh") {
@@ -1304,8 +1384,13 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
   const f = e.target;
   const body = {};
   if (f.note.value.trim() !== "") body.set_note = f.note.value.trim();
-  if (f.volume.value) body.set_volume_gb = parseFloat(f.volume.value);
-  if (f.expires.value) body.set_expires_at = f.expires.value;
+  if (f.volume.value !== "") {
+    const vv = parseFloat(f.volume.value);
+    if (!Number.isFinite(vv) || vv <= 0) { toast(t("msg.badNumbers"), false); return; }
+    body.set_volume_gb = vv;
+  }
+  if (f.expires.value) body.set_expires_at = localInputToUtc(f.expires.value);
+  if (!body.set_expires_at && f.expires.value) { toast(t("msg.badNumbers"), false); return; }
   if (f.device_limit.value !== "") {
     const dv = parseInt(f.device_limit.value, 10);
     body.set_device_limit = Number.isFinite(dv) && dv >= 1 ? dv : 0;
@@ -1375,8 +1460,10 @@ async function loadUpdate(announce) {
       renderChangelog(st.local_log || [], t("update.noLocal"));
     }
     if (announce) toast(t("msg.updateChecked"));
+    return st;
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
+    return null;
   }
 }
 $("#update-check-btn").addEventListener("click", () => loadUpdate(true));
@@ -1389,22 +1476,44 @@ $("#update-now-btn").addEventListener("click", async () => {
     await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
     toast(t("msg.updateStarted"));
     loadUpdate();
-    let n = 0;
+    let n = 0, inFlight = false;
     if (updatePoll) clearInterval(updatePoll);
     updatePoll = setInterval(async () => {
-      n += 1;
-      try { await loadUpdate(); } catch (_) {}
-      if (n >= 20 && updatePoll) {
-        clearInterval(updatePoll);
-        updatePoll = null;
-        try {
-          const after = await api("/api/update/status");
-          if ((after.latest || "") === (before.latest || "") && !after.updating) {
-            toast(t("msg.updateNoSystemd"), false);
-          } else {
-            toast(t("msg.updateDone"));
-          }
-        } catch (_) {}
+      // No overlapping ticks: a slow server must not stack requests.
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        n += 1;
+        const st = await loadUpdate();
+        // Stop early once the server is no longer mid-update instead of
+        // burning all 20 ticks against a restarting panel.
+        if (st && !st.updating) {
+          clearInterval(updatePoll);
+          updatePoll = null;
+          try {
+            const after = await api("/api/update/status");
+            if ((after.latest || "") === (before.latest || "") && !after.updating) {
+              toast(t("msg.updateNoSystemd"), false);
+            } else {
+              toast(t("msg.updateDone"));
+            }
+          } catch (_) {}
+          return;
+        }
+        if (n >= 20 && updatePoll) {
+          clearInterval(updatePoll);
+          updatePoll = null;
+          try {
+            const after = await api("/api/update/status");
+            if ((after.latest || "") === (before.latest || "") && !after.updating) {
+              toast(t("msg.updateNoSystemd"), false);
+            } else {
+              toast(t("msg.updateDone"));
+            }
+          } catch (_) {}
+        }
+      } finally {
+        inFlight = false;
       }
     }, 5000);
   } catch (err) {
@@ -1467,10 +1576,16 @@ $("#ai-fab").addEventListener("click", () => {
   }
 });
 $("#ai-close").addEventListener("click", () => $("#ai-chat").classList.add("hidden"));
+let aiSending = false;
 async function aiSend() {
+  // No overlapping requests: double-send interleaves history and burns
+  // AI quota with out-of-order replies.
+  if (aiSending) return;
   const inp = $("#ai-input");
   const text = inp.value.trim().slice(0, 2000);
   if (!text) return;
+  aiSending = true;
+  $("#ai-send").disabled = true;
   inp.value = "";
   aiAddMsg(text, "user");
   AI_HISTORY.push({ role: "user", content: text });
@@ -1485,6 +1600,10 @@ async function aiSend() {
   } catch (err) {
     typing.remove();
     aiAddMsg(err.message === "auth" ? t("ai.sessionExpired") : (t("ai.errorPre") + err.message), "bot");
+  } finally {
+    aiSending = false;
+    $("#ai-send").disabled = false;
+    inp.focus();
   }
 }
 $("#ai-send").addEventListener("click", aiSend);
@@ -1534,12 +1653,11 @@ $("#apitoken-create-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/api-tokens", { method: "POST", body: { name } });
     $("#apitoken-name").value = "";
-    try {
-      await navigator.clipboard.writeText(r.token_once);
-      toast(t("msg.tokenCreated"));
-    } catch (_) {
-      prompt(t("prm.tokenOnce"), r.token_once);
-    }
+    // The token is shown once and never stored: copy it AND always show
+    // it for manual backup (clipboard content is easily lost/overwritten).
+    await copyText(r.token_once);
+    prompt(t("prm.tokenOnce"), r.token_once);
+    toast(t("msg.tokenCreated"));
     loadApiTokens();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1632,6 +1750,10 @@ $("#ssl-renew-btn").addEventListener("click", async () => {
 $("#backup-btn").addEventListener("click", async () => {
   const pw = prompt(t("prm.backupPw"));
   if (!pw) return;
+  // Two-step choice so Cancel always means abort: first confirm the
+  // download itself, then pick encrypted vs plain (previously Cancel
+  // silently downloaded a PLAINTEXT backup full of secrets).
+  if (!confirm(t("cfm.backupDl"))) return;
   const enc = confirm(t("prm.backupEnc"));
   try {
     const res = await fetch("/api/backup", {
@@ -1721,7 +1843,7 @@ async function loadAudit() {
     if (!rows.length) {
       const li = document.createElement("li");
       li.className = "muted";
-      li.textContent = "No events recorded yet.";
+      li.textContent = t("audit.empty");
       ul.appendChild(li);
       return;
     }
@@ -1751,4 +1873,5 @@ $("#audit-refresh").addEventListener("click", loadAudit);
   loadStats();
   loadSystem();
   loadUsers();
+  loadTemplates();
 })();

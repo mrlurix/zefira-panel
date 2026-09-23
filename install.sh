@@ -8,6 +8,17 @@
 # ============================================================
 set -euo pipefail
 
+# ---------- pretty output (defined first: used by the REPO_URL check below) ----------
+if [[ -t 1 ]]; then
+    C_RED=$'\e[31m'; C_GRN=$'\e[32m'; C_YEL=$'\e[33m'
+    C_BLU=$'\e[34m'; C_BLD=$'\e[1m';  C_DIM=$'\e[2m'; C_RST=$'\e[0m'
+else
+    C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_BLD=""; C_DIM=""; C_RST=""
+fi
+ok()    { echo "${C_GRN}[ok]${C_RST} $*"; }
+warn()  { echo "${C_YEL}[!]${C_RST} $*"; }
+fail()  { echo "${C_RED}[x]${C_RST} $*"; }
+
 REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira-panel.git}"
 if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
     warn "Custom REPO_URL in use ($REPO_URL) — only use mirrors you trust; the panel runtime stays pinned regardless."
@@ -22,10 +33,18 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     systemctl stop "$SERVICE" 2>/dev/null || true
     systemctl disable "$SERVICE" 2>/dev/null || true
     rm -f "/etc/systemd/system/$SERVICE.service"
-    rm -f "/etc/nginx/sites-enabled/zefira" "/etc/nginx/sites-available/zefira"
+    rm -f "/etc/nginx/sites-enabled/zefira" "/etc/nginx/sites-available/zefira" "/etc/nginx/conf.d/zefira.conf"
     rm -f /etc/cron.d/zefira-ssl-renew
     rm -f /etc/sudoers.d/zefira
     systemctl daemon-reload 2>/dev/null || true
+    # Drop the vhost so a stale proxy doesn't stay live, and release the
+    # firewall ports this installer opened (ufw + firewalld).
+    systemctl reload nginx 2>/dev/null || true
+    command -v ufw >/dev/null && ufw delete allow 80/tcp 2>/dev/null || true
+    command -v ufw >/dev/null && ufw delete allow 443/tcp 2>/dev/null || true
+    command -v firewall-cmd >/dev/null && firewall-cmd --remove-port=80/tcp --permanent 2>/dev/null || true
+    command -v firewall-cmd >/dev/null && firewall-cmd --remove-port=443/tcp --permanent 2>/dev/null || true
+    command -v firewall-cmd >/dev/null && firewall-cmd --reload 2>/dev/null || true
     rm -rf "$TARGET"
     echo "[zefira] uninstalled (system user 'zefira' kept for safety; userdel zefira to remove)."
     echo "[zefira] manual leftovers, if applicable: certbot delete --cert-name <domain> ; ufw delete allow <port>/tcp ; journalctl --vacuum-time=1s (logs)."
@@ -37,13 +56,7 @@ if [[ $EUID -ne 0 ]]; then echo "[!] Run as root (sudo)."; exit 1; fi
 INTERACTIVE=0
 [[ -t 0 ]] && INTERACTIVE=1
 
-# ---------- pretty output ----------
-if [[ -t 1 ]]; then
-    C_RED=$'\e[31m'; C_GRN=$'\e[32m'; C_YEL=$'\e[33m'
-    C_BLU=$'\e[34m'; C_BLD=$'\e[1m';  C_DIM=$'\e[2m'; C_RST=$'\e[0m'
-else
-    C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_BLD=""; C_DIM=""; C_RST=""
-fi
+# ---------- banner ----------
 banner() {
     echo "${C_RED}${C_BLD}███████ ███████ ███████ ███████ ██████   ███${C_RST}"
     echo "${C_RED}${C_BLD}     ██ ██ ██   ███   ██   ██  ██ ██${C_RST}"
@@ -57,9 +70,6 @@ banner() {
     echo "${C_DIM}────────────────────────────────────────${C_RST}"
 }
 step()  { echo; echo " ${C_RED}$1)${C_RST} ${C_BLD}$2${C_RST}  ${C_DIM}$3${C_RST}"; }
-ok()    { echo "${C_GRN}[ok]${C_RST} $*"; }
-warn()  { echo "${C_YEL}[!]${C_RST} $*"; }
-fail()  { echo "${C_RED}[x]${C_RST} $*"; }
 
 # ---------- helpers ----------
 ask() {
@@ -218,7 +228,7 @@ if [[ -z "$DOMAIN" ]]; then
     echo "No domain given — skipping Nginx and SSL (panel will run on http://SERVER_IP:$PORT)."
 elif [[ $INTERACTIVE -eq 1 ]]; then
     read -rp "Setup Nginx reverse proxy for $DOMAIN ? [y/N]: " SETUP_NGINX
-    if [[ "$SETUP_NGINX" == "y" || "$SETUP_NGINX" == "Y" ]]; then
+    if [[ "$SETUP_NGINX" == [yY]* ]]; then
         EMAIL=$(ask "Email for Let's Encrypt" "admin@$DOMAIN")
         if ! is_valid_email "$EMAIL"; then echo "[!] Invalid email: $EMAIL"; exit 1; fi
         read -rp "Issue SSL certificate now? (needs port 80 free) [y/N]: " USE_SSL
@@ -246,7 +256,7 @@ if [[ -f "main.py" && -f "requirements.txt" ]]; then
     SRC="$(pwd)"; mkdir -p "$TARGET"
     rsync -a --exclude .venv --exclude instance --exclude .git "$SRC"/ "$TARGET"/ 2>/dev/null || cp -r "$SRC"/. "$TARGET"/
 else
-    rm -rf "$TARGET.tmp"; git clone --depth 1 "$REPO_URL" "$TARGET.tmp" || { echo "[!] clone failed"; exit 1; }
+    rm -rf "$TARGET.tmp"; git clone --depth 1 "$REPO_URL" "$TARGET.tmp" || { rm -rf "$TARGET.tmp"; echo "[!] clone failed"; exit 1; }
     mkdir -p "$TARGET"; cp -r "$TARGET.tmp"/. "$TARGET"/; rm -rf "$TARGET.tmp"
 fi
 cd "$TARGET"
@@ -345,7 +355,10 @@ ProtectKernelModules=true
 RestrictSUIDSGID=true
 LockPersonality=true
 UMask=0077
-ReadWritePaths=$TARGET/instance $TARGET/.venv
+# The whole tree must be writable (not just instance/ + .venv): the
+# in-panel updater runs git fetch/reset here, and pip installs into .venv.
+# System dirs (/usr, /boot, /etc) stay read-only via ProtectSystem=strict.
+ReadWritePaths=$TARGET
 # Network is required (panel + probes + AI). No extra caps.
 AmbientCapabilities=
 CapabilityBoundingSet=
@@ -358,9 +371,19 @@ systemctl enable --now "$SERVICE"
 
 # ---------- Nginx + SSL ----------
 SSL_CERT=""; SSL_KEY=""; SSL_DONE="no"
-if [[ "$SETUP_NGINX" == "y" || "$SETUP_NGINX" == "Y" ]]; then
+# Debian/Ubuntu read sites-enabled/*, RHEL-family only conf.d/*.conf:
+# write the vhost where THIS nginx actually loads it from.
+NGINX_CONF=""
+if [[ "$SETUP_NGINX" == [yY] ]]; then
+    if [[ -d /etc/nginx/sites-enabled ]]; then
+        NGINX_CONF="/etc/nginx/sites-available/zefira"
+    else
+        NGINX_CONF="/etc/nginx/conf.d/zefira.conf"
+    fi
+fi
+if [[ -n "$NGINX_CONF" ]]; then
     echo "==> Setting up Nginx for $DOMAIN ..."
-    cat > "/etc/nginx/sites-available/zefira" <<EOF
+    cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -373,13 +396,17 @@ server {
     }
 }
 EOF
-    ln -sf /etc/nginx/sites-available/zefira /etc/nginx/sites-enabled/zefira 2>/dev/null || true
+    if [[ "$NGINX_CONF" == "/etc/nginx/sites-available/zefira" ]]; then
+        ln -sf /etc/nginx/sites-available/zefira /etc/nginx/sites-enabled/zefira 2>/dev/null || true
+    fi
     nginx -t && systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
-    if [[ "$USE_SSL" == "y" || "$USE_SSL" == "Y" ]]; then
+    if [[ "$USE_SSL" == [yY] ]]; then
         echo "==> Issuing SSL certificate for $DOMAIN ..."
-        if ss -tln 2>/dev/null | grep -q ':80 '; then
-            warn "Port 80 is busy — certbot standalone needs it free. Skipping SSL (run it manually later)."
-        elif certbot certonly --standalone --non-interactive --agree-tos -m "$EMAIL" -d "$DOMAIN" 2>&1 | tail -n 15; then
+        # Standalone certbot needs :80 free but nginx (just configured
+        # above) holds it: stop it for the issuance, restart on ALL paths
+        # below so nginx is never left stopped.
+        systemctl stop nginx 2>/dev/null || true
+        if certbot certonly --standalone --non-interactive --agree-tos -m "$EMAIL" -d "$DOMAIN" 2>&1 | tail -n 15; then
             if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
                 SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
                 SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
@@ -392,7 +419,7 @@ EOF
                 # plain HTTP behind nginx (false HTTPS: no Secure cookies, no
                 # HSTS, plaintext logins). Terminate TLS in nginx and tell
                 # the panel the real scheme via X-Forwarded-Proto.
-                cat > "/etc/nginx/sites-available/zefira" <<EOF
+                cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -427,9 +454,11 @@ EOF
                 ok "SSL issued and deployed for $DOMAIN (https)"
                 openssl x509 -in "$SSL_CERT" -noout -enddate 2>/dev/null || true
             else
+                systemctl start nginx 2>/dev/null || true
                 warn "certbot finished but certificate files not found — run it manually later"
             fi
         else
+            systemctl start nginx 2>/dev/null || true
             warn "certbot failed (check DNS points to this server) — run it manually later"
         fi
     fi
@@ -451,7 +480,7 @@ fi
 ss -tlnp 2>/dev/null | grep -q ":$PORT " && ok "Port $PORT listening" || fail "Port $PORT not listening"
 
 IP=$(curl -fsS4 https://api.ipify.org 2>/dev/null || echo SERVER_IP)
-if [[ "$SSL_DONE" == "yes" ]]; then URL="https://$DOMAIN"; elif [[ -n "$DOMAIN" && "$SETUP_NGINX" == "y" ]]; then URL="http://$DOMAIN"; else URL="http://$IP:$PORT"; fi
+if [[ "$SSL_DONE" == "yes" ]]; then URL="https://$DOMAIN"; elif [[ -n "$DOMAIN" && "$SETUP_NGINX" == [yY]* ]]; then URL="http://$DOMAIN"; else URL="http://$IP:$PORT"; fi
 echo
 echo "${C_BLD}${C_GRN}╔════════════════════════════════════════════╗${C_RST}"
 echo "${C_BLD}${C_GRN}║${C_RST}          ${C_BLD}${C_RED}ZEFIRA INSTALLED${C_RST}              ${C_BLD}${C_GRN}║${C_RST}"

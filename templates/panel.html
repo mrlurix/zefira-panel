@@ -180,7 +180,7 @@
         <div class="search-box flex-1">
           <input type="text" id="ib-host" data-i18n-ph="ib.hostPh" placeholder="Host / domain override (optional)" spellcheck="false">
         </div>
-        <select id="ib-node" class="mw-140" title="Server node (optional)">
+        <select id="ib-node" class="mw-140" data-i18n-title="ib.nodeTitle" title="Server node (optional)">
           <option value="" data-i18n="ib.localPanel">Local panel</option>
         </select>
         <button id="ib-add-btn" class="btn btn-primary">
@@ -275,9 +275,9 @@
           <button type="button" id="tunnel-save-btn" class="btn btn-primary btn-block" data-i18n="tunnels.saveBtn">Save Tunnel Settings</button>
           <hr class="sep">
           <ul class="sec-list mt-0">
-            <li>Normal tunnel: SSH -L forwards a local port to the panel on the server</li>
-            <li>Reverse tunnel: SSH -R exposes this panel from behind NAT via a VPS</li>
-            <li>Keep uvicorn bound to 127.0.0.1 and let the tunnel expose it</li>
+            <li data-i18n="tunnels.howA">Normal tunnel: SSH -L forwards a local port to the panel on the server</li>
+            <li data-i18n="tunnels.howB">Reverse tunnel: SSH -R exposes this panel from behind NAT via a VPS</li>
+            <li data-i18n="tunnels.howC">Keep uvicorn bound to 127.0.0.1 and let the tunnel expose it</li>
           </ul>
         </div>
 
@@ -286,21 +286,21 @@
           <p class="hint mt-0" data-i18n="tunnels.backpackHint">Manage BackPack reverse tunnels (Iran ⇄ Kharej) from here. Create a tunnel, download the setup guide with the secure token, run the wizard answers on both servers, then press Check now to see if the Iran side is reachable.</p>
           <div class="field-row">
             <label class="field"><span data-i18n="tunnels.tunnelName">Tunnel name</span><input type="text" id="node-name" placeholder="My Tunnel" maxlength="40"></label>
-            <label class="field"><span>Transport</span>
+            <label class="field"><span data-i18n="tunnels.transport">Transport</span>
               <select id="node-transport">
-                <option value="tcp">TCP (start here)</option>
-                <option value="tcp-mux">TCP Mux</option>
-                <option value="tcp-stealth">TCP + Stealth (anti-DPI)</option>
-                <option value="tcp-pck">TCP + PCK</option>
-                <option value="udp">UDP (raw, lowest overhead)</option>
-                <option value="kcp">UDP + KCP + FEC</option>
-                <option value="quic">UDP + QUIC</option>
-                <option value="ws">WS / CDN</option>
-                <option value="ws-mux">WS Mux</option>
-                <option value="wss">WSS (looks like HTTPS)</option>
-                <option value="wss-mux">WSS Mux</option>
-                <option value="icmp">xDi (ICMP)</option>
-                <option value="ip-spoof">IP Spoofing</option>
+                <option value="tcp" data-i18n="tunnels.trTcp">TCP (start here)</option>
+                <option value="tcp-mux" data-i18n="tunnels.trTcpMux">TCP Mux</option>
+                <option value="tcp-stealth" data-i18n="tunnels.trTcpStealth">TCP + Stealth (anti-DPI)</option>
+                <option value="tcp-pck" data-i18n="tunnels.trTcpPck">TCP + PCK</option>
+                <option value="udp" data-i18n="tunnels.trUdp">UDP (raw, lowest overhead)</option>
+                <option value="kcp" data-i18n="tunnels.trKcp">UDP + KCP + FEC</option>
+                <option value="quic" data-i18n="tunnels.trQuic">UDP + QUIC</option>
+                <option value="ws" data-i18n="tunnels.trWs">WS / CDN</option>
+                <option value="ws-mux" data-i18n="tunnels.trWsMux">WS Mux</option>
+                <option value="wss" data-i18n="tunnels.trWss">WSS (looks like HTTPS)</option>
+                <option value="wss-mux" data-i18n="tunnels.trWssMux">WSS Mux</option>
+                <option value="icmp" data-i18n="tunnels.trIcmp">xDi (ICMP)</option>
+                <option value="ip-spoof" data-i18n="tunnels.trSpoof">IP Spoofing</option>
               </select>
             </label>
           </div>

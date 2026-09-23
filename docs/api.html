@@ -47,7 +47,7 @@
 
 <div class="callout info"><span data-i18n="api.authA">Authenticate with</span> <code>POST /api/login</code> <span data-i18n="api.authB">(keeps the</span> <code>zefira_session</code> <span data-i18n="api.authC">cookie), then send</span> <code>X-Requested-With: XMLHttpRequest</code> <span data-i18n="api.authD">on every mutating call. No OpenAPI explorer is exposed.</span></div>
 <p><b data-i18n="api.botsLabel">Bots &amp; integrations:</b> <span data-i18n="api.botsA">create a long-lived token under</span> <b data-i18n="api.botsSettings">Settings → API Tokens</b> <span data-i18n="api.botsB">with scope</span> <code>full</code> <span data-i18n="api.botsC">(default, everything) or</span> <code>bot</code> <span data-i18n="api.botsD">(least-privilege for resellers:</span> <code>GET /api/me</code>, <code>GET /api/stats</code>, <code>GET /api/users</code>, <code>POST /api/users</code>, <code>GET /api/templates</code><span data-i18n="api.botsE">) and send it as</span> <code>Authorization: Bearer zfp_…</code> <span data-i18n="api.botsF">— no CSRF header needed then.</span> <span data-i18n="api.botsG">Tokens act as the admin that created them (password-gated actions still need the password), are shown once, and can be revoked anytime.</span> <span data-i18n="api.botsH">Bot tokens can create users including</span> <code>start_on_first_use</code> <span data-i18n="api.botsI">(bot-safe: expiry is server-computed) but get</span> <code>403</code> <span data-i18n="api.botsJ">on deletes, patches, backup/restore, settings, tokens and updates.</span></p>
-<p><span data-i18n="api.exampleBotsA">Ready-made reseller bots:</span> <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node">Node.js</a> <span data-i18n="api.exampleBotsB">— plans keyboard, account creation, subscription link.</span></p>
+<p><span data-i18n="api.exampleBotsA">Ready-made reseller bots:</span> <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-python" data-i18n="api.exBotPy">Python</a> · <a href="https://github.com/mrlurix/zefira-panel/tree/main/examples/telegram-bot-node" data-i18n="api.exBotNode">Node.js</a> <span data-i18n="api.exampleBotsB">— plans keyboard, account creation, subscription link.</span></p>
 
 <h2 id="auth-account" data-i18n="api.hAuth">Auth &amp; account</h2>
 <table>
@@ -138,8 +138,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=25"></script>
+<script src="assets/i18n.js?v=26"></script>
 <script src="assets/docs.js?v=23"></script>
-<script src="assets/support-ai.js?v=4"></script>
+<script src="assets/support-ai.js?v=5"></script>
 </body>
 </html>

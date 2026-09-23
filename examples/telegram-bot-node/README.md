@@ -6,7 +6,7 @@ Telegram shop bot for the Zefira panel. See `bot.js` (one file, ~120 lines).
 npm install
 set TELEGRAM_BOT_TOKEN=...       # from @BotFather (Windows: set, Linux: export)
 set ZEFIRA_URL=https://panel.example.com
-set ZEFIRA_API_TOKEN=zfp_...    # Panel -> Settings -> API Tokens
+set ZEFIRA_API_TOKEN=zfp_...    # Panel -> Settings -> API Tokens -> Create with scope "bot"
 node bot.js
 ```
 

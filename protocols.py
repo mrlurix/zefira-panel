@@ -19,6 +19,10 @@ from config import INSTANCE_DIR
 
 PROTOCOLS = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn", "l2tp", "cisco", "socks5"]
 V2RAY_FAMILY = {"vless", "vmess", "trojan", "ss"}
+# Relay-style protocols that accept extra per-port endpoints (inbounds).
+INBOUND_PROTOCOLS = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2"]
+# BackPack reverse-tunnel transports accepted by tunnel nodes.
+TUNNEL_TRANSPORTS = ["tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "udp", "kcp", "quic", "ws", "ws-mux", "wss", "wss-mux", "icmp", "ip-spoof"]
 # Protocols served without per-inbound endpoints (single server-wide
 # endpoint, like WireGuard/OpenVPN): no inbound variants are generated.
 SINGLE_ENDPOINT = {"wireguard", "openvpn", "l2tp", "cisco", "socks5"}
@@ -363,7 +367,7 @@ PORN_DOMAINS = [
     "xvideos2.com", "hclips.com", "empflix.com", "porntrex.com", "hdzog.com",
 ]
 
-def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
+def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) -> str:
     protos = u.get("protocols") or []
     secrets_map = u.get("secret_map") or {}
     proxies = []
@@ -372,78 +376,92 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None) -> str:
     def ws_opts(h, path="/zefira"):
         return {"path": path, "headers": {"Host": h}}
 
-    def _hs(sec):
-        h = _effective_host(sec, srv)
-        c = _cdn_sni(srv)
+    def _hs(sec, vsrv):
+        h = _effective_host(sec, vsrv)
+        c = _cdn_sni(vsrv)
         return h, (c or h)
+
+    def _each(p):
+        # Same inbound variants (and offline-node filtering) as raw links:
+        # Clash must neither miss endpoints nor serve dead ones.
+        return _srvs_for(p, srv, inbounds)
+
+    def _sfx(ilabel):
+        return f"-{ilabel}" if ilabel else ""
 
     if "vmess" in protos and secrets_map.get("vmess"):
         sec = secrets_map["vmess"]
-        host_eff, sni_eff = _hs(sec)
-        n = f"Zefira-{u['username']}-VMess"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "vmess", "server": host_eff, "port": int(srv["sub_port"]),
-            "uuid": sec, "alterId": 0, "cipher": "auto",
-            "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff),
-        })
+        for vsrv, ilabel in _each("vmess"):
+            host_eff, sni_eff = _hs(sec, vsrv)
+            n = f"Zefira-{u['username']}-VMess{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "vmess", "server": host_eff, "port": int(vsrv["sub_port"]),
+                "uuid": sec, "alterId": 0, "cipher": "auto",
+                "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff),
+            })
     if "vless" in protos and secrets_map.get("vless"):
         sec = secrets_map["vless"]
-        host_eff, sni_eff = _hs(sec)
-        n = f"Zefira-{u['username']}-VLESS"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "vless", "server": host_eff, "port": int(srv["sub_port"]),
-            "uuid": sec, "tls": True, "servername": sni_eff,
-            "network": "ws", "ws-opts": ws_opts(host_eff), "client-fingerprint": "chrome",
-        })
+        for vsrv, ilabel in _each("vless"):
+            host_eff, sni_eff = _hs(sec, vsrv)
+            n = f"Zefira-{u['username']}-VLESS{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["sub_port"]),
+                "uuid": sec, "tls": True, "servername": sni_eff,
+                "network": "ws", "ws-opts": ws_opts(host_eff), "client-fingerprint": "chrome",
+            })
     if "reality" in protos and secrets_map.get("reality"):
         sec = secrets_map["reality"]
-        host_eff = _effective_host(sec, srv)
-        sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
-        sni = sni_list[0] if sni_list else host_eff
-        sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
-        # Same 43-char allowlist as the link builder: a hand-edited row
-        # must not smuggle anything into the Clash document either.
-        rpub = srv.get("reality_pub") or ""
-        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", rpub):
-            rpub = ""
-        n = f"Zefira-{u['username']}-REALITY"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "vless", "server": host_eff, "port": int(srv["reality_port"]),
-            "uuid": sec, "flow": "xtls-rprx-vision",
-            "tls": True, "servername": sni, "client-fingerprint": "chrome",
-            "reality-opts": {"public-key": rpub, "short-id": sid},
-        })
+        for vsrv, ilabel in _each("reality"):
+            host_eff = _effective_host(sec, vsrv)
+            sni_list = [s.strip() for s in (vsrv.get("reality_sni") or "").split(",") if s.strip()]
+            sni = sni_list[0] if sni_list else host_eff
+            sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
+            # Same 43-char allowlist as the link builder: a hand-edited row
+            # must not smuggle anything into the Clash document either.
+            rpub = vsrv.get("reality_pub") or ""
+            if not re.fullmatch(r"[A-Za-z0-9_-]{43}", rpub):
+                rpub = ""
+            n = f"Zefira-{u['username']}-REALITY{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["reality_port"]),
+                "uuid": sec, "flow": "xtls-rprx-vision",
+                "tls": True, "servername": sni, "client-fingerprint": "chrome",
+                "reality-opts": {"public-key": rpub, "short-id": sid},
+            })
     if "trojan" in protos and secrets_map.get("trojan"):
         sec = secrets_map["trojan"]
-        host_eff, sni_eff = _hs(sec)
-        n = f"Zefira-{u['username']}-Trojan"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "trojan", "server": host_eff, "port": int(srv["sub_port"]),
-            "password": sec, "sni": sni_eff, "udp": True,
-            "network": "ws", "ws-opts": ws_opts(host_eff),
-        })
+        for vsrv, ilabel in _each("trojan"):
+            host_eff, sni_eff = _hs(sec, vsrv)
+            n = f"Zefira-{u['username']}-Trojan{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "trojan", "server": host_eff, "port": int(vsrv["sub_port"]),
+                "password": sec, "sni": sni_eff, "udp": True,
+                "network": "ws", "ws-opts": ws_opts(host_eff),
+            })
     if "ss" in protos and secrets_map.get("ss"):
         sec = secrets_map["ss"]
-        host_eff = _effective_host(sec, srv)
-        n = f"Zefira-{u['username']}-SS"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "ss", "server": host_eff, "port": int(srv["sub_port"]),
-            "cipher": "aes-256-gcm", "password": sec, "udp": True,
-        })
+        for vsrv, ilabel in _each("ss"):
+            host_eff = _effective_host(sec, vsrv)
+            n = f"Zefira-{u['username']}-SS{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "ss", "server": host_eff, "port": int(vsrv["sub_port"]),
+                "cipher": "aes-256-gcm", "password": sec, "udp": True,
+            })
     if "hysteria2" in protos and secrets_map.get("hysteria2"):
         sec = secrets_map["hysteria2"]
-        host_eff, sni_eff = _hs(sec)
-        n = f"Zefira-{u['username']}-Hy2"
-        names.append(n)
-        proxies.append({
-            "name": n, "type": "hysteria2", "server": host_eff, "port": int(srv["hy2_port"]),
-            "password": sec, "sni": sni_eff,
-        })
+        for vsrv, ilabel in _each("hysteria2"):
+            host_eff, sni_eff = _hs(sec, vsrv)
+            n = f"Zefira-{u['username']}-Hy2{_sfx(ilabel)}"
+            names.append(n)
+            proxies.append({
+                "name": n, "type": "hysteria2", "server": host_eff, "port": int(vsrv["hy2_port"]),
+                "password": sec, "sni": sni_eff,
+            })
     if "socks5" in protos and secrets_map.get("socks5"):
         sec = secrets_map["socks5"]
         host_eff = _effective_host(sec, srv)
@@ -719,22 +737,22 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
         elif p == "wireguard":
             try:
                 files.append((f"{safe_user}-wg.conf", _wg_config(u, srv, sec)))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "openvpn":
             try:
                 files.append((f"{safe_user}.ovpn", _ovpn_config(u, srv, sec)))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "l2tp":
             try:
                 files.append((f"{safe_user}-l2tp.txt", _l2tp_config(u, srv, sec)))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "cisco":
             try:
                 files.append((f"{safe_user}-cisco.txt", _cisco_config(u, srv, sec)))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "socks5":
             link = _socks5_link(u["username"], sec, srv)
@@ -800,22 +818,22 @@ def user_links(u: dict, srv: dict, inbounds: list = None) -> dict:
         elif p == "wireguard":
             try:
                 out[label] = {"links": [], "config": _wg_config(u, srv, sec)}
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "openvpn":
             try:
                 out[label] = {"links": [], "config": _ovpn_config(u, srv, sec)}
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "l2tp":
             try:
                 out[label] = {"links": [], "config": _l2tp_config(u, srv, sec)}
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "cisco":
             try:
                 out[label] = {"links": [], "config": _cisco_config(u, srv, sec)}
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "socks5":
             link = _socks5_link(u["username"], sec, srv)
@@ -857,22 +875,22 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
         elif p == "wireguard":
             try:
                 extras.append("### WireGuard ###\n" + _wg_config(u, srv, sec))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "openvpn":
             try:
                 extras.append("### OpenVPN ###\n" + _ovpn_config(u, srv, sec))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "l2tp":
             try:
                 extras.append("### L2TP/IPsec ###\n" + _l2tp_config(u, srv, sec))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "cisco":
             try:
                 extras.append("### Cisco AnyConnect ###\n" + _cisco_config(u, srv, sec))
-            except ValueError:
+            except (ValueError, OSError):
                 continue
         elif p == "socks5":
             link = _socks5_link(u.get("username", ""), sec, srv)

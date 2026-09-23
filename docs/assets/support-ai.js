@@ -13,7 +13,7 @@
     if (KB) { cb(KB); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=7").then(function (r) { return r.json(); }).then(function (j) {
+    fetch("assets/site-knowledge.json?v=8").then(function (r) { return r.json(); }).then(function (j) {
       KB = j; cb(KB);
     }).catch(function () { cb(null); });
   }
@@ -120,7 +120,10 @@
   function addEntry(parent, entry, lang) {
     var box = el("div", "ai-entry");
     box.appendChild(el("strong", null, entry.title));
-    var lead = lang !== "en" ? (entry[lang] || entry.fa) : null;
+    // Localized lead + English body. Never fall back across languages
+    // (a Persian lead in front of a zh/ru user is a bug, not a feature);
+    // missing leads simply show the English body.
+    var lead = (lang !== "en" && entry[lang] && entry[lang] !== entry.text) ? entry[lang] : null;
     var body = lead ? (lead + "\n\n" + entry.text) : entry.text;
     body.split(/\n\n+/).forEach(function (para) {
       box.appendChild(el("p", null, para));

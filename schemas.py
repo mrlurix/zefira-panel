@@ -414,3 +414,6 @@ class RestoreIn(RestoreConfirmIn):
     templates: Optional[List[dict]] = Field(default=None, max_length=500)
     blocked_sites: Optional[List[dict]] = Field(default=None, max_length=600)
     api_tokens: Optional[List[dict]] = Field(default=None, max_length=100)
+    inbounds: Optional[List[dict]] = Field(default=None, max_length=200)
+    server_nodes: Optional[List[dict]] = Field(default=None, max_length=100)
+    tunnel_nodes: Optional[List[dict]] = Field(default=None, max_length=100)

@@ -3,11 +3,13 @@
 // Copy buttons on the public subscription dashboard.
 // No innerHTML anywhere: all values come from data attributes / textareas.
 document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
-  btn.dataset.label = btn.textContent;
   btn.addEventListener("click", async () => {
     const sel = btn.getAttribute("data-copy-target");
     const src = sel ? document.querySelector(sel) : null;
     const text = src ? src.value : btn.getAttribute("data-copy") || "";
+    // Capture the CURRENT label (not a stale one from page load: the
+    // language switcher may have retranslated the button since).
+    const label = btn.textContent;
     if (!text) return;
     let done = false;
     try {
@@ -23,6 +25,10 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
         } else {
           const ta = document.createElement("textarea");
           ta.value = text;
+          ta.setAttribute("readonly", "");
+          ta.style.position = "fixed";
+          ta.style.top = "0";
+          ta.style.opacity = "0";
           document.body.appendChild(ta);
           ta.select();
           done = document.execCommand("copy");
@@ -31,7 +37,7 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
       } catch (_) {}
     }
     btn.textContent = done ? t("sub.copied") : t("sub.copyFailed");
-    setTimeout(() => { btn.textContent = btn.dataset.label; }, 1500);
+    setTimeout(() => { btn.textContent = label; }, 1500);
   });
 });
 
