@@ -64,8 +64,18 @@
     var a = document.createElement("a");
     a.className = "ai-link";
     a.textContent = label;
-    a.href = href;
-    if (/^https?:/.test(href)) { a.target = "_blank"; a.rel = "noopener"; }
+    // KB links are static, but never let a data-driven href become
+    // javascript:/data: executable: allow http(s) + same-origin relative only.
+    var h = String(href || "");
+    if (/^https?:\/\//i.test(h)) {
+      a.href = h;
+      a.target = "_blank";
+      a.rel = "noopener";
+    } else if (/^[a-zA-Z0-9._~:/?#@!$&'()*+,;=%-]*$/.test(h) && !/^\s*javascript:/i.test(h) && !/^\s*data:/i.test(h)) {
+      a.href = h;
+    } else {
+      return;
+    }
     parent.appendChild(a);
   }
 

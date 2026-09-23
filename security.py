@@ -41,13 +41,19 @@ def verify_password(password: str, stored: str | None) -> bool:
         n, r, p = int(parts[1]), int(parts[2]), int(parts[3])
         if not (2**10 <= n <= 2**20 and 1 <= r <= 32 and 1 <= p <= 32):
             return False
+        # Cost cap: scrypt memory is ~128*n*r*p bytes. A crafted hash with
+        # maxed params (2^20/32/32) would OOM the worker on every login
+        # attempt for that user. Production hashes are 2^14/8/1 (2^17);
+        # anything above 2^20 total cost is rejected outright.
+        if n * r * p > 2**20:
+            return False
         salt = bytes.fromhex(parts[4])
         expected = bytes.fromhex(parts[5])
         if not (16 <= len(expected) <= 64 and len(salt) <= 64):
             return False
         dk = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, dklen=len(expected))
         return hmac.compare_digest(dk, expected)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, MemoryError, OverflowError):
         return False
 
 

@@ -106,9 +106,9 @@ templates = Jinja2Templates(
     )
 )
 
-USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
-TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
-STRONG_PW_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)\S{10,128}$")
+USERNAME_RE = re.compile(r"\A[a-zA-Z0-9_]{3,32}\Z")
+TOKEN_RE = re.compile(r"\A[a-f0-9]{32}\Z")
+STRONG_PW_RE = re.compile(r"\A(?=.*[A-Za-z])(?=.*\d)\S{10,128}\Z")
 SRV_KEYS = {
     "domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns",
     "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "reality_pub",
@@ -264,6 +264,9 @@ def _is_strong_scrypt_hash(h: str | None) -> bool:
             return False
         if not 1 <= r <= 32 or not 1 <= p <= 32:
             return False
+        # Same cost cap as login-time verify: reject memory-bomb params.
+        if n * r * p > 2**20:
+            return False
         salt = bytes.fromhex(parts[4])
         dk = bytes.fromhex(parts[5])
         if not 8 <= len(salt) <= 64 or not 16 <= len(dk) <= 64:
@@ -389,10 +392,10 @@ BOT_ALLOWED_EXACT = {
 # Regex rules for bot tokens on ID/username-addressed developer endpoints.
 # Full match against "METHOD path". Numeric IDs only, no traversal.
 BOT_ALLOWED_RE = [
-    ("GET", re.compile(r"^/api/users/by-username/[A-Za-z0-9_]{3,32}$")),
-    ("POST", re.compile(r"^/api/users/[0-9]{1,10}/reset-usage$")),
-    ("POST", re.compile(r"^/api/users/[0-9]{1,10}/reset$")),
-    ("GET", re.compile(r"^/api/users/[0-9]{1,10}/qr$")),
+    ("GET", re.compile(r"\A/api/users/by-username/[A-Za-z0-9_]{3,32}\Z")),
+    ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset-usage\Z")),
+    ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset\Z")),
+    ("GET", re.compile(r"\A/api/users/[0-9]{1,10}/qr\Z")),
 ]
 
 
@@ -892,7 +895,9 @@ def parse_host_header(raw_host: str | None) -> str:
         host = raw.rsplit(":", 1)[0]
     else:
         host = raw
-    return host.strip()
+    # A trailing-dot FQDN ("1.2.3.4.") must not bypass block_direct_ip:
+    # ip_address() rejects it, which would fail open to allow.
+    return host.strip().rstrip(".")
 
 
 @app.middleware("http")
@@ -1837,7 +1842,12 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
         req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
         try:
             with opener.open(req, timeout=60) as resp:
-                data = json.loads(resp.read().decode("utf-8", "replace"))
+                # Cap read size: legit AI replies are a few KB; a compromised
+                # provider must not be able to OOM the worker with a huge body.
+                raw_body = resp.read(2_000_000)
+                if len(raw_body) >= 2_000_000:
+                    return False, "AI provider returned an oversized reply (blocked)"
+                data = json.loads(raw_body.decode("utf-8", "replace"))
         except urllib.error.HTTPError as he:
             # _NoRedirect surfaces redirects here: never follow to SSRF.
             if he.code in (301, 302, 303, 307, 308):
@@ -2179,7 +2189,7 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
 
 
 UPDATE_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-SERVICE_RE = re.compile(r"^[A-Za-z0-9_@.:-]{1,64}$")
+SERVICE_RE = re.compile(r"\A[A-Za-z0-9_@.:-]{1,64}\Z")
 _update_lock = threading.Lock()
 
 

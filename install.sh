@@ -9,6 +9,9 @@
 set -euo pipefail
 
 REPO_URL="${ZEFIRA_REPO_URL:-https://github.com/mrlurix/zefira-panel.git}"
+if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
+    warn "Custom REPO_URL in use ($REPO_URL) — only use mirrors you trust; the panel runtime stays pinned regardless."
+fi
 TARGET="/opt/zefira"
 SERVICE="zefira"
 TOTAL_STEPS=7
@@ -358,10 +361,39 @@ EOF
                     echo "ZEFIRA_SSL_KEY=$SSL_KEY"
                     echo "ZEFIRA_SSL_DOMAIN=$DOMAIN"
                 } >> "$ENV_FILE"
-                systemctl restart "$SERVICE"
-                echo "0 3 * * * root certbot renew --quiet --deploy-hook 'systemctl reload nginx'" > /etc/cron.d/zefira-ssl-renew
+                # Deploy the cert: without a 443 block the panel would stay
+                # plain HTTP behind nginx (false HTTPS: no Secure cookies, no
+                # HSTS, plaintext logins). Terminate TLS in nginx and tell
+                # the panel the real scheme via X-Forwarded-Proto.
+                cat > "/etc/nginx/sites-available/zefira" <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name $DOMAIN;
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    location / {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+                nginx -t && systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+                # Standalone renewals need :80 free, but nginx now holds it:
+                # stop/start around renew (3am, seconds of downtime).
+                echo "0 3 * * * root certbot renew --quiet --pre-hook 'systemctl stop nginx' --post-hook 'systemctl start nginx' --deploy-hook 'systemctl reload nginx'" > /etc/cron.d/zefira-ssl-renew
                 SSL_DONE="yes"
-                ok "SSL issued for $DOMAIN"
+                ok "SSL issued and deployed for $DOMAIN (https)"
                 openssl x509 -in "$SSL_CERT" -noout -enddate 2>/dev/null || true
             else
                 warn "certbot finished but certificate files not found — run it manually later"

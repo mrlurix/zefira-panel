@@ -2,7 +2,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}$"
+USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
 Protocol = Literal[
     "vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn",
     "l2tp", "cisco", "socks5",
@@ -13,9 +13,9 @@ Protocol = Literal[
 InboundProtocol = Literal[
     "vless", "reality", "vmess", "trojan", "ss", "hysteria2",
 ]
-HOST_RE = r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"
+HOST_RE = r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\z"
 HOST_CORE = r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?"
-SNI_RE = r"^[a-zA-Z0-9.,\- ]{0,300}$"
+SNI_RE = r"^[a-zA-Z0-9.,\- ]{0,300}\z"
 
 
 class LoginIn(BaseModel):
@@ -53,7 +53,7 @@ class UserPatchIn(BaseModel):
     add_used_gb: Optional[float] = Field(default=None, ge=-1000000, le=1000000)
     set_note: Optional[str] = Field(default=None, max_length=200)
     set_volume_gb: Optional[float] = Field(default=None, gt=0, le=100000)
-    set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
+    set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\z")
     set_device_limit: Optional[int] = Field(default=None, ge=-1, le=1000)
     reset_used: bool = False
 
@@ -82,7 +82,7 @@ class TelegramSettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     bot_token: str = Field(default="", max_length=120)
-    chat_id: str = Field(default="", max_length=40, pattern=r"^$|^@?[a-zA-Z0-9_]{4,64}$|^[-0-9]{3,25}$")
+    chat_id: str = Field(default="", max_length=40, pattern=r"^(?:|@?[a-zA-Z0-9_]{4,64}|[-0-9]{3,25})\z")
 
 
 class TelegramTestIn(BaseModel):
@@ -98,8 +98,8 @@ class ChangePasswordIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
-HEX_COLOR_RE = r"^$|^#[0-9a-fA-F]{6}$"
-BRAND_RE = r"^$|^[a-zA-Z0-9 _-]{1,24}$"
+HEX_COLOR_RE = r"^(?:|#[0-9a-fA-F]{6})\z"
+BRAND_RE = r"^(?:|[a-zA-Z0-9 _-]{1,24})\z"
 
 
 class AppearanceIn(BaseModel):
@@ -124,8 +124,8 @@ class AppearanceIn(BaseModel):
 
 
 AI_PROVIDERS = ("groq", "openai", "anthropic", "gemini")
-AI_URL_RE = r"^$|^https?://[^/\s]+(:[0-9]{1,5})?(/.*)?$"
-AI_MODEL_RE = r"^[A-Za-z0-9_.\-/:]{1,100}$"
+AI_URL_RE = r"^(?:|https?://[^/\s]+(:[0-9]{1,5})?(/.*)?)\z"
+AI_MODEL_RE = r"^[A-Za-z0-9_.\-/:]{1,100}\z"
 
 
 class AiMsgIn(BaseModel):
@@ -143,7 +143,7 @@ class AiSettingsIn(BaseModel):
     enabled: bool = False
     provider: Literal["groq", "openai", "anthropic", "gemini"] = "groq"
     base_url: str = Field(default="", max_length=300, pattern=AI_URL_RE)
-    model: str = Field(default="", max_length=100, pattern=r"^$|^[A-Za-z0-9_.\-/:]{1,100}$")
+    model: str = Field(default="", max_length=100, pattern=r"^(?:|[A-Za-z0-9_.\-/:]{1,100})\z")
     api_key: str = Field(default="", max_length=500)
     extra: str = Field(default="", max_length=500)
 
@@ -187,7 +187,7 @@ class AiSettingsIn(BaseModel):
 class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    domain: str = Field(default="", max_length=253, pattern=r"^$|" + HOST_RE)
+    domain: str = Field(default="", max_length=253, pattern=r"^(?:[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?)?\z")
     sub_port: int = Field(ge=1, le=65535)
     hy2_port: int = Field(ge=1, le=65535)
     wg_port: int = Field(ge=1, le=65535)
@@ -204,10 +204,10 @@ class SettingsIn(BaseModel):
         max_length=300,
         pattern=SNI_RE,
     )
-    obfuscated_host: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    obfuscated_host: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     per_user_subdomain: bool = False
     cdn_enabled: bool = False
-    cdn_sni: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    cdn_sni: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     block_direct_ip: bool = False
 
 
@@ -215,21 +215,21 @@ class SslIssueIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     domain: str = Field(min_length=3, max_length=253, pattern=HOST_RE)
-    subdomain: str = Field(default="", max_length=253, pattern=r"^$|" + HOST_RE)
-    email: str = Field(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    subdomain: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
+    email: str = Field(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+\z")
 
 
 class ApiTokenCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     scopes: Literal["full", "bot"] = "full"
 
 
 class TemplateCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     protocols: List[Protocol] = Field(min_length=1, max_length=11)
     volume_gb: float = Field(gt=0, le=100000)
     days: int = Field(ge=1, le=3650)
@@ -243,7 +243,7 @@ class TunnelSettingsIn(BaseModel):
     public_url: str = Field(
         default="",
         max_length=253,
-        pattern=r"^$|^https?://" + HOST_CORE + r"(:[0-9]{1,5})?$",
+        pattern=r"^(?:|https?://" + HOST_CORE + r"(:[0-9]{1,5})?)\z",
     )
     trusted_proxies: str = Field(default="", max_length=500)
 
@@ -259,7 +259,7 @@ class BlockToggleIn(BaseModel):
     porn_enabled: bool = False
 
 
-HOST_PORT_PAIRS_RE = r"^$|^[0-9]{1,5}:[0-9]{1,5}(\s*,\s*[0-9]{1,5}:[0-9]{1,5})*$"
+HOST_PORT_PAIRS_RE = r"^(?:|[0-9]{1,5}:[0-9]{1,5}(\s*,\s*[0-9]{1,5}:[0-9]{1,5})*)\z"
 Transport = Literal[
     "tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "kcp", "quic",
     "ws", "ws-mux", "wss", "wss-mux", "icmp", "ip-spoof",
@@ -269,10 +269,10 @@ Transport = Literal[
 class TunnelNodeIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     transport: Transport = "tcp"
-    iran_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
-    kharej_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
+    iran_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
+    kharej_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
     tunnel_port: int = Field(ge=1, le=65535)
     forwarded_ports: str = Field(default="", max_length=200, pattern=HOST_PORT_PAIRS_RE)
     udp_forward: bool = False
@@ -301,10 +301,10 @@ class TunnelNodeIn(BaseModel):
 class InboundIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_\-]+$")
+    name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_\-]+\z")
     protocol: InboundProtocol
     port: int = Field(ge=1, le=65535)
-    host: str = Field(default="", max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    host: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     enabled: bool = True
     node_id: Optional[int] = Field(default=None, ge=1)
 
@@ -314,15 +314,15 @@ class InboundPatchIn(BaseModel):
 
     enabled: Optional[bool] = None
     port: Optional[int] = Field(default=None, ge=1, le=65535)
-    host: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:$|" + HOST_CORE + r")$")
+    host: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     node_id: Optional[int] = Field(default=None, ge=1)
 
 
 class ServerNodeIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+$")
-    address: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
+    name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
+    address: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
     check_port: int = Field(default=443, ge=1, le=65535)
     note: str = Field(default="", max_length=200)
 
@@ -338,7 +338,7 @@ class ServerNodePatchIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     enabled: Optional[bool] = None
-    address: Optional[str] = Field(default=None, min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"$")
+    address: Optional[str] = Field(default=None, min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
     check_port: Optional[int] = Field(default=None, ge=1, le=65535)
     note: Optional[str] = Field(default=None, max_length=200)
 
@@ -359,7 +359,7 @@ class RestoreUserIn(BaseModel):
     note: str = Field(default="", max_length=200)
     volume_gb: float = Field(ge=0, le=100000)
     used_gb: float = Field(default=0, ge=0, le=1000000)
-    token: str = Field(pattern=r"^[a-f0-9]{32}$")
+    token: str = Field(pattern=r"^[a-f0-9]{32}\z")
     secret_data: str = Field(default="", max_length=40000)
     is_active: bool = True
     device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
@@ -398,7 +398,7 @@ class BackupIn(RestoreConfirmIn):
 
 class RestoreEncryptedIn(RestoreConfirmIn):
     # Encrypted backup produced by POST /api/backup {"encrypt": true}.
-    salt: str = Field(min_length=16, max_length=64, pattern=r"^[a-f0-9]+$")
+    salt: str = Field(min_length=16, max_length=64, pattern=r"^[a-f0-9]+\z")
     payload: str = Field(min_length=10, max_length=100000000)
     # Password that encrypted the backup. Defaults to password_confirm
     # (common case: same admin password). Provide separately when the

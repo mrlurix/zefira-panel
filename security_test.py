@@ -363,6 +363,33 @@ stu3, _, _ = req(
 )
 check("non-ascii username rejected", stu3 in (400, 422), f"got {stu3}")
 
+# ---- 18b. Control-char / newline usernames rejected (anchor hardening) ----
+stnl, _, _ = req(
+    "POST", "/api/users",
+    json.dumps({"username": "cleanname\n", "protocols": ["vless"], "volume_gb": 1, "days": 1}),
+    AUTH,
+)
+# Pydantic strips trailing whitespace, so "cleanname\n" normalizes to a
+# valid name and may 200 — what must NEVER happen is storing the raw
+# newline: it would corrupt sub links and download filenames.
+stnl_ok = stnl in (400, 422)
+if stnl == 200:
+    mnl = json.loads(req("GET", "/api/users?q=cleanname", headers=AUTH)[2])
+    stnl_ok = any(
+        it.get("username") == "cleanname" and "\n" not in it.get("username", "")
+        for it in mnl["items"]
+    )
+    for it in mnl["items"]:
+        if it.get("username") == "cleanname":
+            req("DELETE", f"/api/users/{it['id']}", headers=AUTH)
+check("newline username never stored raw", stnl_ok, f"got {stnl}")
+stembed, _, _ = req(
+    "POST", "/api/users",
+    json.dumps({"username": "ab\ncdef", "protocols": ["vless"], "volume_gb": 1, "days": 1}),
+    AUTH,
+)
+check("embedded-newline username rejected", stembed in (400, 422), f"got {stembed}")
+
 # ---- 19. Oversized search query handled ----
 stq2, _, _ = req("GET", "/api/users?q=" + ("A" * 1000), headers=AUTH)
 check("1000-char search safe", stq2 == 200, f"got {stq2}")

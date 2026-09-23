@@ -837,3 +837,12 @@ input[type="color"] { width: 100%; height: 42px; padding: 4px; background: var(-
   .sub-link-row { flex-direction: column; }
   .sub-link-row .btn { align-self: flex-end; }
 }
+@media (max-width: 560px) {
+  .topbar { flex-wrap: wrap; gap: 10px; }
+  .topbar h1 { font-size: 18px; }
+  .admin-chip { display: none; }
+  .field-row { grid-template-columns: 1fr; }
+  .modal { padding: 20px 16px; }
+  .sub-usage { flex-wrap: wrap; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}

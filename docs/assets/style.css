@@ -328,8 +328,14 @@ footer a { color: var(--red); text-decoration: none; }
     height: calc(100vh - 94px);
     box-shadow: 4px 0 24px rgba(0,0,0,.6);
   }
+  [dir="rtl"] .sidebar {
+    left: auto;
+    right: 0;
+    box-shadow: -4px 0 24px rgba(0,0,0,.6);
+  }
   .sidebar.open { display: block; }
   .content { padding: 24px 18px 60px; margin-left: 0; max-width: none; }
+  [dir="rtl"] .content { margin-right: 0; }
   .hero h1 { font-size: 32px; letter-spacing: 6px; }
 }
 
@@ -472,9 +478,10 @@ table { display: block; width: 100%; overflow-x: auto; }
 .sp-foot { flex-wrap: wrap; gap: 8px 16px; }
 
 @media (max-width: 560px) {
-  .topbar { gap: 6px; padding: 6px 10px; border-radius: 14px; }  .brand img { width: 24px; height: 24px; }
+  .topbar { gap: 6px; padding: 6px 10px; border-radius: 14px; flex-wrap: wrap; }  .brand img { width: 24px; height: 24px; }
   .brand b { font-size: 13px; letter-spacing: 1px; }
   .ver { display: none; }
+  .lang-sel { max-width: 104px; font-size: 12px; padding: 3px 6px; }
   .topbar a.gh { font-size: 12px; padding: 3px 8px; white-space: nowrap; }
   .topbar a.gh[href="installation.html"], .topbar a.gh[href="changelog.html"], .topbar a.gh[href="donate.html"] { display: none; }
   .sp-trigger { padding: 3px 8px; font-size: 12px; }
@@ -618,7 +625,22 @@ table { display: block; width: 100%; overflow-x: auto; }
 }
 .lang-sel:focus { outline: none; border-color: var(--red); }
 [dir="rtl"] .content, [dir="rtl"] .landing { direction: rtl; text-align: right; }
-[dir="rtl"] .sidebar { text-align: right; }
+[dir="rtl"] .sidebar {
+  text-align: right;
+  left: auto;
+  right: 0;
+  border-right: none;
+  border-left: 1px solid var(--border);
+  padding: 22px 22px 40px 14px;
+}
+[dir="rtl"] .content { margin-left: 0; margin-right: var(--sidebar-w); }
+[dir="rtl"] .sidebar a { border-left: none; border-right: 2px solid transparent; }
+[dir="rtl"] .sidebar a.active { border-right-color: var(--red); }
+[dir="rtl"] .content ul, [dir="rtl"] .content ol { padding-left: 0; padding-right: 22px; }
+[dir="rtl"] .content h2::before { content: " ▸"; }
+[dir="rtl"] .sup-links small { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .sp-foot kbd { margin-right: 0; margin-left: 4px; }
+[dir="rtl"] .sup-panel { transform-origin: bottom left; }
 [dir="rtl"] pre, [dir="rtl"] code, [dir="rtl"] .dn-row code { direction: ltr; unicode-bidi: isolate; text-align: left; }
 [dir="rtl"] table { direction: rtl; }
 [dir="rtl"] th, [dir="rtl"] td { text-align: right; }

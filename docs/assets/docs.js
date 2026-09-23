@@ -77,7 +77,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
 // Command palette search (Ctrl+K / Cmd+K)
 (function () {
   function esc(s) {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function hi(text, q) {
     var idx = text.toLowerCase().indexOf(q);
@@ -92,7 +92,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   trigger.type = "button";
   trigger.setAttribute("aria-label", t("docs.palSearchAria"));
   var isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-  trigger.innerHTML = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg><span>" + t("docs.palSearch") + "</span><kbd>" + (isMac ? "⌘K" : "Ctrl K") + "</kbd>";
+  trigger.innerHTML = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg><span>" + esc(t("docs.palSearch")) + "</span><kbd>" + (isMac ? "⌘K" : "Ctrl K") + "</kbd>";
   var anchor = topbar.querySelector(".gh");
   topbar.insertBefore(trigger, anchor || topbar.querySelector(".spacer"));
 
@@ -100,11 +100,11 @@ document.querySelectorAll("pre").forEach(function (pre) {
   overlay.className = "sp-overlay";
   overlay.hidden = true;
   overlay.innerHTML =
-    "<div class='sp-modal' role='dialog' aria-modal='true' aria-label='" + t("docs.palSearch") + "'>" +
+    "<div class='sp-modal' role='dialog' aria-modal='true' aria-label='" + esc(t("docs.palSearch")) + "'>" +
     "<div class='sp-input-row'><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#ff2740' stroke-width='2'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>" +
-    "<input id='sp-input' type='text' placeholder='" + t("docs.palSearchPh") + "' autocomplete='off' spellcheck='false'></div>" +
+    "<input id='sp-input' type='text' placeholder='" + esc(t("docs.palSearchPh")) + "' autocomplete='off' spellcheck='false'></div>" +
     "<div class='sp-results' id='sp-results'></div>" +
-    "<div class='sp-foot'><span><kbd>↑↓</kbd>" + t("docs.palNav") + "</span><span><kbd>↵</kbd>" + t("docs.palOpen") + "</span><span><kbd>esc</kbd>" + t("docs.palClose") + "</span></div></div>";
+    "<div class='sp-foot'><span><kbd>↑↓</kbd>" + esc(t("docs.palNav")) + "</span><span><kbd>↵</kbd>" + esc(t("docs.palOpen")) + "</span><span><kbd>esc</kbd>" + esc(t("docs.palClose")) + "</span></div></div>";
   document.body.appendChild(overlay);
   var input = overlay.querySelector("#sp-input");
   var resultsBox = overlay.querySelector("#sp-results");
@@ -127,6 +127,9 @@ document.querySelectorAll("pre").forEach(function (pre) {
         return (it.s + " " + it.t).toLowerCase().indexOf(w) >= 0;
       })[0] || "";
       a.className = "sp-item" + (i === sel ? " sel" : "");
+      // Index URLs are build-generated "page.html#slug", but never trust
+      // data into href: allow same-doc links only (no javascript:/data:).
+      if (!/^[A-Za-z0-9._-]+\.html(#[A-Za-z0-9_-]+)?$/.test(it.u || "")) return;
       a.href = it.u;
       a.innerHTML = "<div class='sp-page'>" + esc(it.p) + "</div><div class='sp-sec'>" + hi(it.s, hw) + "</div><div class='sp-snip'>" + hi(it.t.slice(0, 140), hw) + "</div>";
       a.addEventListener("click", close);
