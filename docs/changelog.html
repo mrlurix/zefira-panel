@@ -45,6 +45,13 @@
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
 
+<h2 id="v1133"><span>v1.13.3</span> <span data-i18n="chg.v1133">— Bug-fix round: validation, links, updater</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1133a_lead">Strict numbers:</b> <span data-i18n="chg.v1133a">volume/days/ports reject true and numeric strings (plain 30 still works, 0.01 GB floor everywhere); subscriptions emit one link per endpoint instead of 3 duplicates, and misconfigured REALITY is skipped instead of shipping dead links.</span></li>
+  <li><b data-i18n="chg.v1133b_lead">Smarter clients:</b> <span data-i18n="chg.v1133b">Clash auto-detect covers Mihomo/Stash, empty proxy lists fall back to DIRECT, and WireGuard addresses never collide past the id cap.</span></li>
+  <li><b data-i18n="chg.v1133c_lead">Safer ops:</b> <span data-i18n="chg.v1133c">the updater warns about outdated systemd units and refuses when the panel dir is not writable; restores re-arm stray far-future expiries, stats survive hand-edited rows, CSV export strips bidi spoofing, and downloads re-check login first.</span></li>
+</ul>
+
 <h2 id="v1132"><span>v1.13.2</span> <span data-i18n="chg.v1132">— Bug-fix round: copy, updater, pending display</span></h2>
 <ul>
   <li><b data-i18n="chg.v1132a_lead">Copy works everywhere:</b> <span data-i18n="chg.v1132a">copy buttons fall back when the browser clipboard API is unavailable (plain HTTP), and copy the exact server-built link including custom subscription paths.</span></li>
@@ -203,7 +210,7 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=26"></script>
+<script src="assets/i18n.js?v=27"></script>
 <script src="assets/docs.js?v=23"></script>
 <script src="assets/support-ai.js?v=5"></script>
 </body>

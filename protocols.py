@@ -264,11 +264,12 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
     from urllib.parse import quote as _q
 
     host = _effective_host(secret, srv)
-    pub = srv.get("reality_pub") or "REPLACE_WITH_REALITY_PUBLIC_KEY"
+    pub = srv.get("reality_pub") or ""
     # Hand-edited DB could smuggle extra link params via the public key
-    # (generated keys are always 43-char base64url): refuse, don't splice.
+    # (generated keys are always 43-char base64url): skip output entirely
+    # rather than ship a guaranteed-dead link to the customer.
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", pub or ""):
-        pub = "REPLACE_WITH_REALITY_PUBLIC_KEY"
+        return None
     sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
     sni = sni_list[(index - 1) % len(sni_list)] if sni_list else host
     sni = _q(sni, safe="")
@@ -418,11 +419,11 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             sni_list = [s.strip() for s in (vsrv.get("reality_sni") or "").split(",") if s.strip()]
             sni = sni_list[0] if sni_list else host_eff
             sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
-            # Same 43-char allowlist as the link builder: a hand-edited row
-            # must not smuggle anything into the Clash document either.
+            # Same 43-char allowlist as the link builder: skip misconfigured
+            # REALITY here too instead of shipping a dead proxy.
             rpub = vsrv.get("reality_pub") or ""
             if not re.fullmatch(r"[A-Za-z0-9_-]{43}", rpub):
-                rpub = ""
+                continue
             n = f"Zefira-{u['username']}-REALITY{_sfx(ilabel)}"
             names.append(n)
             proxies.append({
@@ -488,7 +489,10 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
     for p in proxies:
         lines.append("  - " + _json_scalar(p))
     lines.append("proxy-groups:")
-    lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": names}))
+    # An empty proxy list (e.g. only misconfigured REALITY) must still
+    # parse: fall back to DIRECT so clients never choke on `proxies: []`.
+    group_proxies = names if names else ["DIRECT"]
+    lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": group_proxies}))
     lines.append("rules:")
     if blocked:
         # Builder-level filter (defense in depth): only plain hostnames
@@ -542,7 +546,10 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
     peer_valid = _valid_wg_pubkey(srv.get("wg_pub"))
     peer = peer_valid or base64.b64encode(b"\x01" + b"\x00" * 31).decode()
     uid = int(u.get("id", 0) or 0)
-    addr = f"10.7.{(uid // 250) % 250}.{(uid % 250) + 2}"
+    # /32 pool: first octet stays 10.7.* for the first 62500 ids (backward
+    # compatible), then rolls into 10.8/10.9... so churn past the id cap
+    # never aliases two users onto the same address.
+    addr = f"10.{7 + (uid // 62500) % 249}.{(uid // 250) % 250}.{(uid % 250) + 2}"
     host = _effective_host(secret, srv)
     dns = _safe_host(srv.get("dns"), "1.1.1.1")
     lines = [
@@ -714,13 +721,14 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
         if not sec:
             continue
         if p in V2RAY_FAMILY:
-            count = 3 if p != "ss" else 1
+            # One link per endpoint: _v2ray_link ignores `index`, so looping
+            # only emitted byte-identical duplicates (3 indistinguishable
+            # profiles per endpoint in every client).
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""
-                for i in range(1, count + 1):
-                    link = _v2ray_link(p, sec, u["username"] + suffix, i, vsrv)
-                    if link:
-                        links.append(link)
+                link = _v2ray_link(p, sec, u["username"] + suffix, 1, vsrv)
+                if link:
+                    links.append(link)
         elif p == "reality":
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""
@@ -787,13 +795,12 @@ def user_links(u: dict, srv: dict, inbounds: list = None) -> dict:
         label = PROTO_LABELS.get(p, p)
         if p in V2RAY_FAMILY:
             links = []
-            count = 3 if p != "ss" else 1
+            # One link per endpoint (see build_files: the index is unused).
             for vsrv, ilabel in _srvs_for(p, srv, inbounds):
                 suffix = f"-{ilabel}" if ilabel else ""
-                for i in range(1, count + 1):
-                    link = _v2ray_link(p, sec, u["username"] + suffix, i, vsrv)
-                    if link:
-                        links.append(link)
+                link = _v2ray_link(p, sec, u["username"] + suffix, 1, vsrv)
+                if link:
+                    links.append(link)
             if links:
                 out[label] = {"links": links, "config": None}
         elif p == "reality":
@@ -852,13 +859,14 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
         if not sec:
             continue
         if p in V2RAY_FAMILY:
-            count = 3 if p != "ss" else 1
+            # One link per endpoint: _v2ray_link ignores `index`, so looping
+            # only emitted byte-identical duplicates (3 indistinguishable
+            # profiles per endpoint in every client).
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""
-                for i in range(1, count + 1):
-                    link = _v2ray_link(p, sec, u["username"] + suffix, i, vsrv)
-                    if link:
-                        links.append(link)
+                link = _v2ray_link(p, sec, u["username"] + suffix, 1, vsrv)
+                if link:
+                    links.append(link)
         elif p == "reality":
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""

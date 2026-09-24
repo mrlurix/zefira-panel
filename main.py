@@ -1650,14 +1650,13 @@ Available tools (args are JSON, all required unless marked optional):
 Rules: ONE action block per turn, valid JSON only. If args are missing/invalid, ask the user for the missing piece instead of guessing (never invent usernames). These are NEVER available as actions — guide the user to click instead: deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes. Action blocks are invisible protocol: your visible reply must never contain one.
 """
 
-AI_ACTION_RE = re.compile(r"```(?:action|json)\s*(\{.*?\})\s*```", re.S)
+AI_ACTION_RE = re.compile(r"```action\s*(\{.*?\})\s*```", re.S)
 AI_MAX_ACTIONS = 3
 AI_MAX_ROUNDS = 3
 
-# Tools the model may invoke. _parse_ai_action accepts ```action and
-# ```json fences (models drift between them), but ONLY names listed here
-# ever execute: anything else (e.g. a JSON example in a normal answer) is
-# treated as plain text and never runs.
+# Tools the model may invoke. Only ```action fences ever execute: a ```json
+# example in a normal answer (even with an allowlisted tool name inside) is
+# plain text and never runs, and is left visible to the user.
 AI_TOOL_NAMES = {
     "panel_stats",
     "find_user",
@@ -2036,13 +2035,14 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
     if tool == "panel_stats":
         with db.s() as s:
             rows = s.scalars(select(VpnUser)).all()
-            data = [(u.is_active, u.expires_at, u.volume_gb, u.used_gb,
+            data = [(u.is_active, u.expires_at, u.volume_gb or 0, u.used_gb or 0,
                      bool(u.start_on_first_use)) for u in rows]
         now = utcnow()
         # Same buckets as /api/stats: pending SOFU users are NOT active.
+        # None-safe: hand-edited NULL rows degrade instead of 500ing.
         active = sum(1 for a, e, v, used, sofu in data
-                     if a and e > now and used < v
-                     and not (sofu and e is not None and e.year >= PENDING_YEAR))
+                     if a and e is not None and e > now and used < v
+                     and not (sofu and e.year >= PENDING_YEAR))
         return True, (
             f"users={len(data)} active={active} "
             f"volume={sum(v for _, _, v, _ in data):g}GB "
@@ -2325,6 +2325,31 @@ def _git(*args: str, timeout: int = 60) -> tuple:
     return True, proc.stdout.strip()
 
 
+def _unit_stale_warning() -> str:
+    """Old systemd units predate committed hardening (wide ReadWritePaths,
+    ExecStartPre instance guard, NoNewPrivileges removal). The updater only
+    refreshes code+deps, never the unit — flag staleness so the operator
+    re-runs install.sh instead of hitting a read-only git failure or a
+    silently-neutered sudo restart."""
+    try:
+        with open("/etc/systemd/system/zefira.service", encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return ""
+    gaps = []
+    if "ReadWritePaths=" in text and "ReadWritePaths=$TARGET" not in text.replace("${TARGET}", "$TARGET"):
+        # Narrow pre-fix unit (instance/.venv only): git reset can't write.
+        if "ReadWritePaths=$TARGET/instance" in text or "$TARGET/.venv" in text:
+            gaps.append("narrow ReadWritePaths")
+    if "NoNewPrivileges=true" in text:
+        gaps.append("NoNewPrivileges blocks sudo restart")
+    if "ExecStartPre" not in text or "instance" not in text:
+        gaps.append("missing instance guard")
+    if gaps:
+        return "systemd unit outdated (" + ", ".join(gaps) + ") — re-run install.sh then daemon-reload"
+    return ""
+
+
 def _github_json(path: str) -> tuple:
     import urllib.request
 
@@ -2394,10 +2419,16 @@ def _update_status() -> dict:
         error = "not a git checkout"
     if not remote_sha and not error:
         okc, latest = _github_json(f"/repos/{repo}/commits/{branch}?per_page=1")
-        if okc and isinstance(latest, list) and latest:
+        if okc and isinstance(latest, dict) and latest.get("sha"):
+            remote_sha = latest.get("sha", "")
+        elif okc and isinstance(latest, list) and latest:
             remote_sha = latest[0].get("sha", "")
         elif not okc:
             error = latest if isinstance(latest, str) else "GitHub unreachable"
+    try:
+        unit_warning = _unit_stale_warning()
+    except Exception:
+        unit_warning = ""
     return {
         "repo": repo,
         "branch": branch,
@@ -2409,6 +2440,7 @@ def _update_status() -> dict:
         "local_log": local_log,
         "incoming": incoming,
         "error": error,
+        "unit_warning": unit_warning,
     }
 
 
@@ -2540,6 +2572,19 @@ def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = De
     ok, out = _git("rev-parse", "--git-dir")
     if not ok:
         raise HTTPException(status_code=400, detail="Panel directory is not a git checkout")
+    # Pre-flight: under ProtectSystem=strict an outdated narrow unit makes
+    # $TARGET/.git read-only → git reset fails mid-apply. Refuse early with
+    # an actionable message instead of a half-applied update.
+    try:
+        _git_dir = (BASE_DIR / (out.strip() or ".git"))
+        _writable = os.access(_git_dir, os.W_OK) and os.access(BASE_DIR, os.W_OK)
+    except OSError:
+        _writable = True
+    if not _writable:
+        raise HTTPException(
+            status_code=400,
+            detail="Panel directory is not writable (outdated systemd unit?) — re-run install.sh, daemon-reload, then retry",
+        )
     if not _update_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="An update is already running")
     try:
@@ -2966,6 +3011,14 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         except ValueError:
             skipped += 1
             continue
+        # A far-future sentinel expiry without the pending flag is
+        # meaningless (pending activation is what the sentinel means):
+        # re-arm it as pending with a sane duration instead of importing
+        # a user that shows "27000 days" everywhere.
+        sofu = bool(ru.start_on_first_use)
+        duration = ru.duration_days if (ru.duration_days and 1 <= ru.duration_days <= 3650) else 30
+        if not sofu and expires.year >= PENDING_YEAR:
+            sofu, duration = True, 30
         # Quota sanity: zero/negative volumes would be instantly-limited
         # (and bypass plan logic). Skip rather than import dead rows.
         try:
@@ -3016,8 +3069,8 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 token=ru.token,
                 secret_data=secret_json,
                 is_active=ru.is_active,
-                start_on_first_use=bool(ru.start_on_first_use),
-                duration_days=ru.duration_days,
+                start_on_first_use=sofu,
+                duration_days=duration if sofu else None,
                 created_at=created,
                 expires_at=expires,
             )
@@ -3754,6 +3807,9 @@ def api_stats(admin: Admin = Depends(require_admin)):
     active = expired = disabled = expiring_soon = pending_start = limited = 0
     volume_total = used_total = 0.0
     for is_active, expires_at, vol, used, sof in rows:
+        # NULL-tolerant: a hand-edited row must degrade, never 500.
+        vol = vol or 0
+        used = used or 0
         volume_total += vol
         used_total += used
         if not is_active:
@@ -3765,7 +3821,7 @@ def api_stats(admin: Admin = Depends(require_admin)):
             continue
         if used >= vol:
             limited += 1
-        if expires_at <= now:
+        if expires_at is None or expires_at <= now:
             expired += 1
         else:
             active += 1
@@ -3901,7 +3957,7 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
             user.volume_gb = min(100000, max(0.01, user.volume_gb + data.add_volume_gb))
             changes.append(f"vol+{data.add_volume_gb}")
         if data.add_used_gb is not None:
-            user.used_gb = max(0.0, user.used_gb + data.add_used_gb)
+            user.used_gb = min(1000000, max(0.0, user.used_gb + data.add_used_gb))
             changes.append(f"used{data.add_used_gb:+g}")
         if data.set_note is not None:
             user.note = data.set_note
@@ -4072,7 +4128,9 @@ def api_user_config(user_id: int, admin: Admin = Depends(require_admin)):
     safe_uname = re.sub(r"[^A-Za-z0-9_-]", "_", uname or "")[:32] or "client"
     files = protocols.build_files(udict, load_srv(), load_inbounds())
     if not files:
-        raise HTTPException(status_code=500, detail="Config generation failed")
+        # Unmanageable data (e.g. every secret corrupt) is a client error:
+        # delete and recreate the user. Same 422 as sibling handlers.
+        raise HTTPException(status_code=422, detail="No downloadable config for this user — delete and recreate it")
     if len(files) == 1:
         fname, content = files[0]
         log.info("Config downloaded %s by %s", uname, admin.username)
@@ -4312,7 +4370,11 @@ def subscription(token: str, request: Request):
         raise HTTPException(status_code=404, detail="Not Found")
     fmt = (request.query_params.get("format") or "").strip().lower()
     ua = (request.headers.get("user-agent") or "").lower()
-    want_clash = fmt in ("clash", "clashmeta") or "clash" in ua
+    # Mihomo/Stash speak Clash YAML but don't carry "clash" in their UA:
+    # without these, auto-detect disagrees with ?format=clash.
+    want_clash = fmt in ("clash", "clashmeta") or any(
+        t in ua for t in ("clash", "mihomo", "stash", "meta")
+    )
     with db.s() as s:
         user = s.scalar(select(VpnUser).where(VpnUser.token == token))
         if not user or not user.is_active:
@@ -4335,7 +4397,9 @@ def subscription(token: str, request: Request):
             _used = float(user.used_gb or 0)
         except (TypeError, ValueError):
             raise HTTPException(status_code=404, detail="Not Found")
-        if _vol <= 0 or _used >= _vol:
+        # Epsilon-tolerant compare: binary float drift (29.9+0.1) must not
+        # flip-flop against the rounded values the dashboard shows.
+        if _vol <= 0 or _used + 1e-9 >= _vol:
             raise HTTPException(status_code=404, detail="Not Found")
         # Presence signal: every client poll refreshes "last seen" (throttled
         # to one write per minute). This is how the dashboard shows whether

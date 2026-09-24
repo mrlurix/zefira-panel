@@ -59,6 +59,13 @@ async function api(url, opts = {}) {
   return data;
 }
 
+// window.open() downloads bypass the api() 401→login redirect (expired
+// session would show raw JSON in a new tab). Pre-flight the session first.
+async function ensureAuth() {
+  try { await api("/api/me"); return true; }
+  catch (err) { return err.message !== "auth"; }
+}
+
 function toast(msg, ok = true) {
   const box = document.getElementById("toast-box");
   const el = document.createElement("div");
@@ -394,6 +401,7 @@ $("#qr-close").addEventListener("click", () => qrModal.classList.add("hidden"));
 qrModal.addEventListener("click", (e) => { if (e.target === qrModal) qrModal.classList.add("hidden"); });
 let currentQrUrl = "";
 $("#qr-copy-btn").addEventListener("click", async () => {
+  if (!currentQrUrl) return;
   if (await copyText(currentQrUrl)) toast(t("msg.linkCopied"));
   else toast(t("msg.copyFailed"), false);
 });
@@ -514,7 +522,10 @@ $("#sort-sel").addEventListener("change", () => {
 $("#export-csv-btn").addEventListener("click", () => {
   if (!USERS_CACHE.length) { toast(t("msg.noUsersExport"), false); return; }
   const safeCell = (v) => {
-    const s = String(v);
+    // Normalize fullwidth ASCII (＝+＠) and strip bidi controls first:
+    // otherwise U+FF1D/= look-alikes and U+202E overrides dodge the
+    // formula-prefix guard below (quoted, so no breakage — only spoofing).
+    let s = String(v).normalize("NFKC").replace(/[‮‭‪‬⁦⁧]/g, "");
     return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
   };
   const rows = [["username", "protocols", "volume_gb", "used_gb", "expires_at", "status", "note"]];
@@ -581,6 +592,7 @@ $("#users-table").addEventListener("click", async (e) => {
           }
         }
       } catch (_) {}
+      if (!(await ensureAuth())) return;
       const w = window.open(`/api/users/${id}/config`, "_blank");
       toast(w ? t("msg.downloading") : t("msg.popupBlocked"), !!w);
       return;
@@ -1041,7 +1053,11 @@ $("#node-create-btn").addEventListener("click", async () => {
     toast(t("msg.tunnelCreated"));
     $("#node-name").value = ""; $("#node-iran").value = ""; $("#node-kharej").value = "";
     loadNodes();
-    setTimeout(() => window.open(`/api/nodes/${node.id}/guide`, "_blank"), 500);
+    setTimeout(async () => {
+      if (!(await ensureAuth())) return;
+      const w = window.open(`/api/nodes/${node.id}/guide`, "_blank");
+      if (!w) toast(t("msg.popupBlocked"), false);
+    }, 500);
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
@@ -1059,7 +1075,9 @@ $("#nodes-list").addEventListener("click", async (e) => {
       if (await copyText(r.token)) toast(t("msg.tokenCopiedSame"));
       else { prompt(t("prm.tokenOnce"), r.token); toast(t("msg.tokenCopiedSame")); }
     } else if (btn.dataset.act === "download") {
-      window.open(`/api/nodes/${id}/guide`, "_blank");
+      if (!(await ensureAuth())) return;
+      const w = window.open(`/api/nodes/${id}/guide`, "_blank");
+      if (!w) toast(t("msg.popupBlocked"), false);
     } else if (btn.dataset.act === "refresh") {
       if (!confirm(t("cfm.nodeRegen"))) return;
       await api(`/api/nodes/${id}/regen-token`, { method: "POST" });

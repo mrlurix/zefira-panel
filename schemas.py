@@ -1,8 +1,17 @@
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
+
+
+def _reject_bool_str(v):
+    """Accept int/float numbers only: reject bool (subclass of int) and
+    numeric strings (\"30\", \"0x10\", \"1e3\") that lax coercion would
+    otherwise silently accept. Lets int 30 through for float fields."""
+    if isinstance(v, bool) or isinstance(v, str):
+        raise ValueError("must be a number")
+    return v
 Protocol = Literal[
     "vless", "reality", "vmess", "trojan", "ss", "hysteria2", "wireguard", "openvpn",
     "l2tp", "cisco", "socks5",
@@ -31,10 +40,15 @@ class UserCreateIn(BaseModel):
     username: str = Field(pattern=USERNAME_RE)
     protocols: List[Protocol] = Field(min_length=1, max_length=11)
     note: str = Field(default="", max_length=200)
-    volume_gb: float = Field(gt=0, le=100000)
-    days: int = Field(ge=1, le=3650)
+    volume_gb: float = Field(ge=0.01, le=100000)
+    days: StrictInt = Field(ge=1, le=3650)
     start_on_first_use: bool = False
-    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
+    device_limit: Optional[StrictInt] = Field(default=None, ge=1, le=1000)
+
+    @field_validator("volume_gb", mode="before")
+    @classmethod
+    def _num_volume(cls, v):
+        return _reject_bool_str(v)
 
     @field_validator("note", mode="before")
     @classmethod
@@ -48,14 +62,19 @@ class UserPatchIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     is_active: Optional[bool] = None
-    extend_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    extend_days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
     add_volume_gb: Optional[float] = Field(default=None, ge=0.01, le=100000)
     add_used_gb: Optional[float] = Field(default=None, ge=-1000000, le=1000000)
     set_note: Optional[str] = Field(default=None, max_length=200)
-    set_volume_gb: Optional[float] = Field(default=None, gt=0, le=100000)
+    set_volume_gb: Optional[float] = Field(default=None, ge=0.01, le=100000)
     set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\z")
-    set_device_limit: Optional[int] = Field(default=None, ge=-1, le=1000)
+    set_device_limit: Optional[StrictInt] = Field(default=None, ge=-1, le=1000)
     reset_used: bool = False
+
+    @field_validator("add_volume_gb", "add_used_gb", "set_volume_gb", mode="before")
+    @classmethod
+    def _num_patch(cls, v):
+        return _reject_bool_str(v) if v is not None else v
 
     @field_validator("set_note", mode="before")
     @classmethod
@@ -188,17 +207,17 @@ class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     domain: str = Field(default="", max_length=253, pattern=r"^(?:[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?)?\z")
-    sub_port: int = Field(ge=1, le=65535)
-    hy2_port: int = Field(ge=1, le=65535)
-    wg_port: int = Field(ge=1, le=65535)
+    sub_port: StrictInt = Field(ge=1, le=65535)
+    hy2_port: StrictInt = Field(ge=1, le=65535)
+    wg_port: StrictInt = Field(ge=1, le=65535)
     wg_pub: str = Field(default="", max_length=200)
     dns: str = Field(default="1.1.1.1", max_length=100, pattern=HOST_RE)
-    ovpn_port: int = Field(ge=1, le=65535)
+    ovpn_port: StrictInt = Field(ge=1, le=65535)
     ovpn_proto: Literal["udp", "tcp"] = "udp"
-    l2tp_port: int = Field(ge=1, le=65535, default=1701)
-    cisco_port: int = Field(ge=1, le=65535, default=443)
-    socks5_port: int = Field(ge=1, le=65535, default=1080)
-    reality_port: int = Field(ge=1, le=65535, default=443)
+    l2tp_port: StrictInt = Field(ge=1, le=65535, default=1701)
+    cisco_port: StrictInt = Field(ge=1, le=65535, default=443)
+    socks5_port: StrictInt = Field(ge=1, le=65535, default=1080)
+    reality_port: StrictInt = Field(ge=1, le=65535, default=443)
     reality_sni: str = Field(
         default="www.yahoo.com,www.samsung.com,www.microsoft.com",
         max_length=300,
@@ -231,10 +250,15 @@ class TemplateCreateIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     protocols: List[Protocol] = Field(min_length=1, max_length=11)
-    volume_gb: float = Field(gt=0, le=100000)
-    days: int = Field(ge=1, le=3650)
+    volume_gb: float = Field(ge=0.01, le=100000)
+    days: StrictInt = Field(ge=1, le=3650)
     start_on_first_use: bool = False
-    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
+    device_limit: Optional[StrictInt] = Field(default=None, ge=1, le=1000)
+
+    @field_validator("volume_gb", mode="before")
+    @classmethod
+    def _num_tvolume(cls, v):
+        return _reject_bool_str(v)
 
 
 class TunnelSettingsIn(BaseModel):
@@ -273,7 +297,7 @@ class TunnelNodeIn(BaseModel):
     transport: Transport = "tcp"
     iran_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
     kharej_ip: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
-    tunnel_port: int = Field(ge=1, le=65535)
+    tunnel_port: StrictInt = Field(ge=1, le=65535)
     forwarded_ports: str = Field(default="", max_length=200, pattern=HOST_PORT_PAIRS_RE)
     udp_forward: bool = False
 
@@ -303,19 +327,19 @@ class InboundIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_\-]+\z")
     protocol: InboundProtocol
-    port: int = Field(ge=1, le=65535)
+    port: StrictInt = Field(ge=1, le=65535)
     host: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     enabled: bool = True
-    node_id: Optional[int] = Field(default=None, ge=1)
+    node_id: Optional[StrictInt] = Field(default=None, ge=1)
 
 
 class InboundPatchIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     enabled: Optional[bool] = None
-    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
     host: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
-    node_id: Optional[int] = Field(default=None, ge=1)
+    node_id: Optional[StrictInt] = Field(default=None, ge=1)
 
 
 class ServerNodeIn(BaseModel):
@@ -323,7 +347,7 @@ class ServerNodeIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     address: str = Field(min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
-    check_port: int = Field(default=443, ge=1, le=65535)
+    check_port: StrictInt = Field(default=443, ge=1, le=65535)
     note: str = Field(default="", max_length=200)
 
     @field_validator("note", mode="before")
@@ -339,7 +363,7 @@ class ServerNodePatchIn(BaseModel):
 
     enabled: Optional[bool] = None
     address: Optional[str] = Field(default=None, min_length=3, max_length=253, pattern=r"^" + HOST_CORE + r"\z")
-    check_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    check_port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
     note: Optional[str] = Field(default=None, max_length=200)
 
     @field_validator("note", mode="before")
@@ -362,11 +386,16 @@ class RestoreUserIn(BaseModel):
     token: str = Field(pattern=r"^[a-f0-9]{32}\z")
     secret_data: str = Field(default="", max_length=40000)
     is_active: bool = True
-    device_limit: Optional[int] = Field(default=None, ge=1, le=1000)
+    device_limit: Optional[StrictInt] = Field(default=None, ge=1, le=1000)
     start_on_first_use: bool = False
-    duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    duration_days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
     created_at: Optional[str] = None
     expires_at: str
+
+    @field_validator("volume_gb", "used_gb", mode="before")
+    @classmethod
+    def _num_restore(cls, v):
+        return _reject_bool_str(v)
 
     @field_validator("note", mode="before")
     @classmethod
@@ -381,7 +410,7 @@ class RestoreAdminIn(BaseModel):
 
     username: str = Field(pattern=USERNAME_RE)
     password_hash: str = Field(min_length=10, max_length=256)
-    token_version: int = Field(default=0, ge=0, le=999999999)
+    token_version: StrictInt = Field(default=0, ge=0, le=999999999)
 
 
 class RestoreConfirmIn(BaseModel):
