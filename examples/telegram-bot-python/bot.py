@@ -23,10 +23,17 @@ import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-TG_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-PANEL = os.environ.get("ZEFIRA_URL", "").rstrip("/")
+def _missing_env(name: str) -> str:
+    raise SystemExit(f"Set {name} first (see README.md).")
+
+
+TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or _missing_env("TELEGRAM_BOT_TOKEN")
+PANEL = (os.environ.get("ZEFIRA_URL") or _missing_env("ZEFIRA_URL")).rstrip("/")
+ZEFIRA_TOKEN = os.environ.get("ZEFIRA_API_TOKEN") or _missing_env("ZEFIRA_API_TOKEN")
+if not PANEL.startswith(("http://", "https://")):
+    raise SystemExit("ZEFIRA_URL must start with http:// or https://")
 SUB_BASE = os.environ.get("ZEFIRA_SUB_BASE", PANEL + "/sub").rstrip("/")
-HEADERS = {"Authorization": f"Bearer {os.environ['ZEFIRA_API_TOKEN']}", "Content-Type": "application/json"}
+HEADERS = {"Authorization": f"Bearer {ZEFIRA_TOKEN}", "Content-Type": "application/json"}
 
 PLANS = [
     ("10GB / 30 days", 10, 30),
@@ -73,21 +80,35 @@ async def buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Pick a plan:", reply_markup=InlineKeyboardMarkup(kb))
 
 
+def panel_msg(st: int) -> str:
+    """Actionable per-status message; the owner gets the detail in logs."""
+    if st == 0:
+        return "Panel unreachable — try again in a minute."
+    if st in (401, 403):
+        return "Shop unavailable (bot credentials rejected) — tell the shop owner."
+    if st == 413:
+        return "No capacity right now — please try again later."
+    if st == 429:
+        return "Too many attempts — please wait a minute and retry."
+    return "Panel error, try later."
+
+
 async def my(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     st, data = api("GET", f"/api/users?q={uname(update.effective_user.id)}")
     if st != 200:
-        await update.message.reply_text("Panel error, try later.")
+        await update.message.reply_text(panel_msg(st))
         return
     mine = [u for u in data.get("items", []) if u.get("username") == uname(update.effective_user.id)]
     if not mine:
         await update.message.reply_text("No account yet. Use /buy.")
         return
     u = mine[0]
+    # .get() with fallbacks: a future panel schema change must not 500 here.
     await update.message.reply_text(
-        f"Your account: {md(u['username'])}\n"
-        f"Volume: {md(u['used_gb'])} / {md(u['volume_gb'])} GB\n"
-        f"Expires: {md(u['expires_at'])}\n\n"
-        f"Subscription:\n`{md(SUB_BASE)}/{md(u['token'])}`",
+        f"Your account: {md(u.get('username'))}\n"
+        f"Volume: {md(u.get('used_gb', 0))} / {md(u.get('volume_gb', 0))} GB\n"
+        f"Expires: {md(u.get('expires_at') or '?')}\n\n"
+        f"Subscription:\n`{md(SUB_BASE)}/{md(u.get('token', ''))}`",
         parse_mode="Markdown")
 
 
@@ -95,8 +116,12 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     await q.answer()
     try:
-        label, vol, days = PLANS[int(q.data.split(":", 1)[1])]
+        idx = int(q.data.split(":", 1)[1])
+        label, vol, days = PLANS[idx]
     except (IndexError, ValueError):
+        # Stale inline button (bot restarted with a different plan list):
+        # answer instead of leaving the spinner hanging forever.
+        await q.message.reply_text("Plan list changed — send /buy again.")
         return
     name = uname(q.from_user.id)
     st, data = api("POST", "/api/users", {
@@ -108,13 +133,18 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if st != 200 or not data.get("token"):
         log.warning("create failed %s %s", st, data)
-        await q.message.reply_text("Could not create the account, try later.")
+        await q.message.reply_text(panel_msg(st))
         return
     await q.message.reply_text(
         f"Done! {md(label)}\n\nSubscription (tap to copy):\n"
         f"`{md(SUB_BASE)}/{md(data['token'])}`\n\n"
         f"Paste it into v2rayNG / Streisand / Clash.",
         parse_mode="Markdown")
+    # Hide the buttons so a second tap cannot hit "already have".
+    try:
+        await q.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([]))
+    except Exception:
+        pass
 
 
 def main() -> None:

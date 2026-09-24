@@ -933,7 +933,10 @@ def backpack_guide(node: dict, token: str) -> str:
         "icmp": "xDi (ICMP)", "ip-spoof": "IP Spoofing",
     }
     tlabel = transport_labels.get(node["transport"], node["transport"])
-    ports = node.get("forwarded_ports") or "e.g. 443:8000"
+    # No "e.g." placeholder as config: empty means tunnel-port-only (plus
+    # UDP forwarding of it when enabled), stated plainly.
+    raw_ports = (node.get("forwarded_ports") or "").strip()
+    ports = raw_ports if raw_ports else "(none — tunnel port only)"
     udp = "yes" if node.get("udp_forward") else "no"
     return f"""================================================================
  ZEFIRA x BACKPACK - Tunnel Setup Guide (for BackPack {BACKPACK_VERSION}+)

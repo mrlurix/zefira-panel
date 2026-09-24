@@ -143,6 +143,7 @@
         </button>
       </div>
 
+      <p id="users-truncated" class="hint mt-0 hidden"></p>
       <div class="card">
         <div class="table-wrap">
           <table id="users-table">
@@ -357,6 +358,7 @@
             <button type="button" id="update-now-btn" class="btn btn-primary hidden" data-i18n="update.updateBtn">Update now</button>
           </div>
           <p class="hint"><span data-i18n="update.dlHintA">Update pulls</span> <span class="mono" id="update-repo">mrlurix/zefira-panel</span><span data-i18n="update.dlHintB">, reinstalls dependencies and restarts the panel. Refused if you have local changes.</span></p>
+          <p class="hint" id="update-unit-warning" style="color:var(--orange)" hidden></p>
         </div>
 
         <div class="card form-card">
@@ -430,6 +432,7 @@
           <label class="field"><span data-i18n="ai.apiKey">API key (stored encrypted, empty = keep current)</span><input type="password" id="ai-key" maxlength="500" autocomplete="off" placeholder="gsk-…"></label>
           <label class="field"><span data-i18n="ai.extra">Extra instructions (optional)</span><input type="text" id="ai-extra" maxlength="500" placeholder="e.g. Always answer in Persian"></label>
           <button type="button" id="ai-save-btn" class="btn btn-primary" data-i18n="ai.saveBtn">Save AI Settings</button>
+          <button type="button" id="ai-test-btn" class="btn btn-ghost" data-i18n="ai.testBtn">Test</button>
         </div>
 
         <div class="card form-card">
@@ -501,7 +504,7 @@
         <div class="card form-card">
           <div class="card-head"><h2 data-i18n="tg.title">Telegram Notifications</h2></div>
           <p class="hint mt-0" data-i18n="tg.hint">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
-          <label class="field"><span data-i18n="tg.token">Bot token (kept encrypted)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
+          <label class="field"><span data-i18n="tg.token">Bot token (kept encrypted, empty = keep current)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
           <label class="field"><span data-i18n="tg.chat">Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
           <div class="reality-actions">
             <button type="button" id="tg-save-btn" class="btn btn-primary" data-i18n="tg.saveBtn">Save</button>
@@ -606,7 +609,7 @@
   <div class="ai-chat-head"><b data-i18n="ai.chatTitle">AI Assistant</b><span class="muted" data-i18n="ai.chatSub">panel help only</span><button type="button" class="icon-btn" id="ai-close">&times;</button></div>
   <div id="ai-msgs" class="ai-msgs"></div>
   <div class="ai-input-row">
-    <input type="text" id="ai-input" maxlength="2000" data-i18n-ph="ai.inputPh" placeholder="Ask about the panel…" autocomplete="off">
+    <input type="text" id="ai-input" maxlength="4000" data-i18n-ph="ai.inputPh" placeholder="Ask about the panel…" autocomplete="off">
     <button type="button" id="ai-send" class="btn btn-sm btn-primary" data-i18n="ai.sendBtn">Send</button>
   </div>
 </div>

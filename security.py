@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import os
+import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -86,6 +87,10 @@ class SlidingWindowLimiter:
         self.max = max_events
         self.window = window_seconds
         self._events: dict[str, deque] = defaultdict(deque)
+        # Sync endpoints run on uvicorn's thread pool: concurrent hit()
+        # calls race on the dict (over-admit + "dictionary changed size"
+        # RuntimeError during eviction). One lock serializes them.
+        self._lock = threading.Lock()
 
     def _evict_if_needed(self) -> None:
         if len(self._events) <= self.MAX_KEYS:
@@ -99,18 +104,20 @@ class SlidingWindowLimiter:
                 del self._events[k]
 
     def hit(self, key: str) -> bool:
-        self._evict_if_needed()
-        now = time.monotonic()
-        q = self._events[key]
-        while q and now - q[0] > self.window:
-            q.popleft()
-        if len(q) >= self.max:
-            return False
-        q.append(now)
-        return True
+        with self._lock:
+            self._evict_if_needed()
+            now = time.monotonic()
+            q = self._events[key]
+            while q and now - q[0] > self.window:
+                q.popleft()
+            if len(q) >= self.max:
+                return False
+            q.append(now)
+            return True
 
     def reset(self, key: str) -> None:
-        self._events.pop(key, None)
+        with self._lock:
+            self._events.pop(key, None)
 
 
 login_limiter = SlidingWindowLimiter(max_events=8, window_seconds=900)

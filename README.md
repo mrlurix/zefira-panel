@@ -42,6 +42,8 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-server-header --no-pr
 
 First run prints the admin username/password in the terminal. If you set `ZEFIRA_ADMIN_PASSWORD` before starting, it will use that instead.
 
+> **Run exactly one worker.** Rate limiters, the restore/update locks, the node monitor loop and the settings cache live in process memory — `--workers N` multiplies rate-limit budgets and can interleave restores. Scale with more machines, not more workers.
+
 Default login: `http://YOUR_SERVER_IP:8000`
 
 ### What you get

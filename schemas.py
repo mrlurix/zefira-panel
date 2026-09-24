@@ -149,7 +149,9 @@ AI_MODEL_RE = r"^[A-Za-z0-9_.\-/:]{1,100}\z"
 
 class AiMsgIn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=2000)
+    # 4000 to match the server's own reply cap: a long assistant reply
+    # stored in history must not 422 the next turn.
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class AiChatIn(BaseModel):
@@ -301,10 +303,15 @@ class TunnelNodeIn(BaseModel):
     forwarded_ports: str = Field(default="", max_length=200, pattern=HOST_PORT_PAIRS_RE)
     udp_forward: bool = False
 
+    @field_validator("forwarded_ports", mode="after")
     @classmethod
     def _check_ports(cls, v: str) -> str:
+        # Range check as a real validator (not __init__): a ValueError here
+        # becomes a 422 with the offending pair, not a 500. The regex allows
+        # [0-9]{1,5}, so 99999:1 would otherwise slip through.
         if not v:
             return v
+        seen = set()
         for pair in v.split(","):
             pair = pair.strip()
             if not pair:
@@ -314,12 +321,10 @@ class TunnelNodeIn(BaseModel):
             a, b = pair.split(":", 1)
             if not (a.isdigit() and b.isdigit() and 1 <= int(a) <= 65535 and 1 <= int(b) <= 65535):
                 raise ValueError(f"port out of range in {pair!r}")
+            if a in seen:
+                raise ValueError(f"duplicate Iran port in {pair!r}")
+            seen.add(a)
         return v
-
-    def __init__(self, **data):
-        if "forwarded_ports" in data and isinstance(data["forwarded_ports"], str):
-            data["forwarded_ports"] = self._check_ports(data["forwarded_ports"])
-        super().__init__(**data)
 
 
 class InboundIn(BaseModel):

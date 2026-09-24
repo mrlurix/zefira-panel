@@ -107,8 +107,15 @@ echo "Detected OS: $(grep -m1 PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= 
 # ---------- Step 1/7 · Port ----------
 step 1 "Panel port" "local port the panel listens on"
 PORT=$(ask "Panel port" "8000")
-PORT=$(echo "$PORT" | tr -cd '0-9'); [[ -z "$PORT" ]] && PORT=8000
+if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]]; then
+    echo "[!] Port must be digits only (got: $PORT)"; exit 1
+fi
+PORT=$(echo "$PORT" | tr -cd '0-9')
 if ((PORT < 1 || PORT > 65535)); then echo "[!] Invalid port: $PORT"; exit 1; fi
+# Preflight: uvicorn will die with a cryptic bind error otherwise.
+if command -v ss >/dev/null && ss -ltn 2>/dev/null | grep -q ":$PORT[[:space:]]"; then
+    echo "[!] Port $PORT is already in use. Stop that process or choose another port."; exit 1
+fi
 
 # ---------- Step 2/7 · Domain ----------
 step 2 "Domain (for links and SSL)" "empty = server IP, no SSL"
@@ -168,6 +175,9 @@ if [[ $INTERACTIVE -eq 1 ]]; then
     echo "  3) MariaDB"
     echo "  4) PostgreSQL"
     DB_CHOICE=$(ask "Choose" "1")
+    if [[ ! "$DB_CHOICE" =~ ^[1-4]$ ]]; then
+        echo "[!] Choose 1-4 (got: $DB_CHOICE)"; exit 1
+    fi
 fi
 if [[ "$DB_CHOICE" == "2" || "$DB_CHOICE" == "3" ]]; then
     DB_HOST=$(ask "DB host" "127.0.0.1")
@@ -216,7 +226,17 @@ step 6 "Telegram notifications (optional)" "bot token + chat ID"
 TG_TOKEN=""; TG_CHAT=""
 if [[ $INTERACTIVE -eq 1 ]]; then
     read -rp "Telegram bot token (empty to skip) []: " TG_TOKEN
-    if [[ -n "$TG_TOKEN" ]]; then read -rp "Telegram chat ID []: " TG_CHAT; fi
+    if [[ -n "$TG_TOKEN" ]]; then
+        read -rp "Telegram chat ID []: " TG_CHAT
+        # Same patterns the panel enforces, so a typo fails here instead of
+        # as a silent "no notifications" after install.
+        if ! [[ "$TG_TOKEN" =~ ^[0-9]{1,15}:[A-Za-z0-9_-]{1,100}$ ]]; then
+            echo "[!] Invalid bot token format (expected 123456:ABC-DEF...)"; exit 1
+        fi
+        if ! [[ "$TG_CHAT" =~ ^@[A-Za-z0-9_]{4,64}$ || "$TG_CHAT" =~ ^-?[0-9]{3,25}$ ]]; then
+            echo "[!] Invalid chat ID (numeric id or @channelname)"; exit 1
+        fi
+    fi
 else
     TG_TOKEN="${TG_BOT_TOKEN:-}"; TG_CHAT="${TG_CHAT_ID:-}"
 fi
@@ -272,6 +292,14 @@ if [[ "$DB_CHOICE" == "4" ]]; then ".venv/bin/pip" install -q psycopg2-binary 2>
 # ---------- .env ----------
 echo "==> [4/6] Writing .env ..."
 ENV_FILE="$TARGET/.env"
+# Re-run safety: never silently destroy the operator's env (secrets, custom
+# DATABASE_URL). The panel scrubs the admin password on first boot, so a
+# backup is the only surviving copy of any hand-set values.
+if [[ -f "$ENV_FILE" ]]; then
+    cp -a "$ENV_FILE" "$ENV_FILE.bak-$(date +%Y%m%d%H%M%S)"
+    echo "[*] Existing .env backed up to $ENV_FILE.bak-<timestamp>"
+    if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(gen_pass); fi
+fi
 if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16); fi
 {
     echo "ZEFIRA_ADMIN_USERNAME=$(env_escape "$ADMIN_USER")"
@@ -336,6 +364,9 @@ EnvironmentFile=-$ENV_FILE
 ExecStartPre=+$_MKDIR -p $TARGET/instance
 ExecStartPre=+$_CHOWN zefira:zefira $TARGET/instance
 ExecStartPre=+$_CHMOD 700 $TARGET/instance
+# SINGLE WORKER ONLY. Rate limiters, the restore/update locks, the node
+# monitor loop and the settings cache are process-local: --workers N would
+# multiply limit budgets, interleave restores and fork monitor loops.
 ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers --no-access-log
 Restart=always
 RestartSec=3
@@ -383,6 +414,11 @@ if [[ "$SETUP_NGINX" == [yY] ]]; then
 fi
 if [[ -n "$NGINX_CONF" ]]; then
     echo "==> Setting up Nginx for $DOMAIN ..."
+    # Re-run safety: back up a hand-edited vhost before overwriting it.
+    if [[ -f "$NGINX_CONF" ]]; then
+        cp -a "$NGINX_CONF" "$NGINX_CONF.bak-$(date +%Y%m%d%H%M%S)"
+        echo "[*] Existing vhost backed up to $NGINX_CONF.bak-<timestamp>"
+    fi
     cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;

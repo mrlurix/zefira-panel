@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=23">
+<link rel="stylesheet" href="assets/style.css?v=28">
 </head>
 <body>
 <header class="topbar">
@@ -53,10 +53,10 @@
 <table>
 <tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/login</code></td><td><code>{username, password}</code></td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td data-i18n="api.authLogout">Invalidates the session server-side</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/logout</code></td><td><span data-i18n="api.authLogout">Invalidates the session server-side</span> <span data-i18n="api.authLogoutAll">(all devices, this panel has no per-session tracking)</span></td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge post">POST</span> <span class="badge del">DELETE</span></td><td><code>/api/api-tokens…</code></td><td data-i18n="api.authTokens">Bot tokens: list, create (once-only secret), revoke</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/me</code></td><td data-i18n="api.authMe">Username</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td data-i18n="api.authPw">Strong-password enforced, kills other sessions</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/change-password</code></td><td><span data-i18n="api.authPw">Strong-password enforced, kills other sessions</span> <span data-i18n="api.authPwTokens">(and revokes every API token — bots must re-auth with a new token)</span></td></tr>
 </table>
 
 <h2 id="users" data-i18n="api.hUsers">Users</h2>
@@ -68,10 +68,10 @@
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td data-i18n="api.usersCreate">Create (protocols, volume, days, first-use, device limit)</td></tr>
 <tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td data-i18n="api.usersPatch">Extend, top-up, note, expiry, active flag</td></tr>
 <tr><td><span class="badge del">DELETE</span></td><td><code>/api/users/{id}</code></td><td>—</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td data-i18n="api.usersResetToken">Rotates token + all secrets</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td><span data-i18n="api.usersResetToken">Rotates token + all secrets</span> <span data-i18n="api.scopeBotOk">(bot scope OK)</span></td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-usage</code></td><td data-i18n="api.usersResetUsage">Zeroes used traffic (for developers/bots)</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset</code></td><td><span data-i18n="api.usersResetA">Developer combo:</span> <code>{"reset_usage": true, "reset_token": false}</code> <span data-i18n="api.usersResetB">— one call for renew/top-up flows (token rotation kills the old link)</span></td></tr>
-<tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td data-i18n="api.usersQr">Sub URL + QR / config file or ZIP</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/users/{id}/qr</code> · <code>/config</code></td><td><span data-i18n="api.usersQr">Sub URL + QR / config file or ZIP</span> <span data-i18n="api.scopeConfigFull">(config: full scope only)</span></td></tr>
 </table>
 
 <h2 id="server-objects" data-i18n="api.hServer">Server objects</h2>
@@ -138,8 +138,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=27"></script>
-<script src="assets/docs.js?v=23"></script>
-<script src="assets/support-ai.js?v=5"></script>
+<script src="assets/i18n.js?v=28"></script>
+<script src="assets/docs.js?v=28"></script>
+<script src="assets/support-ai.js?v=28"></script>
 </body>
 </html>

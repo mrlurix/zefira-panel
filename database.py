@@ -98,6 +98,10 @@ class VpnUser(Base):
         return data
 
     def to_backup_dict(self) -> dict:
+        # None-tolerant: a hand-edited NULL must degrade the backup (with a
+        # restorable fallback), never 500 it.
+        created = self.created_at or utcnow()
+        expires = self.expires_at or utcnow()
         return {
             "username": self.username,
             "protocol": self.protocol,
@@ -111,8 +115,8 @@ class VpnUser(Base):
             "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
             "duration_days": self.duration_days,
-            "created_at": self.created_at.isoformat(timespec="seconds"),
-            "expires_at": self.expires_at.isoformat(timespec="seconds"),
+            "created_at": created.isoformat(timespec="seconds"),
+            "expires_at": expires.isoformat(timespec="seconds"),
         }
 
 
@@ -365,6 +369,10 @@ class Database:
                 cursor = dbapi_connection.cursor()
                 cursor.execute("PRAGMA foreign_keys=ON")
                 cursor.execute("PRAGMA journal_mode=WAL")
+                # Writers collide (sub-fetch presence writes, token touches,
+                # monitor loop, admin ops): block up to 30s instead of
+                # failing fast with "database is locked".
+                cursor.execute("PRAGMA busy_timeout=30000")
                 cursor.close()
 
     def init(self) -> None:

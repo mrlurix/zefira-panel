@@ -10,7 +10,7 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
     // Capture the CURRENT label (not a stale one from page load: the
     // language switcher may have retranslated the button since).
     const label = btn.textContent;
-    if (!text) return;
+    if (!text) { btn.textContent = t("sub.copyFailed"); setTimeout(() => { btn.textContent = label; }, 1500); return; }
     let done = false;
     try {
       await navigator.clipboard.writeText(text);
@@ -37,7 +37,12 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
       } catch (_) {}
     }
     btn.textContent = done ? t("sub.copied") : t("sub.copyFailed");
-    setTimeout(() => { btn.textContent = label; }, 1500);
+    // Re-read the i18n key on restore instead of the captured text: a
+    // language switch inside the 1.5s window must not be clobbered.
+    const restoreKey = btn.getAttribute("data-i18n");
+    setTimeout(() => {
+      btn.textContent = restoreKey && typeof t === "function" ? t(restoreKey) : label;
+    }, 1500);
   });
 });
 

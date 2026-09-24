@@ -24,6 +24,28 @@ function eventName(ev) {
 let USERS_CACHE = [];
 let SORT_MODE = "newest";
 
+// One in-flight submit per form: a double-click / double-Enter fired two
+// POSTs (duplicate rows, 409s, and burned rate-limit budget). Wraps the
+// form's submit button: disabled while the handler awaits, restored after.
+function guardSubmit(form) {
+  if (form.__busy) return false;
+  form.__busy = true;
+  const btn = form.querySelector('button[type="submit"], button:not([type])');
+  if (btn) { btn.disabled = true; form.__busyBtn = btn; }
+  return true;
+}
+function releaseSubmit(form) {
+  form.__busy = false;
+  if (form.__busyBtn) { form.__busyBtn.disabled = false; form.__busyBtn = null; }
+}
+
+// Same in-flight guard for click buttons (add inbound/node/block/token).
+function guardBtn(btn) {
+  if (!btn || btn.disabled) return false;
+  btn.disabled = true;
+  return true;
+}
+
 let numFmt = new Intl.NumberFormat("en-US");
 let dateFmt = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "2-digit" });
 let dateTimeFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -51,9 +73,13 @@ async function api(url, opts = {}) {
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) {
     const d = data && data.detail;
-    const msg = Array.isArray(d)
+    let msg = Array.isArray(d)
       ? d.map((x) => (typeof x === "object" && x.msg ? x.msg : JSON.stringify(x))).join(", ")
       : (d && typeof d === "object" && d.message) || d || `Error (${res.status})`;
+    // Cap raw backend text: a multi-error 422 would otherwise fill the
+    // screen with an unlocalized wall of text.
+    msg = String(msg);
+    if (msg.length > 220) msg = msg.slice(0, 220) + "…";
     throw new Error(msg);
   }
   return data;
@@ -62,8 +88,11 @@ async function api(url, opts = {}) {
 // window.open() downloads bypass the api() 401→login redirect (expired
 // session would show raw JSON in a new tab). Pre-flight the session first.
 async function ensureAuth() {
+  // Only an explicit successful /api/me proves the session: network
+  // failures and expired sessions both return false (expired sessions
+  // already redirect to /login inside api()).
   try { await api("/api/me"); return true; }
-  catch (err) { return err.message !== "auth"; }
+  catch (_) { return false; }
 }
 
 function toast(msg, ok = true) {
@@ -134,16 +163,20 @@ function expiryBadge(u) {
   // Pending users have a far-future sentinel expiry, not a real date:
   // never render "30000 days" or year-2108 for them.
   if (u.pending_start) return badge(t("badge.notStarted"), "pending");
-  const d = daysLeft(u.expires_at);
-  if (d <= 0) return badge(t("badge.expired"), "expired");
+  // Null/invalid expiry (hand-edited row): Expired badge, never 1970 or a
+  // RangeError that blanks the whole table.
+  const d = u.expires_at ? daysLeft(u.expires_at) : NaN;
+  if (!Number.isFinite(d) || d <= 0) return badge(t("badge.expired"), "expired");
   if (d <= 7) return badge(t("badge.expSoon", {d}), "warn");
   return badge(t("badge.expSoon", {d}), "ok");
 }
 function statusBadge(u) {
   if (!u.is_active) return badge(t("badge.paused"), "off");
   if (u.pending_start) return badge(t("badge.notStarted"), "pending");
-  if (u.used_gb >= u.volume_gb) return badge(t("badge.limited"), "limited");
+  // Expired first (same order as the sub page + CSV): an expired AND
+  // over-quota user reads Expired everywhere, not Limited here.
   if (!u.expires_at || daysLeft(u.expires_at) <= 0) return badge(t("badge.expired"), "expired");
+  if ((Number(u.used_gb) || 0) >= (Number(u.volume_gb) || 0)) return badge(t("badge.limited"), "limited");
   return badge(t("badge.active"), "ok");
 }
 function protoBadges(list) {
@@ -168,14 +201,17 @@ function protoBadges(list) {
 function volumeCell(u) {
   const wrap = document.createElement("div");
   wrap.className = "vol";
+  // Number() guards: a hand-edited NULL row must degrade, never throw and
+  // blank the entire table (backend coerces too; this is the last gate).
+  const used = Number(u.used_gb) || 0, vol = Number(u.volume_gb) || 0;
   const label = document.createElement("span");
   label.className = "vol-label";
-  label.textContent = `${u.used_gb.toFixed(1)} / ${u.volume_gb.toFixed(1)} GB`;
+  label.textContent = `${used.toFixed(1)} / ${vol.toFixed(1)} GB`;
   const bar = document.createElement("div");
   bar.className = "bar";
   const fill = document.createElement("div");
   fill.className = "fill";
-  const pct = u.volume_gb > 0 ? Math.min(100, (u.used_gb / u.volume_gb) * 100) : 0;
+  const pct = vol > 0 ? Math.min(100, (used / vol) * 100) : 0;
   fill.style.width = pct + "%";
   if (pct >= 90) fill.classList.add("danger");
   bar.appendChild(fill);
@@ -293,12 +329,25 @@ function renderUserTable(items) {
   for (const u of applySort(items)) tbody.appendChild(userRow(u));
 }
 
+let usersSeq = 0;
+let usersTotal = 0;
 async function loadUsers(q = "") {
+  // Last-issued query wins: a slow earlier fetch must not overwrite the
+  // table with stale rows for a superseded query.
+  const my = ++usersSeq;
   try {
     const data = await api("/api/users?q=" + encodeURIComponent(q));
+    if (my !== usersSeq) return;
     USERS_CACHE = data.items;
+    usersTotal = data.total || data.items.length;
     renderUserTable(USERS_CACHE);
     $("#empty-state").classList.toggle("hidden", data.items.length > 0);
+    const trunc = document.getElementById("users-truncated");
+    if (trunc) {
+      const show = usersTotal > data.items.length;
+      trunc.classList.toggle("hidden", !show);
+      if (show) trunc.textContent = t("msg.showingOf", {n: data.items.length, total: usersTotal});
+    }
     renderRecent([...USERS_CACHE].sort((a, b) => b.id - a.id).slice(0, 5));
   } catch (e) {
     if (e.message !== "auth") toast(e.message, false);
@@ -308,6 +357,16 @@ async function loadUsers(q = "") {
 function renderRecent(items) {
   const tbody = $("#recent-tbody");
   tbody.textContent = "";
+  if (!items.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "muted";
+    td.textContent = t("users.empty");
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
   for (const u of items) {
     const tr = document.createElement("tr");
     const c1 = document.createElement("td");
@@ -317,9 +376,10 @@ function renderRecent(items) {
     const c2 = document.createElement("td");
     c2.appendChild(protoBadges(u.protocols || []));
     const c3 = document.createElement("td");
-    c3.textContent = `${u.volume_gb.toFixed(0)} GB`;
+    c3.textContent = `${(Number(u.volume_gb) || 0).toFixed(0)} GB`;
     const c4 = document.createElement("td");
-    c4.textContent = u.pending_start ? "\u2014" : dateFmt.format(new Date(u.expires_at));
+    const expD = u.pending_start ? null : new Date(u.expires_at || "");
+    c4.textContent = expD && !isNaN(expD.getTime()) ? dateFmt.format(expD) : "—";
     const c5 = document.createElement("td");
     c5.appendChild(statusBadge(u));
     tr.append(c1, c2, c3, c4, c5);
@@ -339,7 +399,7 @@ async function loadStats() {
       (s.pending_start > 0 ? `${s.expiring_soon > 0 ? " · " : ""}` + t("dash.soonPending", {n: s.pending_start}) : "") +
       (s.limited_users > 0 ? `${s.expiring_soon + s.pending_start > 0 ? " · " : ""}` + t("dash.soonLimited", {n: s.limited_users}) : "");
     $("#s-volume").textContent = numFmt.format(Math.round(s.volume_total_gb)) + " GB";
-    $("#s-used").textContent = t("dash.usedPre") + " " + s.used_total_gb.toFixed(1) + " GB";
+    $("#s-used").textContent = t("dash.usedPre") + " " + (Number(s.used_total_gb) || 0).toFixed(1) + " GB";
   } catch (e) {}
 }
 
@@ -412,6 +472,7 @@ document.addEventListener("keydown", (e) => {
 $("#add-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
+  if (!guardSubmit(f)) return;
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast(t("msg.selectProto"), false); return; }
   const volVal = parseFloat(f.volume.value);
@@ -442,7 +503,7 @@ $("#add-user-form").addEventListener("submit", async (e) => {
     loadUsers($("#search").value.trim());
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
-  }
+  } finally { releaseSubmit(f); }
 });
 
 async function loadTemplates() {
@@ -467,7 +528,9 @@ $("#tpl-select").addEventListener("change", () => {
   const sel = $("#tpl-select");
   const opt = sel.selectedOptions[0];
   if (!opt || !opt.dataset.payload) return;
-  const t = JSON.parse(opt.dataset.payload);
+  let t;
+  try { t = JSON.parse(opt.dataset.payload); }
+  catch (_) { toast(t("msg.badNumbers"), false); return; }
   const f = $("#add-user-form");
   f.querySelectorAll('input[name="proto"]').forEach((c) => { c.checked = t.protocols.includes(c.value); });
   f.volume.value = t.volume_gb;
@@ -547,7 +610,10 @@ $("#export-csv-btn").addEventListener("click", () => {
   a.download = "zefira-users.csv";
   a.click();
   URL.revokeObjectURL(a.href);
-  toast(t("msg.exported", {n: rows.length - 1}));
+  const n = rows.length - 1;
+  // Never claim completeness when the backend truncated at 500: the notice
+  // above the table says the same.
+  toast(usersTotal > n ? t("msg.exportedOf", {n, total: usersTotal}) : t("msg.exported", {n}));
 });
 
 $("#users-table").addEventListener("click", async (e) => {
@@ -557,7 +623,7 @@ $("#users-table").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "edit") {
       const u = USERS_CACHE.find((x) => String(x.id) === String(id));
-      if (!u) return;
+      if (!u) { toast(t("msg.badNumbers"), false); loadUsers($("#search").value.trim()); return; }
       $("#edit-uname").textContent = u.username;
       const f = $("#edit-user-form");
       f.note.value = u.note || "";
@@ -627,20 +693,27 @@ $("#users-table").addEventListener("click", async (e) => {
 $("#pw-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
+  if (!guardSubmit(f)) return;
   if (f.new1.value !== f.new2.value) {
     toast(t("msg.pwMismatch"), false);
+    releaseSubmit(f);
     return;
   }
   try {
-    await api("/api/change-password", {
+    const r = await api("/api/change-password", {
       method: "POST",
       body: { current_password: f.current.value, new_password: f.new1.value }
     });
     f.reset();
-    toast(t("msg.pwChanged"));
+    // Changing the password revokes every API token: bots must be
+    // re-created. Say so instead of silently 401-ing them later.
+    toast(r && r.api_tokens_revoked
+      ? `${t("msg.pwChanged")} — ${r.api_tokens_revoked} API token(s) revoked`
+      : t("msg.pwChanged"));
+    loadApiTokens();
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
-  }
+  } finally { releaseSubmit(f); }
 });
 
 function applyBrand(name) {
@@ -928,7 +1001,9 @@ async function saveAllSettings() {
 document.getElementById("save-reality-btn")?.addEventListener("click", saveAllSettings);
 $("#srv-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await saveAllSettings();
+  if (!guardSubmit(e.target)) return;
+  try { await saveAllSettings(); }
+  finally { releaseSubmit(e.target); }
 });
 
 $("#reality-gen-btn").addEventListener("click", async () => {
@@ -1031,11 +1106,13 @@ async function loadNodes() {
   } catch (_) {}
 }
 
-$("#node-create-btn").addEventListener("click", async () => {
+$("#node-create-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   const name = $("#node-name").value.trim();
   const iran = $("#node-iran").value.trim();
   const kharej = $("#node-kharej").value.trim();
   if (!name || !iran || !kharej) { toast(t("msg.fillTunnel"), false); return; }
+  if (!guardBtn(btn)) return;
   try {
     const node = await api("/api/nodes", {
       method: "POST",
@@ -1059,6 +1136,7 @@ $("#node-create-btn").addEventListener("click", async () => {
       if (!w) toast(t("msg.popupBlocked"), false);
     }, 500);
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 
 $("#nodes-list").addEventListener("click", async (e) => {
@@ -1068,7 +1146,12 @@ $("#nodes-list").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "check") {
       const n = await api(`/api/nodes/${id}/check`, { method: "POST" });
-      toast(n.status === "online" ? t("msg.nodeOnline", {ip: n.iran_ip, port: n.tunnel_port}) : t("msg.nodeOffline"), n.status === "online");
+      if (n.status === "online") {
+        toast(t("msg.nodeOnline", {ip: n.iran_ip, port: n.tunnel_port}) + (n.latency_ms != null ? ` (${n.latency_ms}ms)` : ""));
+      } else {
+        // Distinguish bad host/DNS from host-down: same msg, reason appended.
+        toast(t("msg.nodeOffline") + (n.reason ? ` (${n.reason})` : ""), false);
+      }
       loadNodes();
     } else if (btn.dataset.act === "copy") {
       const r = await api(`/api/nodes/${id}/reveal-token`, { method: "POST" });
@@ -1080,9 +1163,19 @@ $("#nodes-list").addEventListener("click", async (e) => {
       if (!w) toast(t("msg.popupBlocked"), false);
     } else if (btn.dataset.act === "refresh") {
       if (!confirm(t("cfm.nodeRegen"))) return;
-      await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
+      // Same once-flow as create: the old token dies immediately, so copy
+      // the new one and re-open the guide instead of stranding the operator.
+      const r = await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
+      if (r && r.token) {
+        if (!await copyText(r.token)) prompt(t("prm.tokenOnce"), r.token);
+      }
       toast(t("msg.tokenRegenDl"));
       loadNodes();
+      setTimeout(async () => {
+        if (!(await ensureAuth())) return;
+        const w = window.open(`/api/nodes/${id}/guide`, "_blank");
+        if (!w) toast(t("msg.popupBlocked"), false);
+      }, 500);
     } else if (btn.dataset.act === "del-node") {
       if (!confirm(t("cfm.nodeDelete", {name: btn.dataset.name}))) return;
       await api("/api/nodes/" + id, { method: "DELETE" });
@@ -1177,10 +1270,12 @@ async function loadInbounds() {
   } catch (_) {}
 }
 
-$("#ib-add-btn").addEventListener("click", async () => {
+$("#ib-add-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   const name = $("#ib-name").value.trim();
   const port = parseInt($("#ib-port").value, 10);
   if (!name || !port) { toast(t("msg.ibNamePort"), false); return; }
+  if (!guardBtn(btn)) return;
   try {
     await api("/api/inbounds", {
       method: "POST",
@@ -1197,6 +1292,7 @@ $("#ib-add-btn").addEventListener("click", async () => {
     toast(t("msg.ibAdded", {name}));
     loadInbounds();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 
 $("#inbounds-tbody").addEventListener("click", async (e) => {
@@ -1294,11 +1390,13 @@ async function loadSrvNodes() {
   } catch (_) {}
 }
 
-$("#snode-create-btn").addEventListener("click", async () => {
+$("#snode-create-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   const name = $("#snode-name").value.trim();
   const address = $("#snode-addr").value.trim();
   const port = parseInt($("#snode-port").value, 10) || 443;
   if (!name || !address) { toast(t("msg.snodeNameAddr"), false); return; }
+  if (!guardBtn(btn)) return;
   try {
     await api("/api/server-nodes", {
       method: "POST",
@@ -1308,6 +1406,7 @@ $("#snode-create-btn").addEventListener("click", async () => {
     toast(t("msg.snodeAdded", {name}));
     loadSrvNodes();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 
 $("#snodes-list").addEventListener("click", async (e) => {
@@ -1370,16 +1469,19 @@ $("#porn-toggle")?.addEventListener("change", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); e.target.checked = !e.target.checked; }
 });
 
-$("#block-add-btn")?.addEventListener("click", async () => {
+$("#block-add-btn")?.addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   const inp = $("#block-domain");
   const domain = inp.value.trim().toLowerCase();
   if (!domain) { toast(t("msg.domainEmpty"), false); return; }
+  if (!guardBtn(btn)) return;
   try {
     await api("/api/blocklist", { method: "POST", body: { domain } });
     inp.value = "";
     toast(t("msg.blocked", {domain}));
     loadBlocklist();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 
 $("#block-list")?.addEventListener("click", async (e) => {
@@ -1400,27 +1502,33 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#edit-m
 $("#edit-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
+  if (!guardSubmit(f)) return;
   const body = {};
   if (f.note.value.trim() !== "") body.set_note = f.note.value.trim();
   if (f.volume.value !== "") {
     const vv = parseFloat(f.volume.value);
-    if (!Number.isFinite(vv) || vv <= 0) { toast(t("msg.badNumbers"), false); return; }
+    if (!Number.isFinite(vv) || vv < 0.01) { toast(t("msg.badNumbers"), false); releaseSubmit(f); return; }
     body.set_volume_gb = vv;
   }
   if (f.expires.value) body.set_expires_at = localInputToUtc(f.expires.value);
-  if (!body.set_expires_at && f.expires.value) { toast(t("msg.badNumbers"), false); return; }
+  if (!body.set_expires_at && f.expires.value) { toast(t("msg.badNumbers"), false); releaseSubmit(f); return; }
   if (f.device_limit.value !== "") {
     const dv = parseInt(f.device_limit.value, 10);
-    body.set_device_limit = Number.isFinite(dv) && dv >= 1 ? dv : 0;
+    // Garbage/-3 previously became 0 → limit silently removed. Validate.
+    if (!/^\d+$/.test(f.device_limit.value.trim()) || !Number.isFinite(dv) || dv < 0) {
+      toast(t("msg.badNumbers"), false); releaseSubmit(f); return;
+    }
+    body.set_device_limit = dv >= 1 ? dv : 0;
   }
   if (f.reset_used.checked) body.reset_used = true;
-  if (!Object.keys(body).length) { toast(t("msg.nothingChanged"), false); return; }
+  if (!Object.keys(body).length) { toast(t("msg.nothingChanged"), false); releaseSubmit(f); return; }
   try {
     await api("/api/users/" + f.dataset.uid, { method: "PATCH", body });
     $("#edit-modal").classList.add("hidden");
     toast(t("msg.userUpdated"));
     loadUsers($("#search").value.trim());
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { releaseSubmit(f); }
 });
 
 // ---- Panel update ----
@@ -1476,6 +1584,17 @@ async function loadUpdate(announce) {
       sum.textContent = t("update.clean", {ver: (st.latest || st.current) + (st.version ? " (v" + st.version + ")" : "")});
       $("#update-now-btn").classList.add("hidden");
       renderChangelog(st.local_log || [], t("update.noLocal"));
+    }
+    // Stale systemd unit: the in-panel updater only refreshes code+deps,
+    // never the unit — surface it loudly or updates silently degrade.
+    const uw = $("#update-unit-warning");
+    if (uw) {
+      if (st.unit_warning) {
+        uw.textContent = t("update.unitStale", {warn: st.unit_warning});
+        uw.classList.remove("hidden");
+      } else {
+        uw.classList.add("hidden");
+      }
     }
     if (announce) toast(t("msg.updateChecked"));
     return st;
@@ -1584,9 +1703,21 @@ $("#ai-save-btn").addEventListener("click", async () => {
     loadAi();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
+$("#ai-test-btn").addEventListener("click", async () => {
+  const btn = $("#ai-test-btn");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const r = await api("/api/ai/test", { method: "POST", body: {} });
+    toast(`${t("ai.testOk")}: ${r.reply || "ok"}`);
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
+});
 $("#ai-fab").addEventListener("click", () => {
   $("#ai-chat").classList.toggle("hidden");
   if (!$("#ai-chat").classList.contains("hidden")) {
+    // Badge may be stale (saved/disabled in another tab): refresh on open.
+    loadAi();
     if (!$("#ai-msgs").children.length) {
       aiAddMsg(t("ai.greeting"), "bot");
     }
@@ -1600,23 +1731,32 @@ async function aiSend() {
   // AI quota with out-of-order replies.
   if (aiSending) return;
   const inp = $("#ai-input");
-  const text = inp.value.trim().slice(0, 2000);
+  const text = inp.value.trim().slice(0, 4000);
   if (!text) return;
+  if (aiSending) return;
   aiSending = true;
   $("#ai-send").disabled = true;
   inp.value = "";
   aiAddMsg(text, "user");
   AI_HISTORY.push({ role: "user", content: text });
   AI_HISTORY = AI_HISTORY.slice(-11);
+  const userMsgEl = $("#ai-msgs").lastElementChild;
   const typing = aiAddMsg("…", "bot typing");
   try {
     const r = await api("/api/ai/chat", { method: "POST", body: { messages: AI_HISTORY } });
     typing.remove();
-    aiAddMsg(r.reply, "bot");
-    AI_HISTORY.push({ role: "assistant", content: r.reply });
+    const reply = String(r.reply || "").slice(0, 4000);
+    aiAddMsg(reply, "bot");
+    AI_HISTORY.push({ role: "assistant", content: reply });
     AI_HISTORY = AI_HISTORY.slice(-12);
   } catch (err) {
     typing.remove();
+    // A failed turn must not destroy the prompt or poison the history
+    // (quota 429 / 502 are exactly when the user retries): restore input
+    // and drop the un-answered user turn.
+    if (userMsgEl) userMsgEl.remove();
+    AI_HISTORY.pop();
+    inp.value = text;
     aiAddMsg(err.message === "auth" ? t("ai.sessionExpired") : (t("ai.errorPre") + err.message), "bot");
   } finally {
     aiSending = false;
@@ -1665,9 +1805,11 @@ async function loadApiTokens() {
     renderApiTokens(await api("/api/api-tokens"));
   } catch (_) {}
 }
-$("#apitoken-create-btn").addEventListener("click", async () => {
+$("#apitoken-create-btn").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   const name = $("#apitoken-name").value.trim();
   if (!name) { toast(t("msg.tokenNameEmpty"), false); return; }
+  if (!guardBtn(btn)) return;
   try {
     const r = await api("/api/api-tokens", { method: "POST", body: { name } });
     $("#apitoken-name").value = "";
@@ -1678,6 +1820,7 @@ $("#apitoken-create-btn").addEventListener("click", async () => {
     toast(t("msg.tokenCreated"));
     loadApiTokens();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 $("#apitoken-list").addEventListener("click", async (e) => {
   const btn = e.target.closest(".row-btn");
@@ -1742,17 +1885,20 @@ async function loadSslStatus() {
   } catch (_) {}
 }
 $("#ssl-issue-btn").addEventListener("click", async () => {
-  const domain = $("#ssl-domain").value.trim();
-  const subdomain = $("#ssl-subdomain").value.trim();
+  const domain = $("#ssl-domain").value.trim().toLowerCase();
+  let subdomain = $("#ssl-subdomain").value.trim().toLowerCase();
   const email = $("#ssl-email").value.trim();
   if (!domain || !email) { toast(t("msg.domainEmailReq"), false); return; }
+  // Mirror the backend: a subdomain already contained in the domain is
+  // dropped, otherwise the confirm shows panel.panel.example.com.
+  if (subdomain && (domain === subdomain || domain.startsWith(subdomain + "."))) subdomain = "";
   const fqdn = subdomain ? `${subdomain}.${domain}` : domain;
   if (!confirm(t("cfm.sslIssue", {fqdn}))) return;
   toast(t("ssl.requesting"));
   try {
     const r = await api("/api/ssl/issue", { method: "POST", body: { domain, subdomain, email } });
     renderSslStatus(r);
-    toast(t("msg.certIssued"));
+    toast(t("msg.certIssued", {cert: r.cert_path || "?", key: r.key_path || "?"}));
     loadAudit();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
@@ -1871,7 +2017,10 @@ async function loadAudit() {
       const main = document.createElement("span");
       main.textContent = eventName(r.event) + (r.detail ? ` \u2014 ${r.detail}` : "");
       const meta = document.createElement("small");
-      meta.textContent = `${dateTimeFmt.format(new Date(r.ts))}${r.ip && r.ip !== "?" ? " \u00b7 " + r.ip : ""}`;
+      // One corrupt timestamp must not blank the whole events list.
+      const tsD = new Date(r.ts);
+      const tsTxt = isNaN(tsD.getTime()) ? String(r.ts || "?") : dateTimeFmt.format(tsD);
+      meta.textContent = `${tsTxt}${r.ip && r.ip !== "?" ? " \u00b7 " + r.ip : ""}`;
       li.appendChild(main);
       li.appendChild(meta);
       ul.appendChild(li);

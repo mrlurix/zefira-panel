@@ -57,6 +57,13 @@ async function api(method, path, body) {
 }
 
 const uname = (tgId) => `tg${tgId}`;
+const panelMsg = (st) => {
+  if (st === 0) return "Panel unreachable — try again in a minute.";
+  if (st === 401 || st === 403) return "Shop unavailable (bot credentials rejected) — tell the shop owner.";
+  if (st === 413) return "No capacity right now — please try again later.";
+  if (st === 429) return "Too many attempts — please wait a minute and retry.";
+  return "Panel error, try later.";
+};
 const md = (s) =>
   // Telegram legacy-Markdown: escape everything interpolated (usernames and
   // URLs may contain _ * ` [ ] etc., which would otherwise 400 the message).
@@ -79,7 +86,7 @@ bot.onText(/^\/my$/, async (msg) => {
   const name = uname(msg.from.id);
   const [st, data] = await api("GET", `/api/users?q=${encodeURIComponent(name)}`);
   if (st !== 200) {
-    bot.sendMessage(msg.chat.id, "Panel error, try later.");
+    bot.sendMessage(msg.chat.id, panelMsg(st));
     return;
   }
   const mine = (data.items || []).find((u) => u.username === name);
@@ -87,16 +94,22 @@ bot.onText(/^\/my$/, async (msg) => {
     bot.sendMessage(msg.chat.id, "No account yet. Use /buy.");
     return;
   }
+  // .get() with fallbacks: a future panel schema change must not crash here.
   bot.sendMessage(
     msg.chat.id,
-    `Your account: ${md(mine.username)}\nVolume: ${md(mine.used_gb)} / ${md(mine.volume_gb)} GB\nExpires: ${md(mine.expires_at)}\n\nSubscription:\n\`${md(SUB_BASE)}/${md(mine.token)}\``,
+    `Your account: ${md(mine.username)}\nVolume: ${md(mine.used_gb ?? 0)} / ${md(mine.volume_gb ?? 0)} GB\nExpires: ${md(mine.expires_at || "?")}\n\nSubscription:\n\`${md(SUB_BASE)}/${md(mine.token || "")}\``,
     { parse_mode: "Markdown" }
   );
 });
 
 bot.on("callback_query", async (q) => {
   const m = /^buy:(\d+)$/.exec(q.data || "");
-  if (!m || !PLANS[Number(m[1])]) return;
+  // Stale inline button (bot restarted with a different plan list): answer
+  // instead of leaving the user's spinner hanging forever.
+  if (!m || !PLANS[Number(m[1])]) {
+    await bot.answerCallbackQuery(q.id, { text: "Plan list changed — send /buy again." }).catch(() => {});
+    return;
+  }
   const plan = PLANS[Number(m[1])];
   const name = uname(q.from.id);
   await bot.answerCallbackQuery(q.id);
@@ -113,7 +126,7 @@ bot.on("callback_query", async (q) => {
   }
   if (st !== 200 || !data.token) {
     console.warn("create failed", st, data);
-    bot.sendMessage(q.message.chat.id, "Could not create the account, try later.");
+    bot.sendMessage(q.message.chat.id, panelMsg(st));
     return;
   }
   bot.sendMessage(
@@ -121,6 +134,9 @@ bot.on("callback_query", async (q) => {
     `Done! ${md(plan.label)}\n\nSubscription (tap to copy):\n\`${md(SUB_BASE)}/${md(data.token)}\`\n\nPaste it into v2rayNG / Streisand / Clash.`,
     { parse_mode: "Markdown" }
   );
+  // Hide the buttons so a second tap cannot hit "already have".
+  bot.editMessageReplyMarkup({ chat_id: q.message.chat.id, message_id: q.message.message_id })
+    .catch(() => {});
 });
 
 console.log("bot polling...");

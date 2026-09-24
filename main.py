@@ -26,8 +26,9 @@ from jinja2 import Environment as _JinjaEnv
 from jinja2 import FileSystemLoader as _JinjaLoader
 from jinja2 import select_autoescape as _autoescape
 from pydantic import ValidationError
-from sqlalchemy import func, select, text as sqltext
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select, text as sqltext, update
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.orm.exc import StaleDataError
 
 import protocols
 from config import BASE_DIR, SESSION_TTL
@@ -131,6 +132,21 @@ user_create_limiter = SlidingWindowLimiter(max_events=120, window_seconds=3600)
 # Serialize restores: two concurrent full-wipes interleave badly, and a
 # second restore right after the first is never legitimate operator flow.
 restore_lock = threading.Lock()
+# Serialize same-user mutations (patch/delete/reset/AI-topup): without this,
+# two simultaneous read-modify-writes (e.g. two +10GB top-ups) both compute
+# from the same stale row and one update is silently lost. Fixed stripe pool
+# (no growth, no cleanup); distinct users sharing a stripe only wait briefly.
+_USER_STRIPES = [threading.Lock() for _ in range(64)]
+
+
+def _user_stripe(uid) -> threading.Lock:
+    """Stripe pool shared by all per-entity mutations (users, nodes): the
+    key just needs to be stable per entity. Distinct entities sharing a
+    stripe only wait briefly; no growth, no cleanup."""
+    try:
+        return _USER_STRIPES[int(uid) % 64]
+    except (TypeError, ValueError):
+        return _USER_STRIPES[hash(str(uid)) % 64]
 
 TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
@@ -402,6 +418,9 @@ BOT_ALLOWED_RE = [
     ("GET", re.compile(r"\A/api/users/by-username/[A-Za-z0-9_]{3,32}\Z")),
     ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset-usage\Z")),
     ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset\Z")),
+    # Same effect as /reset with reset_token:true (already bot-allowed):
+    # identical effects get identical scopes.
+    ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset-token\Z")),
     ("GET", re.compile(r"\A/api/users/[0-9]{1,10}/qr\Z")),
 ]
 
@@ -653,12 +672,43 @@ def public_base_url(request: Request) -> str:
 def audit(s, event: str, detail: str = "", ip: str = "", ok: bool = True) -> None:
     s.add(AuditLog(event=event, detail=detail[:500], ip=ip[:64], ok=ok))
     s.flush()
-    s.execute(
-        sqltext(
-            "DELETE FROM audit_logs WHERE id <= "
-            "(SELECT COALESCE(MAX(id),0) - 2000 FROM audit_logs)"
+    # Prune is best-effort: under write contention a failed prune must not
+    # fail the user-facing op riding in the same transaction (next audit
+    # retries; the table only grows slightly past the cap meanwhile).
+    try:
+        s.execute(
+            sqltext(
+                "DELETE FROM audit_logs WHERE id <= "
+                "(SELECT COALESCE(MAX(id),0) - 2000 FROM audit_logs)"
+            )
         )
-    )
+    except OperationalError:
+        pass
+
+
+def _commit(s, missing: str | None = None) -> None:
+    """Single-commit helper for mutating endpoints (audit rides in the same
+    transaction: no 500-after-mutation, no phantom audits).
+    - IntegrityError: re-raised (caller maps to 409).
+    - StaleDataError: the row was deleted concurrently -> 404, never 500.
+    - OperationalError (lock/contention): 503 so clients retry."""
+    try:
+        s.commit()
+    except IntegrityError:
+        s.rollback()
+        raise
+    except StaleDataError:
+        try:
+            s.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=404, detail=missing or "Not found")
+    except OperationalError:
+        try:
+            s.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=503, detail="Database busy, try again")
 
 
 def load_srv() -> dict:
@@ -684,7 +734,11 @@ def load_inbounds() -> list:
 
 
 def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
-    """TCP probe used by node health checks. Returns (online, latency_ms).
+    """TCP probe used by node health checks. Returns (online, latency_ms, reason).
+
+    reason is None when online, else one of: "blocked" (SSRF-filtered),
+    "dns" (unresolvable), "unreachable" (refused/timeout) — so the UI can
+    tell a typo'd host from a host that is simply down.
 
     SSRF-guarded: link-local (cloud metadata 169.254.169.254), multicast
     and unspecified targets are never dialed. Private + loopback ARE
@@ -694,12 +748,12 @@ def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
     import socket
 
     if _hostname_is_ssrf_blocked(host):
-        return False, None
+        return False, None, "blocked"
     online, latency = False, None
     try:
         addrinfos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
     except socket.gaierror:
-        return False, None
+        return False, None, "dns"
     # Filter blocked resolved IPs (DNS-rebinding guard): skip metadata /
     # link-local / multicast / unspecified dial targets.
     filtered = []
@@ -709,7 +763,8 @@ def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
             continue
         filtered.append((family, socktype, proto, _canon, sa))
     if not filtered:
-        return False, None
+        return False, None, "blocked"
+    refused = False
     for family, socktype, proto, _canon, sa in filtered[:3]:
         conn = socket.socket(family, socktype, proto)
         conn.settimeout(timeout)
@@ -718,13 +773,17 @@ def probe_host(host: str, port: int, timeout: float = 3.0) -> tuple:
             conn.connect(sa)
             online = True
             latency = int((time_mod.monotonic() - start) * 1000)
-        except OSError:
+        except socket.timeout:
             pass
+        except OSError:
+            refused = True
         finally:
             conn.close()
         if online:
             break
-    return online, latency
+    if online:
+        return True, latency, None
+    return False, None, "unreachable"
 
 
 def load_blocked_for_clash() -> list:
@@ -753,16 +812,22 @@ def notify_async(text: str) -> None:
             import urllib.parse
             import urllib.request
 
-            data = urllib.parse.urlencode({"chat_id": chat, "text": text[:500]}).encode()
+            # parse_mode=HTML renders the <b> tags call sites embed.
+            # Interpolated values (usernames, admin names, IPs) are all
+            # charset-constrained ([A-Za-z0-9_.]), so no tag injection.
+            data = urllib.parse.urlencode(
+                {"chat_id": chat, "text": text[:500], "parse_mode": "HTML"}
+            ).encode()
             req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-            urllib.request.urlopen(req, timeout=6)
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                resp.read()
         except Exception as e:
-            log.debug("telegram notify failed: %s", e)
+            log.warning("telegram notify failed: %s", e)
 
     try:
         threading.Thread(target=_send, daemon=True).start()
     except Exception as e:
-        log.debug("notify thread spawn failed: %s", e)
+        log.warning("notify thread spawn failed: %s", e)
 
 
 @asynccontextmanager
@@ -784,7 +849,12 @@ async def lifespan(_: FastAPI):
                 log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one (printed below)")
                 password = secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
-            s.commit()
+            try:
+                s.commit()
+            except IntegrityError:
+                # Dual-worker cold start (unsupported, but cheap to survive):
+                # the other worker won the insert race.
+                s.rollback()
             print("=" * 58)
             print("  ZEFIRA PANEL - FIRST RUN")
             print(f"  URL:      http://127.0.0.1:8000/")
@@ -842,7 +912,7 @@ def _srvnode_monitor_loop() -> None:
             consec_failures = 0
             for nid, host, port in items:
                 try:
-                    online, latency = probe_host(host, port)
+                    online, latency, _reason = probe_host(host, port)
                 except Exception:
                     online, latency = False, None
                 try:
@@ -995,6 +1065,17 @@ async def csrf_and_size_middleware(request: Request, call_next):
         bearer = auth_h[:7].lower() == "bearer " and len(auth_h) > 7
         if not bearer and request.headers.get("x-requested-with") != "XMLHttpRequest":
             return JSONResponse({"detail": "forbidden"}, status_code=403)
+    # Restore isolation: a restore wipes users while merging the rest, so a
+    # write landing mid-restore is silently wiped (or half-merged). Reject
+    # mutating API calls while the restore lock is held; the restore/backup
+    # endpoints themselves plus login stay usable.
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        _rp = request.url.path
+        if _rp.startswith("/api/") and not _rp.startswith(
+            ("/api/restore", "/api/backup", "/api/login", "/api/update/status")
+        ):
+            if restore_lock.locked():
+                return JSONResponse({"detail": "Restore in progress, try again"}, status_code=409)
     return await call_next(request)
 
 
@@ -1021,18 +1102,19 @@ async def require_admin(request: Request) -> Admin:
     token = request.cookies.get(COOKIE_NAME)
     if token:
         payload = decode_session(token)
-        if not payload:
-            raise HTTPException(status_code=401, detail="Session expired")
-        try:
-            admin_pk = int(payload.get("sub", 0))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=401, detail="Session expired")
-        with db.s() as s:
-            admin = s.get(Admin, admin_pk)
-            if not admin or payload.get("ver") != admin.token_version:
-                raise HTTPException(status_code=401, detail="Session expired")
-            request.state.admin_id = admin.id
-            return admin
+        if payload:
+            try:
+                admin_pk = int(payload.get("sub", 0))
+            except (TypeError, ValueError):
+                admin_pk = 0
+            if admin_pk:
+                with db.s() as s:
+                    admin = s.get(Admin, admin_pk)
+                    if admin and payload.get("ver") == admin.token_version:
+                        request.state.admin_id = admin.id
+                        return admin
+        # Invalid/expired cookie: fall through to bearer instead of 401 —
+        # bots in cookie-carrying contexts must not die on a stale cookie.
     auth = request.headers.get("authorization", "")
     if auth[:7].lower() == "bearer " and len(auth.strip()) > 7:
         raw = auth[7:].strip()
@@ -1049,10 +1131,22 @@ async def require_admin(request: Request) -> Admin:
                 with db.s() as s:
                     admin = s.get(Admin, tok[2]) if tok[2] else None
                     if admin:
-                        touch = s.get(ApiToken, tok[0])
-                        if touch is not None:
-                            touch.last_used_at = utcnow()
-                            s.commit()
+                        # Throttled like sub last_fetch (one write/min): every
+                        # bot poll taking a write lock feeds lock contention.
+                        # Advisory: a failed touch must never 500 the caller.
+                        try:
+                            touch = s.get(ApiToken, tok[0])
+                            if touch is not None and (
+                                not touch.last_used_at
+                                or (utcnow() - touch.last_used_at).total_seconds() > 60
+                            ):
+                                touch.last_used_at = utcnow()
+                                s.commit()
+                        except OperationalError:
+                            try:
+                                s.rollback()
+                            except Exception:
+                                pass
                         request.state.admin_id = admin.id
                         request.state.token_id = tok[0]
                         request.state.token_name = tok[1]
@@ -1152,7 +1246,15 @@ def api_logout(request: Request, response: Response):
                         row.token_version += 1
                         audit(s, "LOGOUT", f"user={row.username}", client_ip(request))
                         s.commit()
-    response.delete_cookie(COOKIE_NAME, path="/")
+    # Mirror the login flags: some browsers won't overwrite a Secure cookie
+    # from a non-Secure clearing response, leaving a stale cookie behind.
+    response.delete_cookie(
+        COOKIE_NAME,
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=(request_scheme(request) == "https"),
+    )
     return {"ok": True}
 
 
@@ -1187,14 +1289,21 @@ def api_change_password(
         row = s.get(Admin, admin.id)
         row.password_hash = hash_password(data.new_password)
         row.token_version += 1
-        audit(s, "PW_CHANGE", f"user={row.username}", client_ip(request))
+        # Containment: bearer API tokens do NOT carry token_version, so a
+        # password change alone would leave them valid. Revoke them all —
+        # the response reports the count so the UI can warn about bots.
+        revoked = s.execute(
+            sqltext("DELETE FROM api_tokens WHERE admin_id = :aid"), {"aid": admin.id}
+        ).rowcount
+        audit(s, "PW_CHANGE", f"user={row.username} tokens_revoked={revoked}", client_ip(request))
         s.commit()
         version = row.token_version
     pw_limiter.reset(f"pw|{admin.id}")
     login_limiter.reset(f"{client_ip(request)}|{row.username.lower()}")
+    login_user_limiter.reset(f"u|{row.username.lower()}")
     set_session_cookie(response, request, admin.id, version)
     log.info("Password changed user=%s ip=%s", admin.username, client_ip(request))
-    return {"ok": True}
+    return {"ok": True, "api_tokens_revoked": revoked or 0}
 
 
 @app.get("/api/audit")
@@ -1252,6 +1361,10 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
 
 @app.post("/api/reality/generate")
 def api_reality_generate(request: Request, admin: Admin = Depends(require_admin)):
+    # ROTATES the server keypair (kills all existing REALITY links): throttle
+    # like other sensitive ops so a compromised session cannot churn it.
+    if not sensitive_limiter.hit(f"realitygen|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     priv, pub = protocols.generate_reality_keypair()
     with db.s() as s:
         for k, v in (("reality_pub", pub), ("reality_priv_enc", encrypt_text(priv))):
@@ -1329,7 +1442,7 @@ def _ssl_state() -> dict:
 def _run_certbot(fqdn: str, email: str | None, keep_until_expiring: bool) -> tuple[bool, str]:
     certbot = shutil.which("certbot")
     if not certbot:
-        return False, "certbot is not installed on this server (apt install certbot)"
+        return False, "certbot is not installed on this server (Debian/Ubuntu: apt install certbot; RHEL: dnf install certbot)"
     cmd = [
         certbot, "certonly", "--standalone", "--non-interactive", "--agree-tos",
         "--http-01-port", "80", "-d", fqdn,
@@ -1348,12 +1461,17 @@ def _run_certbot(fqdn: str, email: str | None, keep_until_expiring: bool) -> tup
     tail = "\n".join(out.splitlines()[-8:])
     if proc.returncode != 0:
         low = out.lower()
+        # In-panel certbot runs as the unprivileged service user (sudoers
+        # covers only systemctl): binding :80 and writing /etc/letsencrypt
+        # need root. Say so explicitly instead of a generic tail.
+        if "permission denied" in low or "must be root" in low or "need root" in low or "eacces" in low:
+            return False, "certbot needs root for port 80 and /etc/letsencrypt — run it on the server as root, or deploy the panel behind nginx (installer does this)"
         if "could not bind" in low or "address already in use" in low or "port 80" in low:
             return False, "port 80 is busy (stop nginx or whatever listens on :80) and retry"
         if "dns" in low and ("no valid ip" in low or "nxdomain" in low or "dns problem" in low):
             return False, "domain DNS does not point to this server"
         if "too many" in low and "rate" in low:
-            return False, "Let's Encrypt rate limit hit — try again later"
+            return False, "Let's Encrypt rate limit hit (5 identical certificates per domain per week) — wait up to 7 days, and use --staging while testing"
         return False, f"certbot failed: {tail[:500]}" or "certbot failed"
     return True, tail[:500]
 
@@ -1367,7 +1485,13 @@ def api_ssl_status(admin: Admin = Depends(require_admin)):
 def api_ssl_issue(data: SslIssueIn, request: Request, admin: Admin = Depends(require_admin)):
     if not ssl_limiter.hit(f"ssl|{admin.id}"):
         raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
-    fqdn = f"{data.subdomain}.{data.domain}" if data.subdomain else data.domain
+    domain = (data.domain or "").strip().lower()
+    subdomain = (data.subdomain or "").strip().lower()
+    if subdomain and (domain == subdomain or domain.startswith(subdomain + ".")):
+        # domain=panel.example.com + subdomain=panel would request
+        # panel.panel.example.com: the subdomain is already in the domain.
+        subdomain = ""
+    fqdn = f"{subdomain}.{domain}" if subdomain else domain
     ok, msg = _run_certbot(fqdn, data.email, keep_until_expiring=False)
     with db.s() as s:
         if ok:
@@ -1469,13 +1593,13 @@ def api_templates_create(data: TemplateCreateIn, request: Request, admin: Admin 
 @app.delete("/api/templates/{template_id}")
 def api_templates_delete(template_id: int, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        t = s.get(UserTemplate, template_id)
+        t = s.get(UserTemplate, _oid(template_id))
         if not t:
             raise HTTPException(status_code=404, detail="Template not found")
         name = t.name
         s.delete(t)
         audit(s, "TEMPLATE_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Template not found")
     return {"ok": True}
 
 
@@ -1520,6 +1644,8 @@ def api_tokens_list(admin: Admin = Depends(require_admin)):
 
 @app.post("/api/api-tokens")
 def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"tokencreate|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     raw = "zfp_" + secrets.token_urlsafe(32)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     scopes = data.scopes if data.scopes in ("full", "bot") else "full"
@@ -1554,14 +1680,16 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
 
 @app.delete("/api/api-tokens/{token_id}")
 def api_tokens_delete(token_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"tokendel|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     with db.s() as s:
-        row = s.get(ApiToken, token_id)
+        row = s.get(ApiToken, _oid(token_id))
         if not row:
             raise HTTPException(status_code=404, detail="Token not found")
         name = row.name
         s.delete(row)
         audit(s, "APITOKEN_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Token not found")
     log.info("API token revoked %s by %s", name, admin.username)
     return {"ok": True}
 
@@ -1647,6 +1775,7 @@ Available tools (args are JSON, all required unless marked optional):
 - reset_usage {"username": "ali"} — zeroes used traffic.
 - set_active {"username": "ali", "active": true} — true/false, pauses or enables service.
 - subscription_link {"username": "ali"} — returns the user's subscription URL.
+Units: there is no MB or months argument — ALWAYS convert first (MB→GB divide by 1024, months→days ×30) and state the conversion in your reply (e.g. "500MB = 0.5GB", "2 months = 60 days").
 Rules: ONE action block per turn, valid JSON only. If args are missing/invalid, ask the user for the missing piece instead of guessing (never invent usernames). These are NEVER available as actions — guide the user to click instead: deleting users, resetting tokens/keys, backup/restore, updates, settings changes, API tokens, password changes. Action blocks are invisible protocol: your visible reply must never contain one.
 """
 
@@ -1799,7 +1928,17 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
     try:
         if provider == "anthropic":
             url = _anthropic_base(base_url) + "/v1/messages"
-            payload = {"model": model, "max_tokens": 800, "system": system, "messages": msgs}
+            # Anthropic rejects system-role entries inside messages AND
+            # consecutive same-role messages: fold tool results into user
+            # turns and merge runs (same alternation the loop already keeps).
+            folded = []
+            for m in msgs:
+                role = "user" if m["role"] == "system" else m["role"]
+                if folded and folded[-1]["role"] == role:
+                    folded[-1]["content"] += "\n" + m["content"]
+                else:
+                    folded.append({"role": role, "content": m["content"]})
+            payload = {"model": model, "max_tokens": 800, "system": system, "messages": folded}
             headers.update({"x-api-key": api_key, "anthropic-version": "2023-06-01"})
         elif provider == "gemini":
             base = _gemini_base(base_url)
@@ -1958,6 +2097,26 @@ def api_ai_settings_put(data: AiSettingsIn, request: Request, admin: Admin = Dep
     return {"ok": True}
 
 
+@app.post("/api/ai/test")
+def api_ai_test(request: Request, admin: Admin = Depends(require_admin)):
+    """One cheap completion to verify provider/base_url/model/key BEFORE the
+    operator discovers a dead config at first real chat. Burns one quota
+    unit, like a single chat turn."""
+    if not ai_limiter.hit(f"ai|{admin.id}"):
+        raise HTTPException(status_code=429, detail="AI quota used up, try again later")
+    s = _ai_settings()
+    api_key = decrypt_text(cached_setting("ai_api_key_enc"))
+    if not s["enabled"] or not api_key or not s["model"]:
+        raise HTTPException(status_code=400, detail="AI assistant is not configured (Settings first)")
+    ok, reply = _ai_complete(
+        s["provider"], s["base_url"], s["model"], api_key,
+        "You are a connectivity probe.", [{"role": "user", "content": "Reply with exactly: ok"}],
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail=reply)
+    return {"ok": True, "reply": reply.strip()[:200]}
+
+
 def _parse_ai_action(reply: str):
     """Extract the LAST ```action JSON block. Returns (tool, args) or None."""
     if not reply or "```action" not in reply:
@@ -2029,7 +2188,14 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
         with db.s() as s:
             row = s.scalar(select(VpnUser).where(VpnUser.username == name))
             if not row:
-                return None, f"no user named {name!r}"
+                # find_user matches case-insensitively (LIKE): mirror that
+                # here when unambiguous, else point at find_user.
+                alts = s.scalars(
+                    select(VpnUser).where(func.lower(VpnUser.username) == name.lower())
+                ).all()
+                if len(alts) == 1:
+                    return alts[0].to_dict(), None
+                return None, f"no user named {name!r} — call find_user to get the exact name"
             return row.to_dict(), None
 
     if tool == "panel_stats":
@@ -2126,18 +2292,16 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
                 expires_at=expires,
             )
             s.add(user)
-            try:
-                s.commit()
-            except IntegrityError:
-                s.rollback()
-                return False, f"username {data.username!r} is already taken"
             audit(
                 s, "AI_CREATE",
                 f"{data.username} [{','.join(proto_list)}] via AI by {admin.username}",
                 ip,
             )
-            s.commit()
             stok = user.token
+            try:
+                _commit(s)
+            except IntegrityError:
+                return False, f"username {data.username!r} is already taken"
         base = public_base_url(request)
         sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
         notify_async(f"\u2713 Zefira: user <b>{data.username}</b> created via AI by {admin.username}")
@@ -2174,45 +2338,52 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
             if not 0.01 <= gb <= 100000:
                 return False, "gb must be 0.01-100000"
         elif tool == "set_active":
-            if not isinstance(args.get("active"), bool):
+            # Same lenient-bool rule as start_on_first_use (true/"true"/1):
+            # one strictness rule for every AI arg.
+            try:
+                active_arg = _parse_ai_bool(args.get("active"))
+            except ValueError:
                 return False, "active must be true/false"
+        else:
+            active_arg = None
         info, err = _lookup(args.get("username"))
         if err:
             return False, err
-        with db.s() as s:
-            user = s.scalar(select(VpnUser).where(VpnUser.username == info["username"]))
-            if not user:
-                return False, f"no user named {info['username']!r}"
-            change = ""
-            if tool == "extend_user":
-                now = utcnow()
-                if user.expires_at and user.expires_at.year >= PENDING_YEAR:
-                    base = now
-                    # Leaving pending: drop SOFU flags like HTTP PATCH does.
-                    user.start_on_first_use = False
-                    user.duration_days = None
-                elif user.expires_at and user.expires_at > now:
-                    base = user.expires_at
-                else:
-                    base = now
-                user.expires_at = base + timedelta(days=days)
-                change = f"+{days}d"
-            elif tool == "add_volume":
-                # Clamp the total like create/set paths cap at 100000:
-                # repeated top-ups must not grow quota without bound.
-                user.volume_gb = min(100000, max(0.01, user.volume_gb + gb))
-                change = f"vol+{gb:g}"
-            elif tool == "reset_usage":
-                user.used_gb = 0.0
-                change = "used=0"
-            elif tool == "set_active":
-                active = args.get("active")
-                user.is_active = active
-                change = "enabled" if active else "paused"
-            s.commit()
-            audit(s, "AI_PATCH", f"{user.username} ({change}) via AI by {admin.username}", ip)
-            s.commit()
-            return True, f"{user.username}: {change}"
+        # Same stripe as the HTTP user endpoints (keyed by user id): an AI
+        # top-up racing a panel top-up must not lose an update.
+        with _user_stripe(info.get("id") or info.get("username")):
+            with db.s() as s:
+                user = s.scalar(select(VpnUser).where(VpnUser.username == info["username"]))
+                if not user:
+                    return False, f"no user named {info['username']!r} — call find_user to get the exact name"
+                change = ""
+                if tool == "extend_user":
+                    now = utcnow()
+                    if user.expires_at and user.expires_at.year >= PENDING_YEAR:
+                        base = now
+                        # Leaving pending: drop SOFU flags like HTTP PATCH does.
+                        user.start_on_first_use = False
+                        user.duration_days = None
+                    elif user.expires_at and user.expires_at > now:
+                        base = user.expires_at
+                    else:
+                        base = now
+                    user.expires_at = base + timedelta(days=days)
+                    change = f"+{days}d"
+                elif tool == "add_volume":
+                    # Clamp the total like create/set paths cap at 100000:
+                    # repeated top-ups must not grow quota without bound.
+                    user.volume_gb = min(100000, max(0.01, user.volume_gb + gb))
+                    change = f"vol+{gb:g}"
+                elif tool == "reset_usage":
+                    user.used_gb = 0.0
+                    change = "used=0"
+                elif tool == "set_active":
+                    user.is_active = active_arg
+                    change = "enabled" if active_arg else "paused"
+                audit(s, "AI_PATCH", f"{user.username} ({change}) via AI by {admin.username}", ip)
+                _commit(s, missing="User not found")
+                return True, f"{user.username}: {change}"
     return False, f"unknown tool {tool!r}"
 
 
@@ -2237,12 +2408,20 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
     # HTTP API, then feeds the result back. Capped rounds AND actions so a
     # chatty model cannot chain unbounded operations.
     for _ in range(AI_MAX_ROUNDS):
+        if len(actions_done) >= AI_MAX_ACTIONS:
+            # Cap BEFORE the provider call: a wasted round-trip (up to 60s
+            # + quota) whose action would be silently dropped is worse than
+            # telling the user to continue in a new message.
+            reply = (
+                (reply + "\nAction limit reached for this turn — continue in a new message.").strip()
+                if reply
+                else "Action limit reached for this turn — continue in a new message."
+            )
+            break
         ok, reply = _ai_complete(s["provider"], s["base_url"], s["model"], api_key, system, history)
         if not ok:
             log.warning("AI chat failed for %s: %s", admin.username, reply[:150])
             raise HTTPException(status_code=502, detail=reply)
-        if len(actions_done) >= AI_MAX_ACTIONS:
-            break
         parsed = _parse_ai_action(reply)
         if not parsed:
             break
@@ -2267,7 +2446,16 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
         ]
     final = AI_ACTION_RE.sub("", reply).strip()[:4000]
     if not final:
-        final = "Done." if actions_done and all(a["ok"] for a in actions_done) else reply.strip()[:4000]
+        if actions_done and all(a["ok"] for a in actions_done):
+            final = "Done."
+        elif actions_done:
+            # The last reply was a pure action block that failed: echoing
+            # the raw ```action JSON leaks protocol to the user. Synthesize
+            # a human summary from the recorded tool result instead.
+            last = actions_done[-1]
+            final = f"Couldn't complete {last['tool']}: {last['summary']}"[:1000]
+        else:
+            final = reply.strip()[:4000]
     return {"reply": final, "actions": actions_done}
 
 
@@ -2650,7 +2838,7 @@ def api_nodes_create(data: TunnelNodeIn, request: Request, admin: Admin = Depend
 
 
 def _get_node_or_404(s, node_id: int) -> TunnelNode:
-    node = s.get(TunnelNode, node_id)
+    node = s.get(TunnelNode, _oid(node_id))
     if not node:
         raise HTTPException(status_code=404, detail="Tunnel not found")
     return node
@@ -2658,6 +2846,8 @@ def _get_node_or_404(s, node_id: int) -> TunnelNode:
 
 @app.post("/api/nodes/{node_id}/reveal-token")
 def api_node_reveal_token(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"nodereveal|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     with db.s() as s:
         node = _get_node_or_404(s, node_id)
         token = decrypt_text(node.token_enc)
@@ -2673,6 +2863,8 @@ def api_node_reveal_token(node_id: int, request: Request, admin: Admin = Depends
 
 @app.post("/api/nodes/{node_id}/regen-token")
 def api_node_regen_token(node_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    if not sensitive_limiter.hit(f"noderegen|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     token_plain = secrets.token_urlsafe(24)
     with db.s() as s:
         node = _get_node_or_404(s, node_id)
@@ -2730,7 +2922,7 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
         port = node.tunnel_port
         node_id_val = node.id
     # Reuse the SSRF-guarded prober (blocks metadata/link-local dials).
-    online, _lat = probe_host(host, port, timeout=3.0)
+    online, lat, reason = probe_host(host, port, timeout=3.0)
     with db.s() as s:
         node = s.get(TunnelNode, node_id_val)
         if not node:
@@ -2739,26 +2931,40 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
         node.status = "online" if online else "offline"
         node.last_check = utcnow()
         out = node.to_dict()
+        # TunnelNode has no latency column: report this probe inline (and
+        # WHY it failed: bad host/DNS vs host simply down).
+        out["latency_ms"] = lat
+        out["reason"] = reason
         audit(s, "NODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
         s.commit()
     return out
 
 
 def _get_srvnode_or_404(s, node_id: int) -> ServerNode:
-    node = s.get(ServerNode, node_id)
+    node = s.get(ServerNode, _oid(node_id))
     if not node:
         raise HTTPException(status_code=404, detail="Server node not found")
     return node
 
 
 def _record_srvnode_probe(s, node: ServerNode, online: bool, latency: int | None) -> None:
-    node.status = "online" if online else "offline"
-    node.latency_ms = latency
-    node.last_check = utcnow()
-    if online:
-        node.success_count = (node.success_count or 0) + 1
-    else:
-        node.fail_count = (node.fail_count or 0) + 1
+    # Atomic SQL (not read-modify-write): the 5-min monitor loop and a
+    # manual check can overlap — ORM increments would lose a probe and skew
+    # uptime_pct. The ORM object is expired so to_dict() re-reads fresh.
+    now = utcnow()
+    s.execute(
+        update(ServerNode)
+        .where(ServerNode.id == node.id)
+        .values(
+            status="online" if online else "offline",
+            latency_ms=latency,
+            last_check=now,
+            # coalesce: a hand-edited NULL must count from 0, not stay NULL.
+            success_count=(func.coalesce(ServerNode.success_count, 0) + 1) if online else ServerNode.success_count,
+            fail_count=(func.coalesce(ServerNode.fail_count, 0) + 1) if not online else ServerNode.fail_count,
+        )
+    )
+    s.expire(node)
 
 
 @app.get("/api/server-nodes")
@@ -2781,14 +2987,12 @@ def api_srvnodes_create(data: ServerNodeIn, request: Request, admin: Admin = Dep
             note=data.note or "",
         )
         s.add(node)
+        audit(s, "SRVNODE_CREATE", f"{data.name} {data.address}:{data.check_port} by {admin.username}", client_ip(request))
         try:
-            s.commit()
+            _commit(s)
         except IntegrityError:
-            s.rollback()
             raise HTTPException(status_code=409, detail="A server node with this name already exists")
         out = node.to_dict()
-        audit(s, "SRVNODE_CREATE", f"{data.name} {data.address}:{data.check_port} by {admin.username}", client_ip(request))
-        s.commit()
     log.info("Server node created %s by %s", data.name, admin.username)
     return out
 
@@ -2810,10 +3014,9 @@ def api_srvnodes_patch(node_id: int, data: ServerNodePatchIn, request: Request, 
         if data.address is not None or data.check_port is not None:
             node.status = "unknown"
             node.latency_ms = None
-        s.commit()
-        out = node.to_dict()
         audit(s, "SRVNODE_PATCH", f"{node.name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Server node not found")
+        out = node.to_dict()
     return out
 
 
@@ -2826,7 +3029,7 @@ def api_srvnodes_delete(node_id: int, request: Request, admin: Admin = Depends(r
             ib.node_id = None
         s.delete(node)
         audit(s, "SRVNODE_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Server node not found")
     log.info("Server node deleted %s by %s", name, admin.username)
     return {"ok": True}
 
@@ -2838,13 +3041,15 @@ def api_srvnodes_check(node_id: int, request: Request, admin: Admin = Depends(re
     with db.s() as s:
         node = _get_srvnode_or_404(s, node_id)
         host, port, node_id_val = node.address, node.check_port, node.id
-    online, latency = probe_host(host, port)
+    online, latency, _reason = probe_host(host, port)
     with db.s() as s:
         node = s.get(ServerNode, node_id_val)
         if not node:
             raise HTTPException(status_code=404, detail="Server node not found")
         _record_srvnode_probe(s, node, online, latency)
         out = node.to_dict()
+        if online and latency is not None:
+            out["latency_ms"] = latency
         audit(s, "SRVNODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
         s.commit()
     return out
@@ -3440,7 +3645,10 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                             last_used = None
                     tscopes = str(rt.get("scopes", "full") or "full").strip().lower()
                     if tscopes not in ("full", "bot"):
-                        tscopes = "full"
+                        # Fail closed like _token_scope_allowed (unknown scope
+                        # defaults to 403): never restore as full.
+                        skipped += 1
+                        continue
                     s.add(ApiToken(
                         name=tname,
                         prefix=prefix,
@@ -3598,7 +3806,7 @@ def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depend
         exists = s.scalar(select(Inbound.id).where(Inbound.name == data.name))
         if exists:
             raise HTTPException(status_code=409, detail="An inbound with this name already exists")
-        if data.node_id is not None and not s.get(ServerNode, data.node_id):
+        if data.node_id is not None and not s.get(ServerNode, _oid(data.node_id)):
             raise HTTPException(status_code=404, detail="Server node not found")
         conflict = _inbound_port_conflict(s, data.protocol, data.port, data.node_id)
         if conflict:
@@ -3612,14 +3820,12 @@ def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depend
             node_id=data.node_id,
         )
         s.add(ib)
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
-            raise HTTPException(status_code=409, detail="An inbound with this name already exists")
-        out = ib.to_dict()
         audit(s, "INBOUND_CREATE", f"{data.name} {data.protocol}:{data.port} by {admin.username}", client_ip(request))
-        s.commit()
+        out = ib.to_dict()
+        try:
+            _commit(s)
+        except IntegrityError:
+            raise HTTPException(status_code=409, detail="An inbound with this name already exists")
     log.info("Inbound created %s by %s", data.name, admin.username)
     return out
 
@@ -3629,7 +3835,7 @@ def api_inbounds_patch(
     inbound_id: int, data: InboundPatchIn, request: Request, admin: Admin = Depends(require_admin)
 ):
     with db.s() as s:
-        ib = s.get(Inbound, inbound_id)
+        ib = s.get(Inbound, _oid(inbound_id))
         if not ib:
             raise HTTPException(status_code=404, detail="Inbound not found")
         if data.enabled is not None:
@@ -3640,30 +3846,29 @@ def api_inbounds_patch(
             ib.host = data.host
         if "node_id" in data.model_fields_set:
             # Explicit null unassigns the inbound back to this panel.
-            if data.node_id and not s.get(ServerNode, data.node_id):
+            if data.node_id and not s.get(ServerNode, _oid(data.node_id)):
                 raise HTTPException(status_code=404, detail="Server node not found")
             ib.node_id = data.node_id or None
         if data.port is not None or "node_id" in data.model_fields_set:
             conflict = _inbound_port_conflict(s, ib.protocol, ib.port, ib.node_id, ignore_id=ib.id)
             if conflict:
                 raise HTTPException(status_code=409, detail=conflict)
-        s.commit()
-        out = ib.to_dict()
         audit(s, "INBOUND_PATCH", f"{ib.name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Inbound not found")
+        out = ib.to_dict()
     return out
 
 
 @app.delete("/api/inbounds/{inbound_id}")
 def api_inbounds_delete(inbound_id: int, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        ib = s.get(Inbound, inbound_id)
+        ib = s.get(Inbound, _oid(inbound_id))
         if not ib:
             raise HTTPException(status_code=404, detail="Inbound not found")
         name = ib.name
         s.delete(ib)
         audit(s, "INBOUND_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Inbound not found")
     log.info("Inbound deleted %s by %s", name, admin.username)
     return {"ok": True}
 
@@ -3694,14 +3899,12 @@ def api_blocklist_add(data: BlockedSiteIn, request: Request, admin: Admin = Depe
             raise HTTPException(status_code=409, detail="Block list is full (500 max)")
         site = BlockedSite(domain=data.domain.lower(), category="custom", enabled=data.enabled)
         s.add(site)
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
-            raise HTTPException(status_code=409, detail="This domain is already blocked")
-        out = site.to_dict()
         audit(s, "BLOCK_ADD", f"{data.domain} by {admin.username}", client_ip(request))
-        s.commit()
+        out = site.to_dict()
+        try:
+            _commit(s)
+        except IntegrityError:
+            raise HTTPException(status_code=409, detail="This domain is already blocked")
     log.info("Blocked site added %s by %s", data.domain, admin.username)
     return out
 
@@ -3709,13 +3912,13 @@ def api_blocklist_add(data: BlockedSiteIn, request: Request, admin: Admin = Depe
 @app.delete("/api/blocklist/{site_id}")
 def api_blocklist_delete(site_id: int, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        site = s.get(BlockedSite, site_id)
+        site = s.get(BlockedSite, _oid(site_id))
         if not site:
             raise HTTPException(status_code=404, detail="Blocked site not found")
         dom = site.domain
         s.delete(site)
         audit(s, "BLOCK_DELETE", f"{dom} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="Blocked site not found")
     log.info("Blocked site removed %s by %s", dom, admin.username)
     return {"ok": True}
 
@@ -3775,11 +3978,18 @@ def api_telegram_test(data: TelegramTestIn, request: Request, admin: Admin = Dep
     chat = cached_setting("tg_chat_id") or ""
     if not token or not chat:
         raise HTTPException(status_code=400, detail="Save a bot token and chat id first")
+    import html as _html
     import urllib.parse
     import urllib.request
 
     try:
-        payload = urllib.parse.urlencode({"chat_id": chat, "text": data.message}).encode()
+        # Escape the free-text message (it is operator-composed and may
+        # contain <>&), then render as HTML like panel notifications.
+        payload = urllib.parse.urlencode({
+            "chat_id": chat,
+            "text": _html.escape(data.message[:500]),
+            "parse_mode": "HTML",
+        }).encode()
         r = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
         resp = urllib.request.urlopen(r, timeout=8)
         ok_code = resp.status == 200
@@ -3787,6 +3997,18 @@ def api_telegram_test(data: TelegramTestIn, request: Request, admin: Admin = Dep
     except Exception as exc:
         ok_code = False
         err = str(exc)[:150]
+        # Surface Telegram's own reason ("bot is not a member", "chat not
+        # found", "bot was blocked") instead of a bare HTTP status: the
+        # @channel-not-admin mistake is otherwise indistinguishable.
+        try:
+            import json as _json
+
+            body = getattr(exc, "read", lambda: b"")() or b""
+            desc = (_json.loads(body.decode("utf-8", "replace")) or {}).get("description", "")
+            if desc:
+                err = f"{err} — {str(desc)[:120]}"
+        except Exception:
+            pass
     with db.s() as s:
         audit(s, "TG_TEST", f"by {admin.username} -> {'ok' if ok_code else err}", client_ip(request), ok=ok_code)
         s.commit()
@@ -3905,26 +4127,36 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
             expires_at=expires,
         )
         s.add(user)
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
-            raise HTTPException(status_code=409, detail="This username is already taken")
-        out = user.to_dict()
+        # Single commit with the audit inside it: a 500 must never follow a
+        # mutation (the client would retry into a confusing 409 while the
+        # first token/link was never delivered).
         flags = f" [{','.join(proto_list)}]"
         if data.start_on_first_use:
             flags += " starts-on-first-use"
         if data.device_limit:
             flags += f" max-{data.device_limit}-dev"
         audit(s, "USER_CREATE", f"{data.username}{flags} by {admin.username}", client_ip(request))
-        s.commit()
+        out = user.to_dict()
+        try:
+            _commit(s)
+        except IntegrityError:
+            raise HTTPException(status_code=409, detail="This username is already taken")
     notify_async(f"\u2713 Zefira: user <b>{data.username}</b> created [{','.join(proto_list)}] by {admin.username}")
     log.info("User created %s %s by %s", data.username, proto_list, admin.username)
     return out
 
 
+def _oid(value: int) -> int:
+    """Validate integer IDs from the path: huge values overflow the SQLite
+    INTEGER binding (-> unhandled 500) and non-positive ids never exist.
+    Fail closed with 404, same as a missing row."""
+    if not isinstance(value, bool) and isinstance(value, int) and 1 <= value <= 2**31 - 1:
+        return value
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 def _get_user_or_404(s, user_id: int) -> VpnUser:
-    user = s.get(VpnUser, user_id)
+    user = s.get(VpnUser, _oid(user_id))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -3932,6 +4164,14 @@ def _get_user_or_404(s, user_id: int) -> VpnUser:
 
 @app.patch("/api/users/{user_id}")
 def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Admin = Depends(require_admin)):
+    # Same-user stripe: two simultaneous top-ups/extends must not compute
+    # from the same stale row (lost update). The impl keeps plain args so
+    # FastAPI inspects a clean signature here.
+    with _user_stripe(user_id):
+        return _api_patch_user_impl(user_id, data, request, admin)
+
+
+def _api_patch_user_impl(user_id: int, data: UserPatchIn, request: Request, admin: Admin):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         changes = []
@@ -3984,28 +4224,31 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
             user.start_on_first_use = False
             user.duration_days = None
             changes.append(f"expire={data.set_expires_at}")
-        s.commit()
-        out = user.to_dict()
         audit(
             s,
             "USER_PATCH",
             f"{user.username} ({', '.join(changes) or 'no-op'}) by {admin.username}",
             client_ip(request),
         )
-        s.commit()
+        _commit(s, missing="User not found")
+        out = user.to_dict()
     log.info("User patched id=%s %s by %s", user_id, changes, admin.username)
     return out
 
 
 @app.delete("/api/users/{user_id}")
 def api_delete_user(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with _user_stripe(user_id):
+        return _api_delete_user_impl(user_id, request, admin)
+
+
+def _api_delete_user_impl(user_id: int, request: Request, admin: Admin):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         name = user.username
         s.delete(user)
-        s.commit()
         audit(s, "USER_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="User not found")
     notify_async(f"\u2715 Zefira: user <b>{name}</b> deleted by {admin.username}")
     log.info("User deleted %s by %s", name, admin.username)
     return {"ok": True}
@@ -4013,6 +4256,11 @@ def api_delete_user(user_id: int, request: Request, admin: Admin = Depends(requi
 
 @app.post("/api/users/{user_id}/reset-token")
 def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    with _user_stripe(user_id):
+        return _api_reset_token_impl(user_id, request, admin)
+
+
+def _api_reset_token_impl(user_id: int, request: Request, admin: Admin):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         user.token = secrets.token_hex(16)
@@ -4024,10 +4272,9 @@ def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(requi
             # instead of an unhandled 500.
             log.warning("Token reset refused (bad protocols=%s) id=%s", proto_list, user_id)
             raise HTTPException(status_code=422, detail="User has unknown protocols; delete and recreate it")
-        s.commit()
-        out = user.to_dict()
         audit(s, "TOKEN_RESET", f"{user.username} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="User not found")
+        out = user.to_dict()
     log.info("Token+secrets reset id=%s by %s", user_id, admin.username)
     return out
 
@@ -4035,13 +4282,17 @@ def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(requi
 @app.post("/api/users/{user_id}/reset-usage")
 def api_reset_usage(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
     """Dedicated reset endpoint for developers: zeroes used traffic."""
+    with _user_stripe(user_id):
+        return _api_reset_usage_impl(user_id, request, admin)
+
+
+def _api_reset_usage_impl(user_id: int, request: Request, admin: Admin):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         user.used_gb = 0.0
-        s.commit()
-        out = user.to_dict()
         audit(s, "USAGE_RESET", f"{user.username} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s, missing="User not found")
+        out = user.to_dict()
     log.info("Usage reset id=%s by %s", user_id, admin.username)
     return out
 
@@ -4051,8 +4302,11 @@ def api_user_qr(user_id: int, request: Request, admin: Admin = Depends(require_a
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         token = user.token
+    from config import SUBSCRIPTION_PATH as _SUB_PATH
+
     base = public_base_url(request)
-    sub_url = f"{base}/sub/{token}"
+    sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
+    sub_url = f"{base}{sub_path}/{token}"
     return {"url": sub_url, "qr_b64": protocols.qr_svg_b64(sub_url)}
 
 
@@ -4085,6 +4339,13 @@ def api_reset_user(
     """
     if not data.reset_usage and not data.reset_token:
         raise HTTPException(status_code=400, detail="Nothing to reset: enable reset_usage and/or reset_token")
+    with _user_stripe(user_id):
+        return _api_reset_user_impl(user_id, data, request, admin)
+
+
+def _api_reset_user_impl(
+    user_id: int, data: UserResetIn, request: Request, admin: Admin
+):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         changes = []
@@ -4105,15 +4366,14 @@ def api_reset_user(
                     detail="User has unknown protocols; delete and recreate it",
                 )
             changes.append("token+secrets rotated")
-        s.commit()
-        out = user.to_dict()
         audit(
             s,
             "USER_RESET",
             f"{user.username} ({', '.join(changes)}) by {admin.username}",
             client_ip(request),
         )
-        s.commit()
+        _commit(s, missing="User not found")
+        out = user.to_dict()
     log.info("User reset id=%s (%s) by %s", user_id, ",".join(changes), admin.username)
     return out
 
@@ -4383,7 +4643,7 @@ def subscription(token: str, request: Request):
             duration = user.duration_days or 30
             user.expires_at = utcnow() + timedelta(days=duration)
             audit(s, "USER_START", f"{user.username} activated on first connection (+{duration}d)", ip)
-            s.commit()
+            _commit(s)
         if user.expires_at <= utcnow():
             raise HTTPException(status_code=404, detail="Not Found")
         # Quota enforcement (fail-closed, same 404 as expired/disabled to
@@ -4402,13 +4662,16 @@ def subscription(token: str, request: Request):
         if _vol <= 0 or _used + 1e-9 >= _vol:
             raise HTTPException(status_code=404, detail="Not Found")
         # Presence signal: every client poll refreshes "last seen" (throttled
-        # to one write per minute). This is how the dashboard shows whether
-        # the config is actually in use — and from which IP.
+        # to one write per minute). Advisory only: a failed write must never
+        # fail the subscription the client came for.
         now = utcnow()
         if not user.last_fetch_at or (now - user.last_fetch_at).total_seconds() > 60:
             user.last_fetch_at = now
             user.last_fetch_ip = ip[:64]
-            s.commit()
+            try:
+                s.commit()
+            except OperationalError:
+                s.rollback()
         udict = user.to_full_dict()
     srv = load_srv()
     inbounds = load_inbounds()
