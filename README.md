@@ -76,13 +76,22 @@ If you prefer env files, copy `.env.example` to `.env`. Env vars are only used a
 
 I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login, CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, encrypted secrets at rest, and audit logging. 
 
-There is a test suite with 117 checks that hits the running panel from the outside:
+There are three test suites that hit the running panel from the outside. Start
+the panel, then run each one (restart the panel between suites):
 
 ```bash
-python security_test.py http://127.0.0.1:8000 admin YOURPASS
+python security_test.py  http://127.0.0.1:8000 admin YOURPASS   # 119 abuse/defense checks
+python functional_test.py http://127.0.0.1:8000 admin YOURPASS  #  60 end-to-end flows
+python feature_test.py   http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
 ```
 
-It should print `119/119 checks passed` or similar - if not, open an issue.
+`feature_test.py` walks all 62 API routes across the 10 panel sections and
+asserts each capability is actually usable (real links in a subscription, a
+decodable QR, a working config archive, the bot-scope matrix, backup/restore
+round-trips…), not merely reachable. It restores the panel to its shipped
+defaults afterwards, so the suites are order-independent and can run against a
+live panel. A green run prints `119/119`, `60/60` and `177/177` - if not, open
+an issue.
 
 ### API
 

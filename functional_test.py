@@ -14,6 +14,13 @@ import urllib.request
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
 PASSWORD = sys.argv[3] if len(sys.argv) > 3 else "YOUR_PASSWORD"
+# The panel's own port, used for the "server node is online" probe. Parsed
+# from BASE so the suite works on any port (run_all_tests.py uses 8011).
+try:
+    from urllib.parse import urlparse
+    PANEL_PORT = urlparse(BASE).port or (443 if urlparse(BASE).scheme == "https" else 80)
+except Exception:
+    PANEL_PORT = 8000
 
 results = []
 CREATED_IDS = []
@@ -154,7 +161,13 @@ st, _, _ = req("PUT", "/api/telegram", json.dumps({"bot_token": "", "chat_id": "
 st, _, tgb2 = req("GET", "/api/telegram", headers=AUTH)
 check("telegram chat round-trip", json.loads(tgb2).get("chat_id") == "999888777", f"got {st}")
 st, _, _ = req("POST", "/api/telegram/test", json.dumps({}), AUTH)
-check("telegram test without token fails cleanly", st == 400, f"got {st}")
+# "empty token" means KEEP the stored one, so this is only a clean 400 when
+# no token exists. With a token present the call must still fail gracefully
+# (bad token / unreachable) instead of crashing — never assume order.
+if orig_tg.get("has_token"):
+    check("telegram test with stored token fails cleanly", st in (400, 502), f"got {st}")
+else:
+    check("telegram test without token fails cleanly", st == 400, f"got {st}")
 req("PUT", "/api/telegram", json.dumps(
     {"bot_token": "", "chat_id": orig_tg.get("chat_id") or ""}), AUTH)
 
@@ -191,7 +204,7 @@ if iid:
 
 # ---- server nodes + offline failover ----
 st, _, snb = req("POST", "/api/server-nodes", json.dumps({
-    "name": "fte_srv", "address": "127.0.0.1", "check_port": 8000, "note": "func"}), AUTH)
+    "name": "fte_srv", "address": "127.0.0.1", "check_port": PANEL_PORT, "note": "func"}), AUTH)
 try:
     snid = json.loads(snb).get("id")
     check("server node create", st == 200 and bool(snid), f"got {st}")

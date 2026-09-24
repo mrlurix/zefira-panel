@@ -1838,9 +1838,12 @@ $("#apitoken-list").addEventListener("click", async (e) => {
 // ---- Telegram ----
 async function loadTelegram() {
   try {
-    const t = await api("/api/telegram");
-    $("#tg-chat").value = t.chat_id || "";
-    $("#tg-hint").textContent = t.has_token
+    const tg = await api("/api/telegram");
+    $("#tg-chat").value = tg.chat_id || "";
+    // Was `t.has_token ? t("tg.hasToken") : ...` — `t` is the translation
+    // fn and `t(...)` on a boolean throws ReferenceError, swallowed by the
+    // catch below: the "token saved" hint never rendered.
+    $("#tg-hint").textContent = tg.has_token
       ? t("tg.hasToken")
       : t("tg.noToken");
   } catch (_) {}

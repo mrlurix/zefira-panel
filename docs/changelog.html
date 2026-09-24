@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=28">
+<link rel="stylesheet" href="assets/style.css?v=29">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,14 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1135"><span>v1.13.5</span> <span data-i18n="chg.v1135">— Feature QA: customer dashboard, Telegram hint, CSP</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1135a_lead">Customers see why:</b> <span data-i18n="chg.v1135a">opening a subscription link after the plan expired or ran out of volume now shows the status page (badge, usage, QR, import buttons, “Out of volume” / “Expired”) instead of a bare 404 — VPN clients still get the 404 as before.</span></li>
+  <li><b data-i18n="chg.v1135b_lead">Telegram state visible:</b> <span data-i18n="chg.v1135b">the settings card now actually shows whether a bot token is stored (a hidden JavaScript error left the hint blank forever).</span></li>
+  <li><b data-i18n="chg.v1135c_lead">CSP-clean UI:</b> <span data-i18n="chg.v1135c">the stale-systemd-unit warning uses a stylesheet class instead of an inline style that the Content-Security-Policy silently blocked.</span></li>
+  <li><b data-i18n="chg.v1135d_lead">QA suite:</b> <span data-i18n="chg.v1135d">new <code>feature_test.py</code> walks all 62 endpoints across the 10 panel sections (176 checks) and asserts the feature is usable, not just reachable.</span></li>
+</ul>
 
 <h2 id="v1134"><span>v1.13.4</span> <span data-i18n="chg.v1134">— Deep audit: concurrency, auth, AI, UI</span></h2>
 <ul>
@@ -218,8 +226,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=28"></script>
-<script src="assets/docs.js?v=28"></script>
-<script src="assets/support-ai.js?v=28"></script>
+<script src="assets/i18n.js?v=29"></script>
+<script src="assets/docs.js?v=29"></script>
+<script src="assets/support-ai.js?v=29"></script>
 </body>
 </html>

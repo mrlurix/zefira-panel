@@ -670,6 +670,14 @@ stupw, _, _ = req("POST", "/api/update/apply", json.dumps({"password_confirm": "
 check("update apply with wrong password -> 400 (no-op)", stupw == 400, f"got {stupw}")
 
 # ---- 34. Appearance: public display values only, writes gated + validated ----
+# Self-contained: the assertion used to depend on a pristine panel (a prior
+# suite leaving a custom brand/accent made it fail spuriously). Pin known
+# values first, then verify the public payload only exposes them.
+req("PUT", "/api/appearance", json.dumps({
+    "theme_accent": "#ff2740", "theme_bg": "#06060a", "theme_card": "#10101a",
+    "theme_text": "#ececf2", "theme_muted": "#8b8c9e", "brand_name": "ZEFIRA",
+    "dash_note": "", "menu_layout": "", "dash_layout": "",
+}), AUTH)
 stap, _, apb = req("GET", "/api/appearance")
 apok = stap == 200
 try:

@@ -4639,12 +4639,18 @@ def subscription(token: str, request: Request):
         user = s.scalar(select(VpnUser).where(VpnUser.token == token))
         if not user or not user.is_active:
             raise HTTPException(status_code=404, detail="Not Found")
+        # Browser requests get the human dashboard; VPN clients get bytes.
+        # Expired / out-of-volume still serve the DASHBOARD (it already
+        # renders "expired" / "out of volume" + the renewal link) so the
+        # customer can see why their app stopped working instead of staring
+        # at a bare 404. Machine formats stay fail-closed 404 as before.
+        dashboard_req = not want_clash and wants_dashboard(request)
         if user.start_on_first_use and user.expires_at is not None and user.expires_at.year >= PENDING_YEAR:
             duration = user.duration_days or 30
             user.expires_at = utcnow() + timedelta(days=duration)
             audit(s, "USER_START", f"{user.username} activated on first connection (+{duration}d)", ip)
             _commit(s)
-        if user.expires_at <= utcnow():
+        if user.expires_at <= utcnow() and not dashboard_req:
             raise HTTPException(status_code=404, detail="Not Found")
         # Quota enforcement (fail-closed, same 404 as expired/disabled to
         # avoid oracle): exhausted volume serves nothing, not even the
@@ -4659,7 +4665,7 @@ def subscription(token: str, request: Request):
             raise HTTPException(status_code=404, detail="Not Found")
         # Epsilon-tolerant compare: binary float drift (29.9+0.1) must not
         # flip-flop against the rounded values the dashboard shows.
-        if _vol <= 0 or _used + 1e-9 >= _vol:
+        if (_vol <= 0 or _used + 1e-9 >= _vol) and not dashboard_req:
             raise HTTPException(status_code=404, detail="Not Found")
         # Presence signal: every client poll refreshes "last seen" (throttled
         # to one write per minute). Advisory only: a failed write must never
@@ -4675,7 +4681,7 @@ def subscription(token: str, request: Request):
         udict = user.to_full_dict()
     srv = load_srv()
     inbounds = load_inbounds()
-    if not want_clash and wants_dashboard(request):
+    if dashboard_req:
         ctx = _dashboard_ctx(udict, srv, inbounds, request)
         ctx["asset_v"] = APP_VERSION
         return templates.TemplateResponse(request, "sub.html", ctx)
