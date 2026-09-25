@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
 
@@ -63,6 +63,9 @@ class UserPatchIn(BaseModel):
 
     is_active: Optional[bool] = None
     extend_days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
+    # `days` is the create-time name; a renewal bot that reuses its create
+    # payload would otherwise get a silent no-op.
+    days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
     add_volume_gb: Optional[float] = Field(default=None, ge=0.01, le=100000)
     add_used_gb: Optional[float] = Field(default=None, ge=-1000000, le=1000000)
     set_note: Optional[str] = Field(default=None, max_length=200)
@@ -70,18 +73,67 @@ class UserPatchIn(BaseModel):
     set_expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\z")
     set_device_limit: Optional[StrictInt] = Field(default=None, ge=-1, le=1000)
     reset_used: bool = False
+    # Absolute aliases. PATCH is "set this field", so the plain field names are
+    # what an integrator reaches for first - and until now they were silently
+    # dropped (200 with no effect), which for `used_gb` means a bot that thinks
+    # it capped a customer leaves them uncapped. Equivalent to the set_*
+    # variants; sending both forms of the same field is a 422.
+    used_gb: Optional[float] = Field(default=None, ge=0, le=1000000)
+    volume_gb: Optional[float] = Field(default=None, ge=0.01, le=100000)
+    expires_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\z")
+    note: Optional[str] = Field(default=None, max_length=200)
+    device_limit: Optional[StrictInt] = Field(default=None, ge=-1, le=1000)
 
-    @field_validator("add_volume_gb", "add_used_gb", "set_volume_gb", mode="before")
+    @field_validator(
+        "add_volume_gb", "add_used_gb", "set_volume_gb", "used_gb", "volume_gb", mode="before"
+    )
     @classmethod
     def _num_patch(cls, v):
         return _reject_bool_str(v) if v is not None else v
 
-    @field_validator("set_note", mode="before")
+    @field_validator("set_note", "note", mode="before")
     @classmethod
     def _strip_set_note(cls, v):
         if isinstance(v, str):
             return "".join(ch for ch in v if ord(ch) >= 32 or ch in "\n\r\t")
         return v
+
+    @model_validator(mode="after")
+    def _no_duplicate_intent(self):
+        dupes = [
+            absolute
+            for absolute, prefixed in (
+                ("used_gb", "add_used_gb"),
+                ("volume_gb", "set_volume_gb"),
+                ("volume_gb", "add_volume_gb"),
+                ("expires_at", "set_expires_at"),
+                ("note", "set_note"),
+                ("device_limit", "set_device_limit"),
+                ("days", "extend_days"),
+            )
+            if getattr(self, absolute) is not None and getattr(self, prefixed) is not None
+        ]
+        if dupes:
+            raise ValueError(
+                "send either the absolute field or its add/set variant, not both: "
+                + ", ".join(sorted(set(dupes)))
+            )
+        return self
+
+    def touches_anything(self) -> bool:
+        """False when nothing in the request maps to a real operation.
+
+        A patch made only of unknown keys used to return 200 and change
+        nothing, so a caller (or a typo) could believe a quota was applied.
+        """
+        return any(
+            getattr(self, f) is not None
+            for f in (
+                "is_active", "extend_days", "days", "add_volume_gb", "add_used_gb",
+                "set_note", "set_volume_gb", "set_expires_at", "set_device_limit",
+                "used_gb", "volume_gb", "expires_at", "note", "device_limit",
+            )
+        ) or self.reset_used
 
 
 class UserResetIn(BaseModel):

@@ -460,12 +460,9 @@ def raw_post_bytes(path, headers, body_chunks=(), read_bytes=4096, timeout=25,
     because a server that already replied usually resets the connection.
     """
     h, p = (HOSTPORT[0], int(HOSTPORT[1]))
-    s = _sock2.create_connection((h, p), timeout=timeout)
-    lines = [f"POST {path} HTTP/1.1", f"Host: {h}:{p}", "Connection: close"]
-    lines += [f"{k}: {v}" for k, v in headers.items()]
     data = b""
 
-    def _drain():
+    def _drain(s):
         nonlocal data
         try:
             while len(data) < read_bytes:
@@ -476,11 +473,20 @@ def raw_post_bytes(path, headers, body_chunks=(), read_bytes=4096, timeout=25,
         except OSError:
             pass
 
+    # The connect itself must be guarded: on a loaded machine the listen
+    # backlog can refuse a probe, and a crash here would look like a product
+    # failure instead of a flaky measurement.
+    try:
+        s = _sock2.create_connection((h, p), timeout=timeout)
+    except OSError as exc:
+        return b"CONNECT-FAILED: %s" % str(exc).encode()
+    lines = [f"POST {path} HTTP/1.1", f"Host: {h}:{p}", "Connection: close"]
+    lines += [f"{k}: {v}" for k, v in headers.items()]
     try:
         s.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
         if read_first:
             s.settimeout(3)
-            _drain()
+            _drain(s)
             if data:
                 s.close()
                 return data.split(b"\r\n", 1)[0]
@@ -489,7 +495,7 @@ def raw_post_bytes(path, headers, body_chunks=(), read_bytes=4096, timeout=25,
             time.sleep(body_delay)
         for c in body_chunks:
             s.sendall(c)
-        _drain()
+        _drain(s)
     except OSError:
         pass
     try:

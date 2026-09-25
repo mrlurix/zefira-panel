@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=31">
+<link rel="stylesheet" href="assets/style.css?v=32">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,13 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1138"><span>v1.13.8</span> <span data-i18n="chg.v1138">— PATCH speaks REST: no more silent no-ops</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1138a_lead">No silent failures:</b> <span data-i18n="chg.v1138a">a patch made only of unrecognized keys used to answer <code>200</code> and change nothing. For an integrator that is the worst possible outcome: a bot that sends <code>used_gb</code> to cap a customer got a success and an uncapped customer. Such a patch is now a <code>422</code> that lists the accepted fields.</span></li>
+  <li><b data-i18n="chg.v1138b_lead">Absolute field names accepted:</b> <span data-i18n="chg.v1138b"><code>used_gb</code>, <code>volume_gb</code>, <code>expires_at</code>, <code>note</code>, <code>device_limit</code> and <code>days</code> now set a value (PATCH semantics); <code>add_used_gb</code> / <code>add_volume_gb</code> stay the deltas. Sending both forms of one field, or an empty patch, is a <code>422</code>.</span></li>
+  <li><b data-i18n="chg.v1138c_lead">Documented + tested:</b> <span data-i18n="chg.v1138c">the API page now lists every PATCH field with copy-paste examples, and the new <code>attack_quota_test.py</code> (46 checks) walks quota accounting, expiry math, start-on-first-use, device limits and every schema boundary on both create and patch.</span></li>
+</ul>
 
 <h2 id="v1137"><span>v1.13.7</span> <span data-i18n="chg.v1137">— Deep audit: wrapped-metadata SSRF, restore buffering, QR budget</span></h2>
 <ul>
@@ -243,8 +250,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=31"></script>
-<script src="assets/docs.js?v=31"></script>
-<script src="assets/support-ai.js?v=31"></script>
+<script src="assets/i18n.js?v=32"></script>
+<script src="assets/docs.js?v=32"></script>
+<script src="assets/support-ai.js?v=32"></script>
 </body>
 </html>

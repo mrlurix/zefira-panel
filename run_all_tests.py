@@ -26,6 +26,7 @@ SUITES = [
     ("security_test.py", "security / abuse"),
     ("functional_test.py", "functional flows"),
     ("attack_test.py", "live attack probes"),
+    ("attack_quota_test.py", "quota / schema boundaries"),
 ]
 
 

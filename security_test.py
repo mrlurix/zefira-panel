@@ -657,11 +657,22 @@ staihist, _, _ = req("POST", "/api/ai/chat", json.dumps({"messages": [{"role": "
 check("ai chat caps history length", staihist == 422, f"got {staihist}")
 stainc, _, _ = req("POST", "/api/ai/chat", json.dumps({"messages": [{"role": "user", "content": "hi"}]}), AUTH2)
 check("ai chat without config -> 400", stainc == 400, f"got {stainc}")
-stup, _, upb = req("GET", "/api/update/status", headers=AUTH2)
-upok = stup == 200
+# /api/update/status calls GitHub, so the client timeout has to be generous
+# (and one retry allowed): a slow API must not be reported as a security
+# failure. The endpoint itself answers 200 with an `error` field when GitHub
+# is unreachable, which is the behaviour this check is really asserting.
+upok = False
+stup = 0
+for _attempt in range(2):
+    stup, _, upb = req("GET", "/api/update/status", headers=AUTH2, timeout=30)
+    if stup == 200:
+        break
 try:
     upj = json.loads(upb)
-    upok = upok and all(k in upj for k in ("repo", "current", "latest", "update_available", "updating", "incoming", "local_log"))
+    upok = stup == 200 and all(
+        k in upj for k in ("repo", "current", "latest", "update_available", "updating",
+                          "incoming", "local_log", "error")
+    )
     upok = upok and isinstance(upj["incoming"], list) and isinstance(upj["local_log"], list)
 except Exception:
     upok = False

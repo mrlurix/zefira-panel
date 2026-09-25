@@ -4463,12 +4463,24 @@ def api_patch_user(user_id: int, data: UserPatchIn, request: Request, admin: Adm
 
 
 def _api_patch_user_impl(user_id: int, data: UserPatchIn, request: Request, admin: Admin):
+    if not data.touches_anything():
+        # Every key was unknown to this endpoint. Answering 200 here would let
+        # a caller (or a typo like "used_gb" before the absolute aliases
+        # existed) believe a quota/expiry change was applied when nothing was.
+        raise HTTPException(
+            status_code=422,
+            detail="No recognized field in the patch. Use set_*/add_* or the "
+                   "absolute names (used_gb, volume_gb, expires_at, note, "
+                   "device_limit, is_active, extend_days, reset_used).",
+        )
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         changes = []
         if data.is_active is not None:
             user.is_active = data.is_active
-        if data.extend_days is not None:
+            changes.append("active" if data.is_active else "paused")
+        extend_days = data.extend_days if data.extend_days is not None else data.days
+        if extend_days is not None:
             now = utcnow()
             if user.expires_at and user.expires_at.year >= PENDING_YEAR:
                 base = now
@@ -4482,39 +4494,47 @@ def _api_patch_user_impl(user_id: int, data: UserPatchIn, request: Request, admi
                 # Expired (or missing) expiry extends from today, otherwise
                 # extending an expired account would leave it expired.
                 base = now
-            user.expires_at = base + timedelta(days=data.extend_days)
-            changes.append(f"+{data.extend_days}d")
+            user.expires_at = base + timedelta(days=extend_days)
+            changes.append(f"+{extend_days}d")
         if data.add_volume_gb is not None:
             user.volume_gb = min(100000, max(0.01, user.volume_gb + data.add_volume_gb))
             changes.append(f"vol+{data.add_volume_gb}")
         if data.add_used_gb is not None:
             user.used_gb = min(1000000, max(0.0, user.used_gb + data.add_used_gb))
             changes.append(f"used{data.add_used_gb:+g}")
-        if data.set_note is not None:
-            user.note = data.set_note
+        if data.used_gb is not None:
+            # Absolute usage (REST semantics: PATCH sets the field).
+            user.used_gb = data.used_gb
+            changes.append(f"used={data.used_gb:g}")
+        note_value = data.set_note if data.set_note is not None else data.note
+        if note_value is not None:
+            user.note = note_value
             changes.append("note")
-        if data.set_volume_gb is not None:
-            user.volume_gb = data.set_volume_gb
-            changes.append(f"vol={data.set_volume_gb:g}")
+        new_volume = data.set_volume_gb if data.set_volume_gb is not None else data.volume_gb
+        if new_volume is not None:
+            user.volume_gb = new_volume
+            changes.append(f"vol={new_volume:g}")
         if data.reset_used:
             user.used_gb = 0.0
             changes.append("used=0")
-        if data.set_device_limit is not None:
-            if data.set_device_limit <= 0:
+        new_dev = data.set_device_limit if data.set_device_limit is not None else data.device_limit
+        if new_dev is not None:
+            if new_dev <= 0:
                 user.device_limit = None
                 changes.append("dev=unlimited")
             else:
-                user.device_limit = data.set_device_limit
-                changes.append(f"dev={data.set_device_limit}")
-        if data.set_expires_at:
+                user.device_limit = new_dev
+                changes.append(f"dev={new_dev}")
+        new_expiry = data.set_expires_at or data.expires_at
+        if new_expiry:
             try:
-                explicit = datetime.strptime(data.set_expires_at, "%Y-%m-%dT%H:%M").replace(tzinfo=None)
+                explicit = datetime.strptime(new_expiry, "%Y-%m-%dT%H:%M").replace(tzinfo=None)
             except ValueError:
                 raise HTTPException(status_code=422, detail="Invalid expiry datetime")
             user.expires_at = explicit
             user.start_on_first_use = False
             user.duration_days = None
-            changes.append(f"expire={data.set_expires_at}")
+            changes.append(f"expire={new_expiry}")
         audit(
             s,
             "USER_PATCH",

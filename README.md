@@ -108,22 +108,26 @@ There are four test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
-python security_test.py  http://127.0.0.1:8000 admin YOURPASS   # 119 abuse/defense checks
-python functional_test.py http://127.0.0.1:8000 admin YOURPASS  #  60 end-to-end flows
-python feature_test.py   http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
-python attack_test.py    http://127.0.0.1:8000 admin YOURPASS   #  80 live attack probes
+python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # 119 abuse/defense checks
+python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   #  60 end-to-end flows
+python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
+python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   #  99 live attack probes
+python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS #  46 quota/schema boundary checks
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
 asserts each capability is actually usable (real links in a subscription, a
 decodable QR, a working config archive, the bot-scope matrix, backup/restore
 round-trips…), not merely reachable. `attack_test.py` fires the hostile
-traffic itself: header spoofing, stored XSS, path traversal, oversized and
-over-nested bodies, unicode/encoding tricks, timing oracles, a login flood and
-the full auth matrix. Both restore the panel to its shipped defaults
-afterwards, so the suites are order-independent and can run against a live
-panel. A green run prints `119/119`, `60/60`, `177/177` and `80/80` - if not,
-open an issue.
+traffic itself: header spoofing, stored XSS, path traversal, oversized/over-
+nested bodies, unicode/encoding tricks, timing oracles, login floods, limiter
+eviction attempts, the full auth matrix. `attack_quota_test.py` covers the
+accounting paths a customer actually hits: quota/expiry gating per client type,
+start-on-first-use, device limits, and every Pydantic boundary on create and
+patch. All five restore the panel to its shipped defaults afterwards, so the
+suites are order-independent and can run against a live panel (or all five in
+one go with `python run_all_tests.py admin YOURPASS`). A green run prints
+`119/119`, `60/60`, `177/177`, `99/99` and `46/46` - if not, open an issue.
 
 ### API
 

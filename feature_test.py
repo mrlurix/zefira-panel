@@ -628,7 +628,12 @@ st, d = js("POST", "/api/ssl/renew", {}, AUTH)
 check("ssl: renew without cert fails cleanly", st == 400 and "No certificate" in str(d), f"{st} {d}")
 
 # ---------------------------------------------------------------- update
-st, d = js("GET", "/api/update/status", headers=AUTH, timeout=40)
+# This endpoint talks to GitHub; retry once so a slow API reads as a retry,
+# not a broken panel (the endpoint answers 200 with an `error` field when
+# GitHub is unreachable, which is the behaviour under test here).
+st, d = js("GET", "/api/update/status", headers=AUTH, timeout=45)
+if st != 200:
+    st, d = js("GET", "/api/update/status", headers=AUTH, timeout=45)
 check("update: status reachable with unit_warning field",
       st == 200 and "unit_warning" in d and "update_available" in d, f"{st} {str(d)[:100]}")
 st, d = js("POST", "/api/update/apply", {"password_confirm": "wrong-password"}, AUTH)
