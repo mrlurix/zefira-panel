@@ -54,11 +54,14 @@ class Admin(Base):
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     def to_backup_dict(self) -> dict:
+        # A hand-edited NULL created_at used to raise AttributeError here and
+        # 500 the whole backup download.
+        created = self.created_at or utcnow()
         return {
             "username": safe_text(self.username),
             "password_hash": safe_text(self.password_hash),
             "token_version": self.token_version,
-            "created_at": self.created_at.isoformat(timespec="seconds"),
+            "created_at": created.isoformat(timespec="seconds"),
         }
 
 
@@ -87,13 +90,17 @@ class VpnUser(Base):
         return bool(self.start_on_first_use) and self.expires_at is not None and self.expires_at.year >= 2098
 
     def to_dict(self) -> dict:
+        # 4 decimals, not 2: the raw gate compares used >= volume, so rounding
+        # 1.233/1.234 down to 1.23 made the panel say "out of volume" for an
+        # account the server was still serving (and the subscription header
+        # reported download == total).
         return {
             "id": self.id,
             "username": safe_text(self.username),
             "protocols": self.protocols_list(),
             "note": safe_text(self.note),
-            "volume_gb": round(self.volume_gb or 0, 2),
-            "used_gb": round(self.used_gb or 0, 2),
+            "volume_gb": round(self.volume_gb or 0, 4),
+            "used_gb": round(self.used_gb or 0, 4),
             "token": self.token,
             "is_active": self.is_active,
             "device_limit": self.device_limit,
@@ -103,7 +110,9 @@ class VpnUser(Base):
                 self.last_fetch_at.isoformat(timespec="seconds") + "Z" if self.last_fetch_at else None
             ),
             "last_fetch_ip": self.last_fetch_ip or None,
-            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            "created_at": (
+                self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
+            ),
             "expires_at": (
                 self.expires_at.isoformat(timespec="seconds") + "Z" if self.expires_at else None
             ),
@@ -122,7 +131,8 @@ class VpnUser(Base):
 
     def to_backup_dict(self) -> dict:
         # None-tolerant: a hand-edited NULL must degrade the backup (with a
-        # restorable fallback), never 500 it.
+        # restorable fallback), never 500 it. Last-seen metadata rides along so
+        # a restore does not wipe the customer's history.
         created = self.created_at or utcnow()
         expires = self.expires_at or utcnow()
         return {
@@ -138,6 +148,10 @@ class VpnUser(Base):
             "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
             "duration_days": self.duration_days,
+            "last_fetch_at": (
+                self.last_fetch_at.isoformat(timespec="seconds") + "Z" if self.last_fetch_at else None
+            ),
+            "last_fetch_ip": safe_text(self.last_fetch_ip) or None,
             "created_at": created.isoformat(timespec="seconds"),
             "expires_at": expires.isoformat(timespec="seconds"),
         }
@@ -355,12 +369,13 @@ class ApiToken(Base):
         }
 
     def to_backup_dict(self) -> dict:
+        created = self.created_at or utcnow()
         return {
             "name": safe_text(self.name),
             "prefix": safe_text(self.prefix),
             "token_sha": safe_text(self.token_sha),
             "scopes": self.scopes or "full",
-            "created_at": self.created_at.isoformat(timespec="seconds"),
+            "created_at": created.isoformat(timespec="seconds"),
             "last_used_at": (
                 self.last_used_at.isoformat(timespec="seconds") if self.last_used_at else None
             ),
@@ -411,17 +426,35 @@ class Database:
             self._drop_column(conn, "admins", "totp_enabled")
             self._drop_column(conn, "admins", "totp_secret")
             self._drop_column(conn, "admins", "totp_pending")
+            # Dialect-aware DDL. The old literals only worked on SQLite:
+            # PostgreSQL rejects `BOOLEAN ... DEFAULT 0` (needs FALSE) and
+            # MySQL rejects `TEXT NOT NULL DEFAULT ''` (error 1101) and
+            # treats TIMESTAMP as tz-converting with a 2038 cutoff, which
+            # would have made a Postgres/MySQL install fail at startup or
+            # store expiry timestamps in the wrong zone.
+            dialect = conn.engine.dialect.name
+            bool_ddl = "BOOLEAN NOT NULL DEFAULT FALSE" if dialect == "postgresql" \
+                else "BOOLEAN NOT NULL DEFAULT 0"
+            text_ddl = "TEXT NULL" if dialect == "mysql" else "TEXT NOT NULL DEFAULT ''"
+            dt_ddl = "DATETIME" if dialect == "mysql" else "TIMESTAMP"
             self._add_column(conn, "vpn_users", "protocol", "protocol VARCHAR(16) NOT NULL DEFAULT 'vless'")
-            self._add_column(conn, "vpn_users", "secret_data", "secret_data TEXT NOT NULL DEFAULT ''")
-            self._add_column(conn, "vpn_users", "protocols", "protocols TEXT NOT NULL DEFAULT ''")
-            self._add_column(conn, "vpn_users", "start_on_first_use", "start_on_first_use BOOLEAN NOT NULL DEFAULT 0")
+            self._add_column(conn, "vpn_users", "secret_data", f"secret_data {text_ddl}")
+            self._add_column(conn, "vpn_users", "protocols", f"protocols {text_ddl}")
+            self._add_column(conn, "vpn_users", "start_on_first_use", f"start_on_first_use {bool_ddl}")
             self._add_column(conn, "vpn_users", "duration_days", "duration_days INTEGER")
             self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
-            self._add_column(conn, "vpn_users", "last_fetch_at", "last_fetch_at TIMESTAMP")
+            self._add_column(conn, "vpn_users", "last_fetch_at", f"last_fetch_at {dt_ddl}")
             self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
             self._add_column(conn, "inbounds", "node_id", "node_id INTEGER")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             self._add_column(conn, "api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'")
+            # Backfill the nullable MySQL TEXT columns so the ORM's
+            # non-nullable contract holds on every dialect.
+            for col in ("secret_data", "protocols"):
+                try:
+                    conn.execute(text(f"UPDATE vpn_users SET {col} = '' WHERE {col} IS NULL"))
+                except Exception:
+                    pass
             try:
                 conn.execute(text("UPDATE api_tokens SET scopes='full' WHERE scopes IS NULL OR scopes=''"))
             except Exception:
@@ -430,7 +463,10 @@ class Database:
 
     @staticmethod
     def _drop_column(conn, table: str, name: str) -> None:
-        # Only drops columns this app once created; identifiers are internal literals.
+        # Only drops columns this app once created; identifiers are internal
+        # literals. A dialect that cannot DROP COLUMN (SQLite < 3.35) must
+        # not take the whole panel down at startup: the leftover TOTP columns
+        # are simply ignored by the ORM.
         from sqlalchemy import inspect as sa_inspect
 
         insp = sa_inspect(conn)
@@ -438,7 +474,10 @@ class Database:
             return
         if name not in {c["name"] for c in insp.get_columns(table)}:
             return
-        conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {name}"))
+        try:
+            conn.execute(text(f"ALTER TABLE {table} DROP COLUMN {name}"))
+        except Exception:
+            pass
 
     @staticmethod
     def _add_column(conn, table: str, name: str, ddl: str) -> None:

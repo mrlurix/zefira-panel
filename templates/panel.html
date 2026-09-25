@@ -449,8 +449,8 @@
         <form id="pw-form" class="card form-card">
           <div class="card-head"><h2 data-i18n="pw.title">Change Admin Password</h2></div>
           <label class="field"><span data-i18n="pw.current">Current password</span><input type="password" name="current" minlength="8" maxlength="128" required></label>
-          <label class="field"><span data-i18n="pw.new1">New password (min 8 chars)</span><input type="password" name="new1" minlength="8" maxlength="128" required></label>
-          <label class="field"><span data-i18n="pw.new2">Repeat new password</span><input type="password" name="new2" minlength="8" maxlength="128" required></label>
+          <label class="field"><span data-i18n="pw.new1">New password (min 10 chars, letters + digits)</span><input type="password" name="new1" minlength="10" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{10,128}" title="At least 10 characters including a letter and a digit" required></label>
+          <label class="field"><span data-i18n="pw.new2">Repeat new password</span><input type="password" name="new2" minlength="10" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{10,128}" title="At least 10 characters including a letter and a digit" required></label>
           <button type="submit" class="btn btn-primary" data-i18n="pw.saveBtn">Save New Password</button>
           <p class="hint" data-i18n="pw.hint">Changing the password invalidates all other active sessions.</p>
         </form>
@@ -585,7 +585,7 @@
     <label class="field"><span data-i18n="modal.note">Note</span><input type="text" name="note" maxlength="200"></label>
     <div class="field-row">
       <label class="field"><span data-i18n="modal.totalVol">Total volume (GB)</span><input type="number" name="volume" min="0.5" max="100000" step="0.5"></label>
-      <label class="field"><span data-i18n="modal.exactExpiry">Exact expiry (UTC)</span><input type="datetime-local" name="expires"></label>
+      <label class="field"><span data-i18n="modal.exactExpiry">Exact expiry (your local time)</span><input type="datetime-local" name="expires"></label>
     </div>
     <label class="field"><span data-i18n="modal.devEdit">Device limit (empty = no change, 0 = unlimited)</span><input type="number" name="device_limit" min="0" max="1000" step="1"></label>
     <label class="proto-check wide"><input type="checkbox" name="reset_used"><span data-i18n="modal.resetUsed">Reset used traffic to zero</span></label>

@@ -1,5 +1,8 @@
 "use strict";
 
+// Age of this server-rendered page (used by the visibility reload below).
+window.__zefiraRenderedAt = Date.now();
+
 // Copy buttons on the public subscription dashboard.
 // No innerHTML anywhere: all values come from data attributes / textareas.
 document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
@@ -50,6 +53,16 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
 document.querySelectorAll(".fill[data-w]").forEach((el) => {
   const pct = Math.max(0, Math.min(100, parseFloat(el.getAttribute("data-w")) || 0));
   el.style.width = pct + "%";
+});
+
+// The page is server-rendered once, so usage / status / days-left froze at
+// load time while the customer kept consuming quota. Reload when the tab
+// comes back to the foreground (no polling, no background traffic) so a
+// dashboard left open on a phone is not an hour stale.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const age = Date.now() - (window.__zefiraRenderedAt || 0);
+  if (age > 120000) location.reload();
 });
 
 try { mountLangSwitcher("#lang-mount-sub"); } catch (_) {}

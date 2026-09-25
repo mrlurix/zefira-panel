@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=32">
+<link rel="stylesheet" href="assets/style.css?v=34">
 </head>
 <body>
 <header class="topbar">
@@ -65,7 +65,7 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/stats</code></td><td data-i18n="api.usersStats">Counters: active, expired, expiring-soon, limited…</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/users?q=…</code></td><td data-i18n="api.usersList">Up to 500, username/note search</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/users/by-username/{username}</code></td><td data-i18n="api.usersByName">Exact lookup — bots know usernames, not IDs</td></tr>
-<tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td data-i18n="api.usersCreate">Create (protocols, volume, days, first-use, device limit)</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/users</code></td><td data-i18n="api.usersCreate">Create (protocols, volume, days, first-use, device limit) — or <code>template_id</code> alone to apply a saved plan</td></tr>
 <tr><td><span class="badge put">PATCH</span></td><td><code>/api/users/{id}</code></td><td><span data-i18n="api.usersPatchA">Change one user. Absolute fields set a value:</span> <code>used_gb</code>, <code>volume_gb</code>, <code>expires_at</code>, <code>note</code>, <code>device_limit</code>, <code>is_active</code>, <code>days</code> <span data-i18n="api.usersPatchB">(extend). Deltas:</span> <code>add_used_gb</code>, <code>add_volume_gb</code>. Also <code>reset_used: true</code>.</td></tr>
 <tr><td><span class="badge del">DELETE</span></td><td><code>/api/users/{id}</code></td><td>—</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/users/{id}/reset-token</code></td><td><span data-i18n="api.usersResetToken">Rotates token + all secrets</span> <span data-i18n="api.scopeBotOk">(bot scope OK)</span></td></tr>
@@ -116,6 +116,13 @@ curl -b jar.txt -H 'Content-Type: application/json' \
      -d '{"username":"buyer1","protocols":["vless","reality"],"volume_gb":50,"days":30}' \
      https://vpn.example.com/api/users
 
+# Or create straight from a saved plan: template_id fills protocols, volume,
+# days, start_on_first_use and device_limit. Explicit body fields win.
+curl -b jar.txt -H 'Content-Type: application/json' \
+     -H 'X-Requested-With: XMLHttpRequest' \
+     -d '{"username":"buyer2","template_id":3,"days":60}' \
+     https://vpn.example.com/api/users
+
 # PATCH sets absolute values; add_* are deltas. An unknown-only patch is a
 # 422 (never a silent 200), and sending both forms of one field is a 422.
 curl -X PATCH -b jar.txt -H 'Content-Type: application/json' \
@@ -150,8 +157,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=32"></script>
-<script src="assets/docs.js?v=32"></script>
+<script src="assets/i18n.js?v=34"></script>
+<script src="assets/docs.js?v=34"></script>
 <script src="assets/support-ai.js?v=32"></script>
 </body>
 </html>

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=32">
+<link rel="stylesheet" href="assets/style.css?v=34">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,16 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1139"><span>v1.13.9</span> <span data-i18n="chg.v1139">— Third bug hunt: restore, configs and the panel UI</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1139a_lead">Restore could 500:</b> <span data-i18n="chg.v1139a">restoring a backup onto an instance that already had one of the plan templates raised <code>ProgrammingError</code> (the row object was bound as a primary key) and the whole restore failed. A single malformed customer row also aborted the entire file; bad rows are now skipped and the good ones are kept.</span></li>
+  <li><b data-i18n="chg.v1139b_lead">Nothing silently lost:</b> <span data-i18n="chg.v1139b">the encrypted restore dropped inbounds, server nodes and tunnels entirely (they are restored now); pinned inbounds lost their node (the backup records the node <i>name</i>); OpenVPN credentials signed by another host's CA are re-issued instead of shipped dead; a REALITY public key whose private half cannot be decrypted is no longer paired with the local key; API tokens are replaced by the backup's set instead of resurrecting revoked ones; last-seen history survives a restore.</span></li>
+  <li><b data-i18n="chg.v1139c_lead">Configs that clients can actually load:</b> <span data-i18n="chg.v1139c">a subscription that mixes share links with file-based configs is Base64 again (v2rayNG imported <i>zero</i> nodes from the plain-text bundle), the OpenVPN profile no longer demands the CA's name from the server certificate (<code>VERIFY_X509NAME ERROR</code> on every normal cert), the Hysteria2 URI has the slash the spec requires, and quota rounding no longer tells a customer "out of volume" while the server still serves them.</span></li>
+  <li><b data-i18n="chg.v1139d_lead">Settings that were ignored:</b> <span data-i18n="chg.v1139d"><code>ZEFIRA_HY2_PORT</code>, <code>ZEFIRA_WG_PORT</code>, <code>ZEFIRA_DNS</code> and <code>ZEFIRA_OVPN_PROTO</code> never reached the generators; <code>ZEFIRA_DOMAIN</code> was skipped when building subscription links. Empty-label hostnames (<code>a..b</code>), a REALITY SNI like <code>www..com</code> and a <code>public_url</code> on port 0 are now rejected instead of producing dead endpoints.</span></li>
+  <li><b data-i18n="chg.v1139e_lead">Panel UI:</b> <span data-i18n="chg.v1139e">the API-token list no longer crashes (<code>t</code> shadowed the translation function), a failed Add-User validation no longer locks the form until reload, one bad expiry can no longer blank the user table, notes can be cleared again, and stale async responses can no longer overwrite newer settings, lists, QR codes or modals. The REALITY public key is filled on load, saves are serialized, and <code>1e3</code> in a number field means 1000 instead of 1.</span></li>
+  <li><b data-i18n="chg.v1139f_lead">Concurrency + tests:</b> <span data-i18n="chg.v1139f">first-use activation is an atomic claim, server-node probes can no longer stamp a repointed node, first-run credentials from a lost multi-worker race are no longer written, and mutating endpoints answer a retryable 503 (not a 500) on a database lock. New <code>attack_paths_test.py</code> (64 checks) walks templates, inbounds, CSV, Clash, tunnels and the full backup/restore round-trip; all six suites are green (611 checks).</span></li>
+</ul>
 
 <h2 id="v1138"><span>v1.13.8</span> <span data-i18n="chg.v1138">— PATCH speaks REST: no more silent no-ops</span></h2>
 <ul>
@@ -250,8 +260,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=32"></script>
-<script src="assets/docs.js?v=32"></script>
+<script src="assets/i18n.js?v=34"></script>
+<script src="assets/docs.js?v=34"></script>
 <script src="assets/support-ai.js?v=32"></script>
 </body>
 </html>

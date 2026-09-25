@@ -104,7 +104,7 @@ decrypt round-trip. Treat the database and unencrypted backups as customer
 credentials: keep `instance/` at `700`, use encrypted backups or full-disk
 encryption, and see [SECURITY.md](SECURITY.md).
 
-There are four test suites that hit the running panel from the outside. Start
+There are six test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
@@ -113,6 +113,7 @@ python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   #  60 end-to-e
 python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
 python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   #  99 live attack probes
 python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS #  46 quota/schema boundary checks
+python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS #  63 operator-path checks
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
@@ -124,10 +125,14 @@ nested bodies, unicode/encoding tricks, timing oracles, login floods, limiter
 eviction attempts, the full auth matrix. `attack_quota_test.py` covers the
 accounting paths a customer actually hits: quota/expiry gating per client type,
 start-on-first-use, device limits, and every Pydantic boundary on create and
-patch. All five restore the panel to its shipped defaults afterwards, so the
-suites are order-independent and can run against a live panel (or all five in
-one go with `python run_all_tests.py admin YOURPASS`). A green run prints
-`119/119`, `60/60`, `177/177`, `99/99` and `46/46` - if not, open an issue.
+patch. `attack_paths_test.py` walks the operator paths the other suites skip:
+templates (create-from-template, upsert), inbounds + node pinning, CSV export,
+blocked sites, the Clash YAML invariants, theme/appearance, audit/stats/system,
+the BackPack tunnel lifecycle, and a full backup/restore round-trip. All six
+restore the panel to its shipped defaults afterwards, so the suites are
+order-independent and can run against a live panel (or all six in one go with
+`python run_all_tests.py admin YOURPASS`). A green run prints `119/119`,
+`60/60`, `177/177`, `99/99`, `46/46` and `63/63` - if not, open an issue.
 
 ### API
 

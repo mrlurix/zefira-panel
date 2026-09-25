@@ -1,3 +1,4 @@
+import re
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
@@ -22,9 +23,16 @@ Protocol = Literal[
 InboundProtocol = Literal[
     "vless", "reality", "vmess", "trojan", "ss", "hysteria2",
 ]
-HOST_RE = r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\z"
-HOST_CORE = r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?"
-SNI_RE = r"^[a-zA-Z0-9.,\- ]{0,300}\z"
+# DNS-label based host patterns. The old "[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?"
+# accepted empty labels, so "a..b" / "www..com" were saved and then emitted
+# as dead hosts/SNIs in every generated link.
+_DNS_LABEL = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+HOST_RE = rf"^(?:{_DNS_LABEL}(?:\.{_DNS_LABEL})*)?\z"
+HOST_CORE = rf"{_DNS_LABEL}(?:\.{_DNS_LABEL})*"
+# Unanchored single hostname (for per-entry validation, e.g. the SNI list).
+HOST_ONE = rf"{_DNS_LABEL}(?:\.{_DNS_LABEL})*"
+# SNI is a comma/space separated host list (REALITY rotates through it).
+SNI_RE = r"^(?:[a-zA-Z0-9.,\- ]*[a-zA-Z0-9])?\z"
 
 
 class LoginIn(BaseModel):
@@ -38,12 +46,28 @@ class UserCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     username: str = Field(pattern=USERNAME_RE)
-    protocols: List[Protocol] = Field(min_length=1, max_length=11)
+    # A template fills every plan field, so they become optional when one is
+    # given: the panel's "create from template" button posts the template id,
+    # and an integrator posting {template_id} alone got a 422 for protocols.
+    template_id: Optional[int] = Field(default=None, ge=1, le=2**31 - 1)
+    protocols: Optional[List[Protocol]] = Field(default=None, min_length=1, max_length=11)
     note: str = Field(default="", max_length=200)
-    volume_gb: float = Field(ge=0.01, le=100000)
-    days: StrictInt = Field(ge=1, le=3650)
-    start_on_first_use: bool = False
+    volume_gb: Optional[float] = Field(default=None, ge=0.01, le=100000)
+    days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
+    start_on_first_use: Optional[bool] = None
     device_limit: Optional[StrictInt] = Field(default=None, ge=1, le=1000)
+
+    @model_validator(mode="after")
+    def _template_or_fields(self):
+        if self.template_id is None:
+            missing = [n for n in ("protocols", "volume_gb", "days")
+                       if getattr(self, n) is None]
+            if missing:
+                raise ValueError(
+                    "missing required field(s): " + ", ".join(missing)
+                    + " (or pass template_id)"
+                )
+        return self
 
     @field_validator("volume_gb", mode="before")
     @classmethod
@@ -260,7 +284,7 @@ class AiSettingsIn(BaseModel):
 class SettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    domain: str = Field(default="", max_length=253, pattern=r"^(?:[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?)?\z")
+    domain: str = Field(default="", max_length=253, pattern=HOST_RE)
     sub_port: StrictInt = Field(ge=1, le=65535)
     hy2_port: StrictInt = Field(ge=1, le=65535)
     wg_port: StrictInt = Field(ge=1, le=65535)
@@ -275,8 +299,30 @@ class SettingsIn(BaseModel):
     reality_sni: str = Field(
         default="www.yahoo.com,www.samsung.com,www.microsoft.com",
         max_length=300,
-        pattern=SNI_RE,
     )
+
+    @field_validator("reality_sni", mode="after")
+    @classmethod
+    def _check_sni(cls, v: str) -> str:
+        # The SNI is a comma-separated host list that REALITY rotates through
+        # (protocols.py splits on ","). A character-class regex accepted
+        # "www..com" and "www yahoo.com" (empty DNS label / a space inside one
+        # name), which then shipped as a dead server name in every REALITY
+        # link. Validate each comma-separated entry.
+        cleaned = v.strip()
+        if not cleaned:
+            return cleaned
+        seen = 0
+        for part in cleaned.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if not re.fullmatch(HOST_ONE, part) or len(part) > 253:
+                raise ValueError(f"invalid SNI hostname: {part[:40]!r}")
+            seen += 1
+        if not seen:
+            raise ValueError("reality_sni must contain at least one hostname")
+        return cleaned
     obfuscated_host: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     per_user_subdomain: bool = False
     cdn_enabled: bool = False
@@ -318,10 +364,12 @@ class TemplateCreateIn(BaseModel):
 class TunnelSettingsIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    # Port 0/99999 passed the old [0-9]{1,5} pattern and became the target of
+    # every subscription link and QR code ("https://host:0/sub/...").
     public_url: str = Field(
         default="",
         max_length=253,
-        pattern=r"^(?:|https?://" + HOST_CORE + r"(:[0-9]{1,5})?)\z",
+        pattern=r"^(?:|https?://" + HOST_CORE + r"(:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?)\z",
     )
     trusted_proxies: str = Field(default="", max_length=500)
 
@@ -448,6 +496,8 @@ class RestoreUserIn(BaseModel):
     duration_days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
     created_at: Optional[str] = None
     expires_at: str
+    last_fetch_at: Optional[str] = None
+    last_fetch_ip: Optional[str] = Field(default=None, max_length=64)
 
     @field_validator("volume_gb", "used_gb", mode="before")
     @classmethod
@@ -494,8 +544,13 @@ class RestoreEncryptedIn(RestoreConfirmIn):
 
 class RestoreIn(RestoreConfirmIn):
     zefira_backup: Literal[True]
-    users: List[RestoreUserIn] = Field(max_length=10000)
-    admins: Optional[List[RestoreAdminIn]] = None
+    # Raw dicts on purpose: a backup is a mixed bag of versions, and one
+    # unusable row (missing expiry, numeric string volume, bad enum) used to
+    # 422 the WHOLE request - so a single corrupt customer lost every other
+    # customer in the file. Rows are validated per-row inside the restore
+    # transaction and the bad ones are skipped + counted.
+    users: List[dict] = Field(max_length=10000)
+    admins: Optional[List[RestoreAdminIn]] = Field(default=None, max_length=50)
     settings: Optional[dict] = None
     templates: Optional[List[dict]] = Field(default=None, max_length=500)
     blocked_sites: Optional[List[dict]] = Field(default=None, max_length=600)
@@ -503,3 +558,7 @@ class RestoreIn(RestoreConfirmIn):
     inbounds: Optional[List[dict]] = Field(default=None, max_length=200)
     server_nodes: Optional[List[dict]] = Field(default=None, max_length=100)
     tunnel_nodes: Optional[List[dict]] = Field(default=None, max_length=100)
+    # Identity of the source host's OpenVPN CA (from meta.ca_fingerprint).
+    # Empty = older backup: treated as "unknown origin" -> OpenVPN client
+    # credentials are re-issued against the local CA instead of imported.
+    ca_fingerprint: str = Field(default="", max_length=64, pattern=r"^[a-f0-9]*\z")

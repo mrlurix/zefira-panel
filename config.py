@@ -61,7 +61,39 @@ if (
     SUBSCRIPTION_PATH = "/sub"
 else:
     SUBSCRIPTION_PATH = _SUB_RAW.rstrip("/") or "/sub"
-DOMAIN = os.environ.get("ZEFIRA_DOMAIN", "zefira.example.com").strip() or "zefira.example.com"
+
+
+def _detect_outbound_ipv4() -> str:
+    """Best-effort primary outbound IPv4 (no packets are sent).
+
+    install.sh explicitly supports "empty domain = use server IP", so the
+    panel has to know its own address: without this the generated configs
+    pointed at the zefira.example.com placeholder.
+    """
+    try:
+        import socket
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("1.1.1.1", 53))
+            ip = sock.getsockname()[0]
+        finally:
+            sock.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
+
+
+_raw_domain = os.environ.get("ZEFIRA_DOMAIN")
+if _raw_domain is None:
+    # Unset: keep the documented placeholder default.
+    DOMAIN = "zefira.example.com"
+else:
+    # Explicitly empty (IP mode): resolve the server's own address instead of
+    # shipping every link to the placeholder domain.
+    DOMAIN = _raw_domain.strip() or _detect_outbound_ipv4()
 SUB_PORT = os.environ.get("ZEFIRA_SUB_PORT", "443")
 WG_PORT = os.environ.get("ZEFIRA_WG_PORT", "51820")
 HY2_PORT = os.environ.get("ZEFIRA_HY2_PORT", "8443")

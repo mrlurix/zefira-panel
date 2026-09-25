@@ -85,6 +85,16 @@ async function api(url, opts = {}) {
   return data;
 }
 
+// Numeric input helper. parseInt/parseFloat were used for number fields, so
+// "1e3" became 1 (wrong quota) and `parseInt(port) || 443` silently rewrote a
+// typed 0 into 443. Number() keeps exponent notation honest; junk -> NaN,
+// which every caller already validates.
+function numInput(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return NaN;
+  return Number(s);
+}
+
 // window.open() downloads bypass the api() 401→login redirect (expired
 // session would show raw JSON in a new tab). Pre-flight the session first.
 async function ensureAuth() {
@@ -93,6 +103,27 @@ async function ensureAuth() {
   // already redirect to /login inside api()).
   try { await api("/api/me"); return true; }
   catch (_) { return false; }
+}
+
+// Download/open helper: window.open() after an await is a popup-blocker
+// target (the user got "popup blocked" and no file). Pre-open a blank tab
+// synchronously, then navigate it; if that is blocked, fall back to a
+// same-tab anchor download so the guide/config still arrives.
+function openDownload(url) {
+  let w = null;
+  try { w = window.open("", "_blank"); } catch (_) { w = null; }
+  if (w) {
+    try { w.location.href = url; } catch (_) { /* cross-origin edge */ }
+    return true;
+  }
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return false;
 }
 
 function toast(msg, ok = true) {
@@ -273,7 +304,10 @@ function userRow(u) {
   exp.className = "exp-cell";
   exp.appendChild(expiryBadge(u));
   const dateSmall = document.createElement("small");
-  dateSmall.textContent = u.pending_start ? "\u2014" : dateFmt.format(new Date(u.expires_at));
+  // Guarded: a null/garbage expires_at used to throw a RangeError here,
+  // AFTER the table body was cleared - one bad row blanked every user.
+  const expDate = u.pending_start ? null : new Date(u.expires_at);
+  dateSmall.textContent = (!expDate || isNaN(expDate.getTime())) ? "\u2014" : dateFmt.format(expDate);
   exp.appendChild(dateSmall);
 
   const act = document.createElement("td");
@@ -407,6 +441,10 @@ async function loadSystem() {
   try {
     const sys = await api("/api/system");
     if (!sys.available) { $("#sys-card").classList.add("hidden"); return; }
+    // The card was hidden by an earlier unavailable answer and never came
+    // back: a single transient failure hid the System section for the rest
+    // of the session.
+    $("#sys-card").classList.remove("hidden");
     setBar("#bar-cpu", "#val-cpu", sys.cpu);
     setBar("#bar-mem", "#val-mem", sys.mem);
     setBar("#bar-disk", "#val-disk", sys.disk);
@@ -432,7 +470,11 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
       clearInterval(updatePoll);
       updatePoll = null;
     }
-    if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); }
+    if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); loadUsers(); }
+    // Anti-Censorship saves through the same #srv-form payload, so its fields
+    // must be loaded even when Settings was never opened (blank ports parsed
+    // to NaN and the save was rejected).
+    if (btn.dataset.section === "reality") { loadSrvSettings(); }
     if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); loadApiTokens(); }
     if (btn.dataset.section === "customize") { loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
@@ -452,36 +494,49 @@ $("#logout-btn").addEventListener("click", async () => {
 });
 
 const overlay = $("#modal-overlay");
-$("#add-user-btn").addEventListener("click", () => { loadTemplates(); overlay.classList.remove("hidden"); });
-$("#modal-close").addEventListener("click", () => overlay.classList.add("hidden"));
-overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.add("hidden"); });
+$("#add-user-btn").addEventListener("click", () => { bumpUserFormOp(); loadTemplates(); overlay.classList.remove("hidden"); });
+$("#modal-close").addEventListener("click", () => { bumpUserFormOp(); overlay.classList.add("hidden"); });
+overlay.addEventListener("click", (e) => { if (e.target === overlay) { bumpUserFormOp(); overlay.classList.add("hidden"); } });
+// Operation generation: a finished add/edit from a modal the operator already
+// closed used to reset+close the modal they had since reopened, wiping the
+// new form. Each open/submit bumps the counter and only the newest op acts.
+let userFormOp = 0;
+function bumpUserFormOp() { userFormOp += 1; return userFormOp; }
 
 const qrModal = $("#qr-modal");
 $("#qr-close").addEventListener("click", () => qrModal.classList.add("hidden"));
 qrModal.addEventListener("click", (e) => { if (e.target === qrModal) qrModal.classList.add("hidden"); });
 let currentQrUrl = "";
+// Monotonic counter for QR/copy actions: only the newest request may write
+// the modal, the image, or the clipboard.
+let qrSeq = 0;
 $("#qr-copy-btn").addEventListener("click", async () => {
   if (!currentQrUrl) return;
   if (await copyText(currentQrUrl)) toast(t("msg.linkCopied"));
   else toast(t("msg.copyFailed"), false);
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { overlay.classList.add("hidden"); qrModal.classList.add("hidden"); }
+  if (e.key === "Escape") { bumpUserFormOp(); overlay.classList.add("hidden"); qrModal.classList.add("hidden"); }
 });
 
 $("#add-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
+  const myOp = bumpUserFormOp();
+  // Every early return must release the form: a validation error used to
+  // leave __busy set and the button disabled, so the form only worked again
+  // after a full page reload.
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
-  if (!protos.length) { toast(t("msg.selectProto"), false); return; }
-  const volVal = parseFloat(f.volume.value);
-  const daysVal = parseInt(f.days.value, 10);
+  if (!protos.length) { toast(t("msg.selectProto"), false); releaseSubmit(f); return; }
+  const volVal = Number(f.volume.value);
+  const daysVal = numInput(f.days.value);
   if (!Number.isFinite(volVal) || volVal <= 0 || !Number.isFinite(daysVal) || daysVal < 1) {
     toast(t("msg.badNumbers"), false);
+    releaseSubmit(f);
     return;
   }
-  const devVal = parseInt(f.device_limit.value, 10);
+  const devVal = numInput(f.device_limit.value);
   try {
     await api("/api/users", {
       method: "POST",
@@ -495,6 +550,9 @@ $("#add-user-form").addEventListener("submit", async (e) => {
         device_limit: Number.isFinite(devVal) && devVal >= 1 ? devVal : null
       }
     });
+    // The modal was closed/reopened while this request was in flight:
+    // resetting and closing it now would destroy the operator's new input.
+    if (myOp !== userFormOp) return;
     f.reset();
     f.querySelector('input[value="vless"]').checked = true;
     f.volume.value = 30; f.days.value = 30;
@@ -505,7 +563,6 @@ $("#add-user-form").addEventListener("submit", async (e) => {
     if (err.message !== "auth") toast(err.message, false);
   } finally { releaseSubmit(f); }
 });
-
 async function loadTemplates() {
   try {
     const tpls = await api("/api/templates");
@@ -528,22 +585,25 @@ $("#tpl-select").addEventListener("change", () => {
   const sel = $("#tpl-select");
   const opt = sel.selectedOptions[0];
   if (!opt || !opt.dataset.payload) return;
-  let t;
-  try { t = JSON.parse(opt.dataset.payload); }
+  // `tpl`, not `t`: `t` is the translation function and the catch below used
+  // t("...") with t undefined -> uncaught TypeError, no toast at all.
+  let tpl;
+  try { tpl = JSON.parse(opt.dataset.payload); }
   catch (_) { toast(t("msg.badNumbers"), false); return; }
+  if (!tpl || !Array.isArray(tpl.protocols)) { toast(t("msg.badNumbers"), false); return; }
   const f = $("#add-user-form");
-  f.querySelectorAll('input[name="proto"]').forEach((c) => { c.checked = t.protocols.includes(c.value); });
-  f.volume.value = t.volume_gb;
-  f.days.value = t.days;
-  $("#sofu-check").checked = !!t.start_on_first_use;
-  f.device_limit.value = t.device_limit || "";
+  f.querySelectorAll('input[name="proto"]').forEach((c) => { c.checked = tpl.protocols.includes(c.value); });
+  f.volume.value = tpl.volume_gb;
+  f.days.value = tpl.days;
+  $("#sofu-check").checked = !!tpl.start_on_first_use;
+  f.device_limit.value = tpl.device_limit || "";
 });
 $("#tpl-save-btn").addEventListener("click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast(t("msg.tplSelectProto"), false); return; }
-  const volVal = parseFloat(f.volume.value);
-  const daysVal = parseInt(f.days.value, 10);
+  const volVal = numInput(f.volume.value);
+  const daysVal = numInput(f.days.value);
   if (!Number.isFinite(volVal) || volVal <= 0 || !Number.isFinite(daysVal) || daysVal < 1) {
     toast(t("msg.badNumbers"), false);
     return;
@@ -553,7 +613,7 @@ $("#tpl-save-btn").addEventListener("click", async () => {
   try {
     await api("/api/templates", {
       method: "POST",
-      body: { name, protocols: protos, volume_gb: volVal, days: daysVal, start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = parseInt(f.device_limit.value, 10); return Number.isFinite(v) && v >= 1 ? v : null; })() }
+      body: { name, protocols: protos, volume_gb: volVal, days: daysVal, start_on_first_use: $("#sofu-check").checked, device_limit: (() => { const v = numInput(f.device_limit.value); return Number.isFinite(v) && v >= 1 ? v : null; })() }
     });
     toast(t("msg.tplSaved", {name}));
     loadTemplates();
@@ -593,13 +653,18 @@ $("#export-csv-btn").addEventListener("click", () => {
   };
   const rows = [["username", "protocols", "volume_gb", "used_gb", "expires_at", "status", "note"]];
   for (const u of applySort(USERS_CACHE)) {
+    // Same order as statusBadge()/the subscription page: expired wins over
+    // limited. The CSV used to report "limited" for an account that is both.
+    const expDays = u.expires_at ? daysLeft(u.expires_at) : NaN;
+    const expired = !Number.isFinite(expDays) || expDays <= 0;
+    const limited = (Number(u.used_gb) || 0) >= (Number(u.volume_gb) || 0);
     rows.push([
       u.username,
       (u.protocols || []).join("|"),
       u.volume_gb,
       u.used_gb,
       u.expires_at && !u.pending_start ? u.expires_at : "on-first-use",
-      u.is_active ? (u.pending_start ? "pending" : (u.used_gb >= u.volume_gb ? "limited" : (daysLeft(u.expires_at) <= 0 ? "expired" : "active"))) : "disabled",
+      !u.is_active ? "disabled" : u.pending_start ? "pending" : expired ? "expired" : limited ? "limited" : "active",
       (u.note || "").replace(/[\r\n,]/g, " ")
     ]);
   }
@@ -639,7 +704,11 @@ $("#users-table").addEventListener("click", async (e) => {
       // Fetch the server-built URL (respects custom SUBSCRIPTION_PATH);
       // a location.origin + "/sub/" guess 404s for renamed paths.
       try {
+        const seq = ++qrSeq;
         const d = await api(`/api/users/${id}/qr`);
+        // A slower earlier request used to overwrite the newer action
+        // (copy A, click B, then A's answer lands: B's URL on screen).
+        if (seq !== qrSeq) return;
         if (await copyText(d.url)) toast(t("msg.subCopied"));
         else toast(t("msg.copyFailed"), false);
       } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -648,23 +717,27 @@ $("#users-table").addEventListener("click", async (e) => {
     if (btn.dataset.act === "download") {
       // Check the WireGuard key BEFORE opening: otherwise the warning
       // always arrives after the download already started.
+      let blocked = false;
       try {
         const u = (typeof USERS_CACHE !== "undefined" ? USERS_CACHE : []).find((x) => String(x.id) === String(id));
         if (u && (u.protocols || []).includes("wireguard")) {
           const srv = await api("/api/settings");
           if (!srv.wg_pub) {
+            // Say what actually happened: nothing was downloaded.
             toast(t("msg.wgKeyWarn"), false);
-            return;
+            blocked = true;
           }
         }
       } catch (_) {}
+      if (blocked) return;
       if (!(await ensureAuth())) return;
-      const w = window.open(`/api/users/${id}/config`, "_blank");
-      toast(w ? t("msg.downloading") : t("msg.popupBlocked"), !!w);
+      openDownload(`/api/users/${id}/config`);
       return;
     }
     if (btn.dataset.act === "qr") {
+      const seq = ++qrSeq;
       const d = await api(`/api/users/${id}/qr`);
+      if (seq !== qrSeq) return;   // a newer QR/copy action won
       currentQrUrl = d.url;
       $("#user-qr-img").src = "data:image/svg+xml;base64," + d.qr_b64;
       $("#qr-url").textContent = d.url;
@@ -677,10 +750,14 @@ $("#users-table").addEventListener("click", async (e) => {
       toast(isActive ? t("msg.paused") : t("msg.enabled"));
     } else if (btn.dataset.act === "reset") {
       if (!confirm(t("cfm.userReset"))) return;
+      // confirm() only blocks the dialog; a second click during the request
+      // rotated the token twice (the first link was already dead).
+      if (!guardBtn(btn)) return;
       await api("/api/users/" + id + "/reset-token", { method: "POST" });
       toast(t("msg.tokenRegen"));
     } else if (btn.dataset.act === "del") {
       if (!confirm(t("cfm.userDelete", {name: btn.dataset.name}))) return;
+      if (!guardBtn(btn)) return;
       await api("/api/users/" + id, { method: "DELETE" });
       toast(t("msg.userDeleted"));
     }
@@ -824,17 +901,33 @@ function layoutRow(label, locked, hidden, onUp, onDown, onEye) {
     li.appendChild(b);
     return b;
   };
-  mk("▲", onUp, false);
-  mk("▼", onDown, false);
+  // Boundary arrows were rendered enabled and did nothing on click.
+  const up = mk("▲", onUp, onUp === null);
+  const down = mk("▼", onDown, onDown === null);
+  up.dataset.edge = "up";
+  down.dataset.edge = "down";
   const eye = mk(hidden ? t("menu.hide") : t("menu.show"), onEye, locked);
   if (locked) eye.title = t("menu.lockedNote");
   return li;
 }
+// Layout autosave runs one request per click. Two fast clicks (Up then Down)
+// could land out of order and persist the pre-click order permanently, so
+// saves are serialized and coalesced: only the newest payload is sent.
+let layoutSaveChain = Promise.resolve();
+let layoutSavePending = null;
 async function saveLayout(silent) {
-  try {
-    await api("/api/appearance", { method: "PUT", body: collectAppearance() });
-    if (!silent) toast(t("msg.layoutSaved"));
-  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  const body = collectAppearance();
+  layoutSavePending = body;
+  layoutSaveChain = layoutSaveChain.then(async () => {
+    const payload = layoutSavePending;
+    layoutSavePending = null;
+    if (!payload) return;
+    try {
+      await api("/api/appearance", { method: "PUT", body: payload });
+      if (!silent) toast(t("msg.layoutSaved"));
+    } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  });
+  return layoutSaveChain;
 }
 function renderMenuLayout() {
   const ul = $("#menu-layout-list");
@@ -845,8 +938,8 @@ function renderMenuLayout() {
       t("menu." + item.id),
       locked,
       item.hidden,
-      () => { if (i > 0) { const t = MENU_STATE[i - 1]; MENU_STATE[i - 1] = item; MENU_STATE[i] = t; afterMenuChange(); } },
-      () => { if (i < MENU_STATE.length - 1) { const t = MENU_STATE[i + 1]; MENU_STATE[i + 1] = item; MENU_STATE[i] = t; afterMenuChange(); } },
+      i > 0 ? () => { const t = MENU_STATE[i - 1]; MENU_STATE[i - 1] = item; MENU_STATE[i] = t; afterMenuChange(); } : null,
+      i < MENU_STATE.length - 1 ? () => { const t = MENU_STATE[i + 1]; MENU_STATE[i + 1] = item; MENU_STATE[i] = t; afterMenuChange(); } : null,
       () => { if (!locked) { item.hidden = !item.hidden; afterMenuChange(); } }
     ));
   });
@@ -872,22 +965,18 @@ function renderDashLayout() {
       t("dlayout." + id),
       false,
       hidden,
-      () => {
-        if (i > 0) {
-          const o = DASH_STATE.order.slice();
-          const t = o[i - 1]; o[i - 1] = o[i]; o[i] = t;
-          DASH_STATE.order = o;
-          afterDashChange();
-        }
-      },
-      () => {
-        if (i < DASH_STATE.order.length - 1) {
-          const o = DASH_STATE.order.slice();
-          const t = o[i + 1]; o[i + 1] = o[i]; o[i] = t;
-          DASH_STATE.order = o;
-          afterDashChange();
-        }
-      },
+      i > 0 ? () => {
+        const o = DASH_STATE.order.slice();
+        const t = o[i - 1]; o[i - 1] = o[i]; o[i] = t;
+        DASH_STATE.order = o;
+        afterDashChange();
+      } : null,
+      i < DASH_STATE.order.length - 1 ? () => {
+        const o = DASH_STATE.order.slice();
+        const t = o[i + 1]; o[i + 1] = o[i]; o[i] = t;
+        DASH_STATE.order = o;
+        afterDashChange();
+      } : null,
       () => {
         const h = DASH_STATE.hidden.slice();
         const k = h.indexOf(id);
@@ -946,9 +1035,23 @@ $("#ap-reset-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
+// Loader generation counters. Without them a slow earlier response overwrote
+// whatever the operator had typed/saved in the meantime (stale address/port,
+// list row vanished after a create, REALITY keys reset to empty).
+const seq = {};
+function nextSeq(name) {
+  seq[name] = (seq[name] || 0) + 1;
+  return seq[name];
+}
+function isCurrent(name, token) {
+  return seq[name] === token;
+}
+
 async function loadSrvSettings() {
+  const token = nextSeq("srv");
   try {
     const srv = await api("/api/settings");
+    if (!isCurrent("srv", token)) return;
     const f = $("#srv-form");
     for (const [k, v] of Object.entries(srv)) {
       if (f.elements[k]) {
@@ -964,6 +1067,10 @@ async function loadSrvSettings() {
     const cs = document.querySelector('[name="cdn_sni"]');
     if (ce) ce.checked = String(srv.cdn_enabled) === "1" || srv.cdn_enabled === true;
     if (cs) cs.value = srv.cdn_sni || "";
+    // The public key is not a secret: "Copy Both Keys" used to copy an EMPTY
+    // public_key after a reload because only Generate ever filled it.
+    const rpub = document.querySelector('[name="reality_pub"]') || $("#reality-pub");
+    if (rpub && srv.reality_pub) rpub.value = srv.reality_pub;
   } catch (_) {}
 }
 document.getElementById("cdn-preset")?.addEventListener("change", (e) => {
@@ -974,23 +1081,31 @@ async function saveAllSettings() {
   const f = $("#srv-form");
   const body = {};
   body.domain = f.domain.value.trim();
-  body.sub_port = parseInt(f.sub_port.value, 10);
-  body.hy2_port = parseInt(f.hy2_port.value, 10);
-  body.wg_port = parseInt(f.wg_port.value, 10);
-  body.ovpn_port = parseInt(f.ovpn_port.value, 10);
-  body.l2tp_port = parseInt(f.l2tp_port.value, 10) || 1701;
-  body.cisco_port = parseInt(f.cisco_port.value, 10) || 443;
-  body.socks5_port = parseInt(f.socks5_port.value, 10) || 1080;
+  // Number(), not parseInt: "1e3" became 1 and every port was truncated.
+  body.sub_port = numInput(f.sub_port.value);
+  body.hy2_port = numInput(f.hy2_port.value);
+  body.wg_port = numInput(f.wg_port.value);
+  body.ovpn_port = numInput(f.ovpn_port.value);
+  body.l2tp_port = numInput(f.l2tp_port.value) || 1701;
+  body.cisco_port = numInput(f.cisco_port.value) || 443;
+  body.socks5_port = numInput(f.socks5_port.value) || 1080;
   body.dns = f.dns.value.trim() || "1.1.1.1";
   body.ovpn_proto = f.ovpn_proto.value;
   body.wg_pub = f.wg_pub.value.trim();
-  body.reality_port = parseInt(document.querySelector('[name="reality_port"]').value, 10) || 443;
+  body.reality_port = numInput(document.querySelector('[name="reality_port"]').value) || 443;
   body.reality_sni = document.querySelector('[name="reality_sni"]').value.trim() || "www.yahoo.com,www.samsung.com,www.microsoft.com";
   body.obfuscated_host = f.obfuscated_host.value.trim();
   body.per_user_subdomain = f.per_user_subdomain.checked;
   body.block_direct_ip = f.block_direct_ip.checked;
   body.cdn_enabled = document.querySelector('[name="cdn_enabled"]').checked;
   body.cdn_sni = document.querySelector('[name="cdn_sni"]').value.trim();
+  // A NaN port would be sent as null and 422 the whole save; say which field.
+  for (const [k, v] of Object.entries(body)) {
+    if (k.endsWith("_port") && !Number.isFinite(v)) {
+      toast(t("msg.badNumbers"), false);
+      return;
+    }
+  }
   try {
     await api("/api/settings", { method: "PUT", body });
     toast(t("msg.srvSaved"));
@@ -998,7 +1113,11 @@ async function saveAllSettings() {
     if (err.message !== "auth") toast(err.message, false);
   }
 }
-document.getElementById("save-reality-btn")?.addEventListener("click", saveAllSettings);
+document.getElementById("save-reality-btn")?.addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  try { await saveAllSettings(); } finally { btn.disabled = false; }
+});
 $("#srv-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!guardSubmit(e.target)) return;
@@ -1006,8 +1125,10 @@ $("#srv-form").addEventListener("submit", async (e) => {
   finally { releaseSubmit(e.target); }
 });
 
-$("#reality-gen-btn").addEventListener("click", async () => {
+$("#reality-gen-btn").addEventListener("click", async (e) => {
   if (!confirm(t("cfm.realityGen"))) return;
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
   try {
     const d = await api("/api/reality/generate", { method: "POST" });
     $("#reality-pub").value = d.public_key;
@@ -1015,6 +1136,7 @@ $("#reality-gen-btn").addEventListener("click", async () => {
     $("#reality-out").classList.remove("hidden");
     toast(t("msg.realityKeypair"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 $("#reality-reveal-btn").addEventListener("click", async () => {
   try {
@@ -1031,8 +1153,10 @@ $("#reality-copy-btn").addEventListener("click", async () => {
 });
 
 async function loadTunnelSettings() {
+  const token = nextSeq("tun");
   try {
     const t = await api("/api/tunnel-settings");
+    if (!isCurrent("tun", token)) return;
     $("#tunnel-public-url").value = t.public_url || "";
     $("#tunnel-trusted").value = t.trusted_proxies || "";
   } catch (_) {}
@@ -1060,6 +1184,7 @@ function nodeStatusText(st) {
 function renderNodes(nodes) {
   const ul = $("#nodes-list");
   ul.textContent = "";
+  if (!Array.isArray(nodes)) nodes = [];
   if (!nodes.length) {
     const li = document.createElement("li");
     li.className = "muted";
@@ -1101,8 +1226,11 @@ function renderNodes(nodes) {
 }
 
 async function loadNodes() {
+  const token = nextSeq("nodes");
   try {
-    renderNodes(await api("/api/nodes"));
+    const rows = await api("/api/nodes");
+    if (!isCurrent("nodes", token)) return;
+    renderNodes(rows);
   } catch (_) {}
 }
 
@@ -1121,7 +1249,7 @@ $("#node-create-btn").addEventListener("click", async (e) => {
         transport: $("#node-transport").value,
         iran_ip: iran,
         kharej_ip: kharej,
-        tunnel_port: parseInt($("#node-tport").value, 10),
+        tunnel_port: numInput($("#node-tport").value),
         forwarded_ports: $("#node-fports").value.trim(),
         udp_forward: $("#node-udp").checked
       }
@@ -1130,11 +1258,7 @@ $("#node-create-btn").addEventListener("click", async (e) => {
     toast(t("msg.tunnelCreated"));
     $("#node-name").value = ""; $("#node-iran").value = ""; $("#node-kharej").value = "";
     loadNodes();
-    setTimeout(async () => {
-      if (!(await ensureAuth())) return;
-      const w = window.open(`/api/nodes/${node.id}/guide`, "_blank");
-      if (!w) toast(t("msg.popupBlocked"), false);
-    }, 500);
+    setTimeout(() => openDownload(`/api/nodes/${node.id}/guide`), 500);
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
@@ -1156,13 +1280,18 @@ $("#nodes-list").addEventListener("click", async (e) => {
     } else if (btn.dataset.act === "copy") {
       const r = await api(`/api/nodes/${id}/reveal-token`, { method: "POST" });
       if (await copyText(r.token)) toast(t("msg.tokenCopiedSame"));
-      else { prompt(t("prm.tokenOnce"), r.token); toast(t("msg.tokenCopiedSame")); }
+      else {
+        // Copy failed: the fallback prompt is the only way to keep the token.
+        // Claiming "copied" while the prompt was dismissed lost it for good.
+        prompt(t("prm.tokenOnce"), r.token);
+        toast(t("msg.copyFailed"), false);
+      }
     } else if (btn.dataset.act === "download") {
       if (!(await ensureAuth())) return;
-      const w = window.open(`/api/nodes/${id}/guide`, "_blank");
-      if (!w) toast(t("msg.popupBlocked"), false);
+      if (!openDownload(`/api/nodes/${id}/guide`)) toast(t("msg.popupBlocked"), false);
     } else if (btn.dataset.act === "refresh") {
       if (!confirm(t("cfm.nodeRegen"))) return;
+      if (!guardBtn(btn)) return;
       // Same once-flow as create: the old token dies immediately, so copy
       // the new one and re-open the guide instead of stranding the operator.
       const r = await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
@@ -1171,11 +1300,7 @@ $("#nodes-list").addEventListener("click", async (e) => {
       }
       toast(t("msg.tokenRegenDl"));
       loadNodes();
-      setTimeout(async () => {
-        if (!(await ensureAuth())) return;
-        const w = window.open(`/api/nodes/${id}/guide`, "_blank");
-        if (!w) toast(t("msg.popupBlocked"), false);
-      }, 500);
+      setTimeout(() => openDownload(`/api/nodes/${id}/guide`), 500);
     } else if (btn.dataset.act === "del-node") {
       if (!confirm(t("cfm.nodeDelete", {name: btn.dataset.name}))) return;
       await api("/api/nodes/" + id, { method: "DELETE" });
@@ -1234,7 +1359,7 @@ function inboundRow(ib) {
     try {
       await api("/api/inbounds/" + ib.id, {
         method: "PATCH",
-        body: { node_id: nodeSel.value ? parseInt(nodeSel.value, 10) : null }
+        body: { node_id: nodeSel.value ? numInput(nodeSel.value) : null }
       });
       toast(nodeSel.value ? t("msg.ibPinned") : t("msg.ibLocal"));
       loadInbounds();
@@ -1265,15 +1390,18 @@ async function loadInbounds() {
     const items = await api("/api/inbounds");
     const tbody = $("#inbounds-tbody");
     tbody.textContent = "";
-    for (const ib of items) tbody.appendChild(inboundRow(ib));
-    $("#ib-empty").classList.toggle("hidden", items.length > 0);
+    // Null/garbage body used to throw for...of AFTER the tbody was cleared,
+    // leaving the section permanently blank.
+    const list = Array.isArray(items) ? items : [];
+    for (const ib of list) tbody.appendChild(inboundRow(ib));
+    $("#ib-empty").classList.toggle("hidden", list.length > 0);
   } catch (_) {}
 }
 
 $("#ib-add-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#ib-name").value.trim();
-  const port = parseInt($("#ib-port").value, 10);
+  const port = numInput($("#ib-port").value);
   if (!name || !port) { toast(t("msg.ibNamePort"), false); return; }
   if (!guardBtn(btn)) return;
   try {
@@ -1285,7 +1413,7 @@ $("#ib-add-btn").addEventListener("click", async (e) => {
         port,
         host: $("#ib-host").value.trim(),
         enabled: true,
-        node_id: $("#ib-node") && $("#ib-node").value ? parseInt($("#ib-node").value, 10) : null
+        node_id: $("#ib-node") && $("#ib-node").value ? numInput($("#ib-node").value) : null
       }
     });
     $("#ib-name").value = ""; $("#ib-port").value = ""; $("#ib-host").value = "";
@@ -1339,7 +1467,8 @@ function fillNodeSelect(sel, current) {
 }
 
 function renderSrvNodes(nodes) {
-  SERVER_NODES = nodes;
+  SERVER_NODES = Array.isArray(nodes) ? nodes : [];
+  nodes = SERVER_NODES;
   fillNodeSelect($("#ib-node"), $("#ib-node") ? $("#ib-node").value : "");
   const ul = $("#snodes-list");
   ul.textContent = "";
@@ -1385,8 +1514,11 @@ function renderSrvNodes(nodes) {
 }
 
 async function loadSrvNodes() {
+  const token = nextSeq("snodes");
   try {
-    renderSrvNodes(await api("/api/server-nodes"));
+    const rows = await api("/api/server-nodes");
+    if (!isCurrent("snodes", token)) return;
+    renderSrvNodes(rows);
   } catch (_) {}
 }
 
@@ -1394,7 +1526,10 @@ $("#snode-create-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#snode-name").value.trim();
   const address = $("#snode-addr").value.trim();
-  const port = parseInt($("#snode-port").value, 10) || 443;
+  // 0 was not a valid port: `parseInt(...) || 443` silently created the node
+  // on 443 while the operator had typed 0.
+  const portRaw = numInput($("#snode-port").value);
+  const port = Number.isFinite(portRaw) && portRaw >= 1 && portRaw <= 65535 ? portRaw : NaN;
   if (!name || !address) { toast(t("msg.snodeNameAddr"), false); return; }
   if (!guardBtn(btn)) return;
   try {
@@ -1416,7 +1551,11 @@ $("#snodes-list").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "check") {
       const n = await api(`/api/server-nodes/${id}/check`, { method: "POST" });
-      toast(n.status === "online" ? t("msg.snodeOnline", {name: n.name, ms: n.latency_ms}) : t("msg.snodeOffline", {name: n.name}), n.status === "online");
+      // latency_ms is nullable: the toast used to read "name ONLINE (null ms)".
+      const latTxt = n.latency_ms != null ? ` (${n.latency_ms} ms)` : "";
+      toast(n.status === "online"
+        ? t("msg.snodeOnline", {name: n.name}) + latTxt
+        : t("msg.snodeOffline", {name: n.name}), n.status === "online");
       loadSrvNodes();
     } else if (btn.dataset.act === "toggle") {
       const cur = SERVER_NODES.find((x) => String(x.id) === String(id));
@@ -1495,25 +1634,28 @@ $("#block-list")?.addEventListener("click", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
-$("#edit-close").addEventListener("click", () => $("#edit-modal").classList.add("hidden"));
-$("#edit-modal").addEventListener("click", (e) => { if (e.target === $("#edit-modal")) $("#edit-modal").classList.add("hidden"); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#edit-modal").classList.add("hidden"); });
+$("#edit-close").addEventListener("click", () => { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); });
+$("#edit-modal").addEventListener("click", (e) => { if (e.target === $("#edit-modal")) { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); } });
 
 $("#edit-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
+  const myOp = bumpUserFormOp();
   const body = {};
-  if (f.note.value.trim() !== "") body.set_note = f.note.value.trim();
+  // Always send the note: omitting it when emptied made "clear the note"
+  // impossible (the UI said "nothing changed" / the old note survived).
+  body.set_note = f.note.value.trim();
   if (f.volume.value !== "") {
-    const vv = parseFloat(f.volume.value);
+    const vv = numInput(f.volume.value);
     if (!Number.isFinite(vv) || vv < 0.01) { toast(t("msg.badNumbers"), false); releaseSubmit(f); return; }
     body.set_volume_gb = vv;
   }
   if (f.expires.value) body.set_expires_at = localInputToUtc(f.expires.value);
   if (!body.set_expires_at && f.expires.value) { toast(t("msg.badNumbers"), false); releaseSubmit(f); return; }
   if (f.device_limit.value !== "") {
-    const dv = parseInt(f.device_limit.value, 10);
+    const dv = numInput(f.device_limit.value);
     // Garbage/-3 previously became 0 → limit silently removed. Validate.
     if (!/^\d+$/.test(f.device_limit.value.trim()) || !Number.isFinite(dv) || dv < 0) {
       toast(t("msg.badNumbers"), false); releaseSubmit(f); return;
@@ -1524,6 +1666,7 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
   if (!Object.keys(body).length) { toast(t("msg.nothingChanged"), false); releaseSubmit(f); return; }
   try {
     await api("/api/users/" + f.dataset.uid, { method: "PATCH", body });
+    if (myOp !== userFormOp) return;   // modal closed/reopened meanwhile
     $("#edit-modal").classList.add("hidden");
     toast(t("msg.userUpdated"));
     loadUsers($("#search").value.trim());
@@ -1554,9 +1697,12 @@ function renderChangelog(items, prefix) {
     ul.appendChild(li);
   }
 }
-async function loadUpdate(announce) {
+async function loadUpdate(announce, fresh) {
   try {
-    const st = await api("/api/update/status");
+    // ?fresh=1 bypasses the server-side status cache. The poller used to read
+    // the CACHED pre-update answer ("updating: false") right after applying
+    // the update and immediately declared the update finished.
+    const st = await api("/api/update/status" + (fresh ? "?fresh=1" : ""));
     const badge = $("#update-badge");
     const sum = $("#update-summary");
     $("#update-repo").textContent = st.repo + "@" + st.branch;
@@ -1627,11 +1773,11 @@ $("#update-now-btn").addEventListener("click", async () => {
   const pw = prompt(t("prm.updatePw"));
   if (!pw) return;
   try {
-    const before = await api("/api/update/status");
+    const before = await api("/api/update/status?fresh=1");
     await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
     toast(t("msg.updateStarted"));
-    loadUpdate();
-    let n = 0, inFlight = false;
+    loadUpdate(false, true);
+    let n = 0, inFlight = false, sawUpdating = false;
     if (updatePoll) clearInterval(updatePoll);
     updatePoll = setInterval(async () => {
       // No overlapping ticks: a slow server must not stack requests.
@@ -1639,10 +1785,12 @@ $("#update-now-btn").addEventListener("click", async () => {
       inFlight = true;
       try {
         n += 1;
-        const st = await loadUpdate();
-        // Stop early once the server is no longer mid-update instead of
-        // burning all 20 ticks against a restarting panel.
-        if (st && !st.updating) {
+        const st = await loadUpdate(false, true);
+        if (st && st.updating) sawUpdating = true;
+        // Stop only after the server was actually seen mid-update (or after
+        // the tick budget). A cached/stale "not updating" first answer must
+        // not end the poll while the update is still running.
+        if (st && !st.updating && (sawUpdating || n >= 3)) {
           clearInterval(updatePoll);
           updatePoll = null;
           try {
@@ -1688,8 +1836,10 @@ function aiAddMsg(text, cls) {
   return el;
 }
 async function loadAi() {
+  const token = nextSeq("ai");
   try {
     const a = await api("/api/ai/settings");
+    if (!isCurrent("ai", token)) return;   // a newer save/load won
     $("#ai-enabled").checked = !!a.enabled;
     $("#ai-provider").value = a.provider || "groq";
     $("#ai-base").value = a.base_url || "";
@@ -1786,9 +1936,12 @@ $("#ai-send").addEventListener("click", aiSend);
 $("#ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") aiSend(); });
 
 // ---- API tokens (bots & integrations) ----
-function renderApiTokens(items) {
+async function renderApiTokens(items) {
   const ul = $("#apitoken-list");
   ul.textContent = "";
+  // A null/garbage response must not throw after the list was cleared: the
+  // outer catch then leaves the section permanently blank.
+  if (!Array.isArray(items)) items = [];
   if (!items.length) {
     const li = document.createElement("li");
     li.className = "muted";
@@ -1796,24 +1949,27 @@ function renderApiTokens(items) {
     ul.appendChild(li);
     return;
   }
-  for (const t of items) {
+  // Loop variable must NOT be `t`: that shadows the global translation
+  // function and every t("...") below threw "t is not a function", which
+  // blanked the whole token list as soon as one token existed.
+  for (const tk of items) {
     const li = document.createElement("li");
     li.style.display = "flex";
     li.style.flexWrap = "wrap";
     li.style.alignItems = "center";
     li.style.gap = "6px";
     const main = document.createElement("span");
-    main.textContent = t.name;
+    main.textContent = tk.name;
     const meta = document.createElement("small");
-    const bits = [`${t.prefix}…`];
-    bits.push(t.last_used_at ? t("tokens.lastUsed", {dt: t.last_used_at}) : t("tokens.neverUsed"));
+    const bits = [`${tk.prefix}…`];
+    bits.push(tk.last_used_at ? t("tokens.lastUsed", {dt: tk.last_used_at}) : t("tokens.neverUsed"));
     meta.textContent = bits.join(" · ");
     li.appendChild(main);
     li.appendChild(meta);
     const delBtn = iconBtn(t("icon.revoke"), ICONS.trash, "bad");
     delBtn.dataset.act = "del-token";
-    delBtn.dataset.id = t.id;
-    delBtn.dataset.name = t.name;
+    delBtn.dataset.id = tk.id;
+    delBtn.dataset.name = tk.name;
     li.appendChild(delBtn);
     ul.appendChild(li);
   }
@@ -1833,11 +1989,12 @@ $("#apitoken-create-btn").addEventListener("click", async (e) => {
     $("#apitoken-name").value = "";
     // The token is shown once and never stored: copy it AND always show
     // it for manual backup (clipboard content is easily lost/overwritten).
+    // The prompt is deliberately unconditional - a dismissed prompt plus a
+    // "copied" toast meant the bot credential was simply gone.
     await copyText(r.token_once);
     prompt(t("prm.tokenOnce"), r.token_once);
     toast(t("msg.tokenCreated"));
-    loadApiTokens();
-  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+    loadApiTokens();  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
 $("#apitoken-list").addEventListener("click", async (e) => {
@@ -1846,6 +2003,7 @@ $("#apitoken-list").addEventListener("click", async (e) => {
   try {
     if (btn.dataset.act === "del-token") {
       if (!confirm(t("cfm.tokenRevoke", {name: btn.dataset.name}))) return;
+      if (!guardBtn(btn)) return;
       await api("/api/api-tokens/" + btn.dataset.id, { method: "DELETE" });
       toast(t("msg.tokenRevoked"));
       loadApiTokens();
@@ -1962,6 +2120,27 @@ $("#backup-btn").addEventListener("click", async () => {
   }
 });
 
+// After a restore the whole panel state is stale: users, stats, settings,
+// Reality/CDN, Telegram, SSL, AI, tokens, inbounds, nodes, blocklist and the
+// customized layout. Only users+stats were reloaded, so the operator kept
+// editing the PRE-restore configuration and saving it back over the restore.
+function reloadAfterRestore() {
+  loadStats();
+  loadUsers($("#search").value.trim());
+  loadSrvSettings();
+  loadAppearance();
+  loadTelegram();
+  loadSslStatus();
+  loadAi();
+  loadApiTokens();
+  loadInbounds();
+  loadSrvNodes();
+  loadNodes();
+  loadTunnelSettings();
+  loadBlocklist();
+  loadAudit();
+}
+
 const restoreFile = $("#restore-file");
 restoreFile.addEventListener("change", () => {
   $("#restore-btn").disabled = !restoreFile.files.length;
@@ -1998,8 +2177,7 @@ $("#restore-btn").addEventListener("click", async () => {
       toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
       restoreFile.value = "";
       $("#restore-btn").disabled = true;
-      loadStats();
-      loadUsers();
+      reloadAfterRestore();
     } catch (err) {
       if (err.message !== "auth") toast(err.message, false);
     }
@@ -2013,8 +2191,7 @@ $("#restore-btn").addEventListener("click", async () => {
     toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
     restoreFile.value = "";
     $("#restore-btn").disabled = true;
-    loadStats();
-    loadUsers();
+    reloadAfterRestore();
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
   }

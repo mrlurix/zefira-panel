@@ -144,24 +144,58 @@ def generate_reality_keypair() -> tuple:
 
 
 def resolve_srv(db_values: dict) -> dict:
-    from config import DOMAIN, OVPN_PORT_DEFAULT, SUB_PORT
+    # Every documented ZEFIRA_* port/protocol env must actually reach the
+    # generators: only DOMAIN/SUB_PORT/OVPN_PORT were imported before, so
+    # ZEFIRA_HY2_PORT / ZEFIRA_WG_PORT / ZEFIRA_DNS / ZEFIRA_OVPN_PROTO were
+    # silently ignored and every config came out on the built-in defaults.
+    from config import DNS, DOMAIN, HY2_PORT, OVPN_PORT_DEFAULT, OVPN_PROTO, SUB_PORT, WG_PORT
 
     srv = dict(DEFAULT_SRV)
-    srv["domain"] = DOMAIN
-    srv["sub_port"] = int(SUB_PORT)
-    srv["ovpn_port"] = int(OVPN_PORT_DEFAULT)
+    env_overrides = {
+        "domain": DOMAIN,
+        "sub_port": SUB_PORT,
+        "hy2_port": HY2_PORT,
+        "wg_port": WG_PORT,
+        "ovpn_port": OVPN_PORT_DEFAULT,
+        "dns": DNS,
+        "ovpn_proto": OVPN_PROTO,
+    }
+    for k, v in env_overrides.items():
+        if v in (None, ""):
+            continue
+        if k.endswith("_port"):
+            port = _env_port(v)
+            if port is not None:
+                srv[k] = port
+        else:
+            srv[k] = v
+    # Range-validate the DB overrides too: a junk value must not become a
+    # broken link ("port NaN" / an impossible listen port).
     for k, v in (db_values or {}).items():
         if k in srv and v not in (None, ""):
             if k.endswith("_port"):
-                try:
-                    srv[k] = int(v)
-                except (TypeError, ValueError):
-                    pass
+                port = _env_port(v)
+                if port is not None:
+                    srv[k] = port
             else:
                 srv[k] = v
     if not srv.get("domain"):
         srv["domain"] = DOMAIN
+    if srv.get("ovpn_proto") not in ("udp", "tcp"):
+        srv["ovpn_proto"] = "udp"
     return srv
+
+
+def _env_port(value) -> int | None:
+    """1-65535 int from env/DB text, else None (0 and 99999 are rejected:
+    they produced 'https://host:0/...' links and dead configs)."""
+    try:
+        if isinstance(value, bool):
+            return None
+        port = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return port if 1 <= port <= 65535 else None
 
 
 def _b64(s: str) -> str:
@@ -253,8 +287,10 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
         userinfo = base64.urlsafe_b64encode(f"aes-256-gcm:{secret}".encode()).decode().rstrip("=")
         return f"ss://{userinfo}@{host}:{srv['sub_port']}#{username}"
     if protocol == "hysteria2":
+        # The spec's grammar has the slash before the query ("host:port/?..."):
+        # importers that split on "/?" lost the port and SNI.
         return (
-            f"hysteria2://{secret}@{host}:{srv['hy2_port']}"
+            f"hysteria2://{secret}@{host}:{srv['hy2_port']}/"
             f"?sni={sni}&insecure=0#{username}"
         )
     return None
@@ -660,7 +696,10 @@ def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
         "persist-key",
         "persist-tun",
         "remote-cert-tls server",
-        "verify-x509-name Zefira-CA name",
+        # No verify-x509-name here: that directive checks the *server*
+        # certificate's CN, not the CA in <ca>. With a normal service cert
+        # (CN=vpn.example.com) every client aborted with
+        # VERIFY_X509NAME ERROR. The CA is already pinned via <ca>.
         "auth SHA256",
         "cipher AES-256-GCM",
         "data-ciphers AES-256-GCM:AES-128-GCM",
@@ -682,9 +721,15 @@ def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
 
 def _variant_srv(srv: dict, inbound: dict) -> dict:
     v = dict(srv)
-    v["sub_port"] = int(inbound["port"])
-    v["reality_port"] = int(inbound["port"])
-    v["hy2_port"] = int(inbound["port"])
+    # A hand-edited/legacy inbound row with a NULL or junk port used to raise
+    # here and take down the whole subscription/dashboard. Skip the variant
+    # instead: the main endpoint still serves.
+    port = _env_port(inbound.get("port"))
+    if port is None:
+        raise ValueError("inbound has no usable port")
+    v["sub_port"] = port
+    v["reality_port"] = port
+    v["hy2_port"] = port
     if inbound.get("host"):
         v["domain"] = inbound["host"]
         v["_is_inbound_variant"] = True
@@ -703,7 +748,12 @@ def _srvs_for(proto: str, srv: dict, inbounds: list) -> list:
             # until the first check runs.
             if i.get("node_id") and (not i.get("node_enabled", True) or i.get("node_status") == "offline"):
                 continue
-            out.append((_variant_srv(srv, i), i["name"]))
+            try:
+                variant = _variant_srv(srv, i)
+            except ValueError:
+                # Unusable legacy port: skip that endpoint, keep the rest.
+                continue
+            out.append((variant, i["name"]))
     return out
 
 
@@ -908,11 +958,17 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
     if only_links:
         encoded = base64.b64encode("\n".join(links).encode()).decode()
         return encoded, "text/plain"
+    # Mixed bundle (links + file-based configs) was returned as PLAIN TEXT.
+    # v2rayNG/Clash-style importers expect the whole document to be Base64 and
+    # silently imported zero nodes from it. Encode the whole bundle: clients
+    # that only understand share links skip the "### ... ###" sections, and
+    # the config/ZIP download still carries the files themselves.
     parts = []
     if links:
         parts.append("\n".join(links))
     parts.extend(extras)
-    return ("\n\n".join(parts) + "\n"), "text/plain"
+    body = ("\n\n".join(parts) + "\n").encode()
+    return base64.b64encode(body).decode(), "text/plain"
 
 
 BACKPACK_VERSION = "v1.8.2"

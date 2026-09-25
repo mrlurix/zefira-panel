@@ -165,12 +165,18 @@ check("users: list reports total", st == 200 and d.get("total", 0) >= 1, f"total
 
 # subscription outputs must be usable
 st, hd, body = req("GET", f"/sub/{tok}", headers={"User-Agent": "zefira-featuretest/1.0"}, raw=True)
-sub_txt = body.decode("utf-8", "replace")
+sub_txt = decode_sub(body)
 check("sub: raw subscription served", st == 200 and len(body) > 50, f"{st} len={len(body)}")
 check("sub: links present for link protocols",
       "vless://" in sub_txt and "vmess://" in sub_txt and "trojan://" in sub_txt
       and "ss://" in sub_txt and "hysteria2://" in sub_txt and "reality" not in sub_txt.lower().split("://")[0],
       sub_txt[:80])
+# Every machine-facing subscription is a Base64 document (v2ray convention),
+# including bundles that also carry the file-based configs.
+check("sub: body is Base64 for machine clients",
+      st == 200 and "://" not in body.decode("utf-8", "replace")[:200]
+      and base64.b64decode(body + b"=" * (-len(body) % 4)).decode("utf-8", "replace").count("://") >= 5,
+      body[:60])
 check("sub: userinfo header", hget(hd, "subscription-userinfo").startswith("upload=0;"),
       hget(hd, "subscription-userinfo"))
 st, hd, body = req("GET", f"/sub/{tok}", headers={"User-Agent": "v2rayNG/1.0"}, raw=True)
@@ -347,12 +353,12 @@ if st == 200:
     # subscription must now include the enabled inbound variant
     st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
     check("sub: enabled inbound variant included",
-          st == 200 and b"in.example.com" in body, f"{st} {decode_sub(body)[:120]}")
+          st == 200 and "in.example.com" in decode_sub(body), f"{st} {decode_sub(body)[:120]}")
     st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
     st, d = js("PATCH", f"/api/inbounds/{ib['id']}", {"enabled": False}, AUTH)
     body2 = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)[2]
     check("sub: disabled inbound variant dropped",
-          b"in.example.com" not in body2, "disabled inbound still served")
+          "in.example.com" not in decode_sub(body2), "disabled inbound still served")
     st, d = js("DELETE", f"/api/inbounds/{ib['id']}", headers=AUTH)
     check("inbounds: delete", st == 200, f"{st}")
     st, d = js("DELETE", f"/api/inbounds/{ib['id']}", headers=AUTH)
@@ -539,10 +545,10 @@ st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
 # obfuscated_host + per_user_subdomain are ON in this block, so the links
 # must carry the obfuscated host (with the per-user prefix), not the domain.
 check("settings: obfuscated host (+ per-user prefix) used in links",
-      st == 200 and b"obf.example.com" in body, f"{st} {decode_sub(body)[:100]}")
+      st == 200 and "obf.example.com" in decode_sub(body), f"{st} {decode_sub(body)[:100]}")
 st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
 check("settings: cdn sni reaches the links",
-      st == 200 and b"cdn.example.com" in body, f"{st} {decode_sub(body)[:100]}")
+      st == 200 and "cdn.example.com" in decode_sub(body), f"{st} {decode_sub(body)[:100]}")
 st, d = js("PUT", "/api/settings", SAVE["settings"], AUTH)
 check("settings: restored to defaults", st == 200, f"{st}")
 st, s2 = js("GET", "/api/settings", headers=AUTH)

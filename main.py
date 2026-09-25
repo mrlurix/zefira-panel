@@ -27,7 +27,7 @@ from jinja2 import FileSystemLoader as _JinjaLoader
 from jinja2 import select_autoescape as _autoescape
 from pydantic import ValidationError
 from sqlalchemy import func, select, text as sqltext, update
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.orm.exc import StaleDataError
 
 import protocols
@@ -45,6 +45,7 @@ from database import (
     UserTemplate,
     VpnUser,
     utcnow,
+    safe_text,
 )
 from schemas import (
     AiChatIn,
@@ -62,6 +63,7 @@ from schemas import (
     RestoreConfirmIn,
     RestoreEncryptedIn,
     RestoreIn,
+    RestoreUserIn,
     ServerNodeIn,
     ServerNodePatchIn,
     SettingsIn,
@@ -332,26 +334,48 @@ def _valid_restore_secret(proto: str, value: object) -> bool:
     restore). The V2RAY link builders interpolate secrets straight into
     subscription URLs, so a crafted value with newlines/control chars
     would corrupt subscription output. Only accept exactly what
-    provision_map() generates; anything else skips the row.
+    provision_map() generates; anything else is regenerated server-side.
+    The shapes below therefore mirror provision_map() token by token
+    (uuid4 / token_urlsafe sizes), not a loose "looks like a credential".
     """
     if not isinstance(value, str) or not value or len(value) > 20000:
         return False
     if proto in ("vless", "reality", "vmess", "trojan"):
-        return bool(re.fullmatch(r"[a-f0-9-]{36}", value))
-    if proto in ("ss", "hysteria2", "cisco", "socks5"):
-        return bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", value))
+        # provision_map emits str(uuid4()): canonical 8-4-4-4-12 hex form.
+        # The old [a-f0-9-]{36} also accepted 36 dashes, which then shipped
+        # a dead credential to the customer instead of being regenerated.
+        return bool(re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", value))
+    # token_urlsafe(21/18/16) -> 28/24/22 chars. Allow slack for future
+    # n-byte variants, but never a 1-char "password".
+    sizes = {"ss": (20, 64), "hysteria2": (20, 48), "cisco": (16, 48), "socks5": (16, 48)}
+    if proto in sizes:
+        lo, hi = sizes[proto]
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]+", value)) and lo <= len(value) <= hi
     if proto == "wireguard":
         try:
             return len(base64.b64decode(value, validate=True)) == 32
         except Exception:
             return False
     if proto == "openvpn":
-        return (
-            "<ZEFIRA-CERT>" in value
-            and "<ZEFIRA-KEY>" in value
-            and "-----BEGIN CERTIFICATE-----" in value
-            and "-----BEGIN PRIVATE KEY-----" in value
-        )
+        # Markers alone are not proof: parse both PEM blocks. A hand-edited
+        # backup with "-----BEGIN CERTIFICATE-----" filler used to survive
+        # validation and produce an .ovpn no client can load.
+        if "<ZEFIRA-CERT>" not in value or "<ZEFIRA-KEY>" not in value:
+            return False
+        cert_pem, _, key_pem = value.partition("<ZEFIRA-KEY>")
+        cert_pem = cert_pem.replace("<ZEFIRA-CERT>", "").strip()
+        key_pem = key_pem.strip()
+        if not cert_pem or not key_pem:
+            return False
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import serialization as _ser
+            x509.load_pem_x509_certificate(cert_pem.encode())
+            _ser.load_pem_private_key(key_pem.encode(), password=None)
+            return True
+        except Exception:
+            return False
     if proto == "l2tp":
         try:
             data = json.loads(value)
@@ -363,10 +387,91 @@ def _valid_restore_secret(proto: str, value: object) -> bool:
         return (
             isinstance(pw, str)
             and isinstance(psk, str)
-            and bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", pw))
-            and bool(re.fullmatch(r"[A-Za-z0-9_-]{1,200}", psk))
+            and bool(re.fullmatch(r"[A-Za-z0-9_-]{16,64}", pw))
+            and bool(re.fullmatch(r"[A-Za-z0-9_-]{24,64}", psk))
         )
     return False
+
+
+def _ca_fingerprint() -> str:
+    """Identity of this instance's OpenVPN CA (public cert only).
+
+    Client certificates are signed by it, so a backup taken on another host
+    carries certificates the local CA never signed. Comparing fingerprints
+    lets restore re-issue those credentials instead of shipping an .ovpn
+    that fails verification on the customer device.
+    """
+    try:
+        return hashlib.sha256(protocols.CA_CERT_PATH.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _rbool(value: object, default: bool = False) -> bool:
+    """Strict bool for backup payloads.
+
+    bool("false") is True, so a hand-edited backup used to flip
+    start_on_first_use / enabled / udp_forward the wrong way. Only real
+    booleans and the documented spellings are accepted; anything else keeps
+    the default (and the row is skipped where the field is required).
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        low = value.strip().lower()
+        if low in ("1", "true", "yes", "on"):
+            return True
+        if low in ("0", "false", "no", "off", ""):
+            return False
+    return default
+
+
+def _rint(value: object, lo: int, hi: int):
+    """Strict int for backup payloads: bools, fractional floats, junk -> None."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None
+        value = int(value)
+    try:
+        out = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return out if lo <= out <= hi else None
+
+
+def _rfloat(value: object, lo: float, hi: float):
+    """Strict float for backup payloads (rejects bools and junk)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        out = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    if out != out or out in (float("inf"), float("-inf")):  # NaN / inf
+        return None
+    return out if lo <= out <= hi else None
+
+
+def _rusdt(value: object):
+    """ISO timestamp -> naive UTC, or None.
+
+    datetime.fromisoformat(...).replace(tzinfo=None) *drops* an offset
+    instead of applying it, so "2030-01-01T00:00:00+05:00" landed five
+    hours late in a UTC column. Convert properly, then store naive UTC.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _scrub_env_password() -> None:
@@ -702,6 +807,12 @@ def public_base_url(request: Request) -> str:
     port = request.url.port
     default_port = (scheme == "https" and port == 443) or (scheme == "http" and port == 80)
     dom = (cached_setting("domain") or "").strip().lower()
+    if not dom:
+        # Fresh DB: the operator's ZEFIRA_DOMAIN (or the detected server IP in
+        # IP mode) is the real hostname. It used to be skipped here, so every
+        # subscription link/QR was built from the request's Host header.
+        from config import DOMAIN as _ENV_DOMAIN
+        dom = (_ENV_DOMAIN or "").strip().lower()
     if dom and re.fullmatch(r"[a-z0-9.-]{1,253}", dom):
         return f"{scheme}://{dom}" + ("" if default_port or not port else f":{port}")
     # Host fallback (IP/direct installs with no domain configured). The header
@@ -719,19 +830,27 @@ def public_base_url(request: Request) -> str:
 
 
 def audit(s, event: str, detail: str = "", ip: str = "", ok: bool = True) -> None:
+    # No flush here: audit() is called from inside mutating endpoints, often
+    # BEFORE their own try/except IntegrityError -> 409 handler. A flush made
+    # the pending business row hit the uniqueness constraint inside audit(),
+    # so the loser got a raw 500 instead of the handled 409. The endpoint's
+    # commit flushes both rows together.
     s.add(AuditLog(event=event, detail=detail[:500], ip=ip[:64], ok=ok))
-    s.flush()
     # Prune is best-effort: under write contention a failed prune must not
     # fail the user-facing op riding in the same transaction (next audit
     # retries; the table only grows slightly past the cap meanwhile).
+    # The savepoint keeps a prune failure from poisoning the session: without
+    # it, Postgres/MySQL lock errors leave the transaction in "aborted" state
+    # and the caller's real commit then fails with "no transaction active".
     try:
-        s.execute(
-            sqltext(
-                "DELETE FROM audit_logs WHERE id <= "
-                "(SELECT COALESCE(MAX(id),0) - 2000 FROM audit_logs)"
+        with s.begin_nested():
+            s.execute(
+                sqltext(
+                    "DELETE FROM audit_logs WHERE id <= "
+                    "(SELECT COALESCE(MAX(id),0) - 2000 FROM audit_logs)"
+                )
             )
-        )
-    except OperationalError:
+    except (OperationalError, DBAPIError):
         pass
 
 
@@ -907,48 +1026,64 @@ async def lifespan(_: FastAPI):
                 log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one")
                 password = secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
+            won_insert = True
             try:
                 s.commit()
             except IntegrityError:
                 # Dual-worker cold start (unsupported, but cheap to survive):
-                # the other worker won the insert race.
+                # the other worker won the insert race. Our generated password
+                # is NOT the admin's, so it must never reach the credentials
+                # file (it used to: the operator then typed a password that
+                # could not log in and blamed the panel).
                 s.rollback()
+                won_insert = False
+                log.warning("Admin already exists (lost first-run race); not writing credentials")
             # The password must NOT go to stdout: under systemd that is the
             # journal, which every member of `adm`/`systemd-journal` can read
             # for the lifetime of the boot. Write it to a 0600 file inside the
             # 0700 instance directory instead and print only the path.
             cred_path = BASE_DIR / "instance" / "first-run-credentials.txt"
-            try:
-                cred_path.write_text(
-                    "Zefira first-run credentials\n"
-                    f"  URL:      http://127.0.0.1:8000/\n"
-                    f"  USERNAME: {username}\n"
-                    f"  PASSWORD: {password}\n\n"
-                    "  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!\n"
-                    "  !! DELETE THIS FILE WHEN YOU ARE DONE !!\n",
-                    encoding="utf-8",
-                )
+            if not won_insert:
+                # Another process created the admin: our password is dead, so
+                # no credential file, no printed password - just a note.
+                print("=" * 58)
+                print("  ZEFIRA PANEL - FIRST RUN")
+                print("  An admin already exists (another worker won the race).")
+                print("  No credentials file was written; use the existing password.")
+                print("=" * 58)
+            else:
                 try:
-                    os.chmod(cred_path, 0o600)
-                except OSError:
-                    pass
-                print("=" * 58)
-                print("  ZEFIRA PANEL - FIRST RUN")
-                print(f"  USERNAME: {username}")
-                print(f"  PASSWORD: written to {cred_path} (mode 600)")
-                print("  !! CHANGE THE PASSWORD AFTER LOGIN, THEN DELETE THAT FILE !!")
-                print("=" * 58)
-            except OSError as exc:
-                # Could not protect the file: fall back to stdout rather than
-                # locking the operator out, but say so loudly.
-                print("=" * 58)
-                print("  ZEFIRA PANEL - FIRST RUN")
-                print(f"  USERNAME: {username}")
-                print(f"  PASSWORD: {password}")
-                print(f"  !! could not write the credentials file: {exc}")
-                print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
-                print("=" * 58)
-            log.warning("First-run admin created. Credentials stored at %s.", cred_path)
+                    cred_path.write_text(
+                        "Zefira first-run credentials\n"
+                        f"  URL:      http://127.0.0.1:8000/\n"
+                        f"  USERNAME: {username}\n"
+                        f"  PASSWORD: {password}\n\n"
+                        "  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!\n"
+                        "  !! DELETE THIS FILE WHEN YOU ARE DONE !!\n",
+                        encoding="utf-8",
+                    )
+                    try:
+                        os.chmod(cred_path, 0o600)
+                    except OSError:
+                        pass
+                    print("=" * 58)
+                    print("  ZEFIRA PANEL - FIRST RUN")
+                    print(f"  USERNAME: {username}")
+                    print(f"  PASSWORD: written to {cred_path} (mode 600)")
+                    print("  !! CHANGE THE PASSWORD AFTER LOGIN, THEN DELETE THAT FILE !!")
+                    print("=" * 58)
+                except OSError as exc:
+                    # Could not protect the file: fall back to stdout rather than
+                    # locking the operator out, but say so loudly.
+                    print("=" * 58)
+                    print("  ZEFIRA PANEL - FIRST RUN")
+                    print(f"  USERNAME: {username}")
+                    print(f"  PASSWORD: {password}")
+                    print(f"  !! could not write the credentials file: {exc}")
+                    print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
+                    print("=" * 58)
+            if won_insert:
+                log.warning("First-run admin created. Credentials stored at %s.", cred_path)
             # One-time use: the installer wrote the password to .env for
             # systemd. Scrub it now so a later .env leak cannot replay it.
             try:
@@ -1006,7 +1141,12 @@ def _srvnode_monitor_loop() -> None:
                         node = s.get(ServerNode, nid)
                         if node is None:
                             continue
-                        _record_srvnode_probe(s, node, online, latency)
+                        # Config changed (or the id was recycled by a
+                        # delete+create) while the probe was in flight:
+                        # drop the result instead of stamping the new node.
+                        if not _record_srvnode_probe(s, node, online, latency,
+                                                     expect_addr=host, expect_port=port):
+                            continue
                         s.commit()
                 except Exception as exc:
                     log.debug("srvnode monitor write failed: %s", exc)
@@ -1102,13 +1242,32 @@ CSP = (
 )
 
 
+def _subscription_path_prefix() -> str:
+    """Operator-configured subscription path (SUBSCRIPTION_PATH), or "" for the
+    default /sub. Read lazily so config stays import-cheap for tests."""
+    try:
+        from config import SUBSCRIPTION_PATH
+    except ImportError:
+        return ""
+    p = (SUBSCRIPTION_PATH or "/sub").rstrip("/") or "/sub"
+    return "" if p == "/sub" else p
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     for key, value in SECURITY_HEADERS.items():
         response.headers.setdefault(key, value)
     response.headers["Content-Security-Policy"] = CSP
-    if request.url.path.startswith("/api") or request.url.path.startswith("/sub"):
+    # The custom SUBSCRIPTION_PATH (e.g. /vpn) is served by the same handler as
+    # /sub, so it needs the same no-store: those responses carry the customer's
+    # bearer links and private configs and must never sit in a shared cache.
+    _sub_prefix = _subscription_path_prefix()
+    if (
+        request.url.path.startswith("/api")
+        or request.url.path.startswith("/sub")
+        or (_sub_prefix and request.url.path.startswith(_sub_prefix))
+    ):
         response.headers.setdefault("Cache-Control", "no-store")
     if request_scheme(request) == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -1280,12 +1439,14 @@ async def csrf_and_size_middleware(request: Request, call_next):
             return JSONResponse({"detail": "forbidden"}, status_code=403)
     # Restore isolation: a restore wipes users while merging the rest, so a
     # write landing mid-restore is silently wiped (or half-merged). Reject
-    # mutating API calls while the restore lock is held; the restore/backup
-    # endpoints themselves plus login stay usable.
+    # mutating API calls while the restore lock is held. A backup is a read,
+    # but it spans many SELECTs: mid-restore it captured a mixed state
+    # (new users, old settings) that no database ever looked like, so it is
+    # rejected too - login and the update-status poll stay usable.
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         _rp = request.url.path
         if _rp.startswith("/api/") and not _rp.startswith(
-            ("/api/restore", "/api/backup", "/api/login", "/api/update/status")
+            ("/api/restore", "/api/login", "/api/update/status")
         ):
             if restore_lock.locked():
                 return JSONResponse({"detail": "Restore in progress, try again"}, status_code=409)
@@ -1588,7 +1749,7 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
             else:
                 row.value = str(v)
         audit(s, "SETTINGS_UPDATE", f"by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
         _settings_cache.pop(k, None)
     log.info("Server settings updated by %s", admin.username)
@@ -1611,7 +1772,7 @@ def api_reality_generate(request: Request, admin: Admin = Depends(require_admin)
             else:
                 row.value = v
         audit(s, "REALITY_GENERATE", f"by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     log.info("REALITY keypair generated by %s", admin.username)
     return {"public_key": pub, "private_key": priv}
 
@@ -1746,7 +1907,7 @@ def api_ssl_issue(data: SslIssueIn, request: Request, admin: Admin = Depends(req
             else:
                 ok, msg = False, "certbot reported success but certificate files were not found"
         audit(s, "SSL_ISSUE", f"{fqdn} by {admin.username} -> {'ok' if ok else msg[:120]}", client_ip(request), ok=ok)
-        s.commit()
+        _commit(s)
     log.info("SSL issue %s by %s ok=%s", fqdn, admin.username, ok)
     if not ok:
         raise HTTPException(status_code=502, detail=msg)
@@ -1769,7 +1930,7 @@ def api_ssl_renew(request: Request, admin: Admin = Depends(require_admin)):
             for k in SSL_SETTING_KEYS:
                 _settings_cache.pop(k, None)
         audit(s, "SSL_RENEW", f"{fqdn} by {admin.username} -> {'ok' if ok else msg[:120]}", client_ip(request), ok=ok)
-        s.commit()
+        _commit(s)
     log.info("SSL renew %s by %s ok=%s", fqdn, admin.username, ok)
     if not ok:
         raise HTTPException(status_code=502, detail=msg)
@@ -1808,7 +1969,7 @@ def api_templates_create(data: TemplateCreateIn, request: Request, admin: Admin 
             action = "created"
         audit(s, "TEMPLATE_SAVE", f"{data.name} {action} by {admin.username}", client_ip(request))
         try:
-            s.commit()
+            _commit(s)
         except IntegrityError:
             # Concurrent double-create: the loser re-reads and updates
             # instead of 500ing (same pattern as tokens/tunnels/users).
@@ -1866,7 +2027,7 @@ def api_tunnel_put(data: TunnelSettingsIn, request: Request, admin: Admin = Depe
             else:
                 row.value = v
         audit(s, "TUNNEL_SETTINGS", f"by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     for k in TUNNEL_KEYS:
         _settings_cache.pop(k, None)
     log.info("Tunnel settings updated by %s", admin.username)
@@ -1907,7 +2068,7 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
         out["token_once"] = raw
         audit(s, "APITOKEN_CREATE", f"{data.name} [{scopes}] by {admin.username}", client_ip(request))
         try:
-            s.commit()
+            _commit(s)
         except IntegrityError:
             s.rollback()
             raise HTTPException(status_code=409, detail="A token with this name already exists")
@@ -1952,7 +2113,7 @@ def api_appearance_put(data: AppearanceIn, request: Request, admin: Admin = Depe
             "dash_layout": json.dumps(_canon_dash_layout(data.dash_layout)),
         })
         audit(s, "APPEARANCE", f"theme/brand updated by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     for k in APPEARANCE_KEYS:
         _settings_cache.pop(k, None)
     log.info("Appearance updated by %s", admin.username)
@@ -2327,7 +2488,7 @@ def api_ai_settings_put(data: AiSettingsIn, request: Request, admin: Admin = Dep
         if data.api_key:
             _save_settings(s, {"ai_api_key_enc": encrypt_text(data.api_key)})
         audit(s, "AI_SETTINGS", f"provider={data.provider} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     for k in AI_KEYS:
         _settings_cache.pop(k, None)
     log.info("AI settings updated by %s", admin.username)
@@ -2876,12 +3037,16 @@ def _update_status() -> dict:
 
 
 @app.get("/api/update/status")
-def api_update_status(admin: Admin = Depends(require_admin)):
+def api_update_status(request: Request, admin: Admin = Depends(require_admin)):
     # 60s micro-cache: anonymous GitHub API is 60 req/hour, and spam-clicking
-    # Check must not blind the panel for an hour.
+    # Check must not blind the panel for an hour. The update poller asks for
+    # ?fresh=1 so it never reads the CACHED pre-update answer and declares
+    # the update finished while it is still running (it polls every 5s, and
+    # the GitHub call only happens when the cache is cold).
+    fresh = (request.query_params.get("fresh") or "").strip() in ("1", "true", "yes")
     now = time_mod.monotonic()
     ent = _settings_cache.get("__update_status__")
-    if ent and now - ent[1] < 60.0:
+    if not fresh and ent and now - ent[1] < 60.0:
         return ent[0]
     out = _update_status()
     _settings_cache["__update_status__"] = (out, now)
@@ -3117,7 +3282,7 @@ def api_nodes_create(data: TunnelNodeIn, request: Request, admin: Admin = Depend
         out["token_once"] = token_plain
         audit(s, "NODE_CREATE", f"{data.name} {data.transport} by {admin.username}", client_ip(request))
         try:
-            s.commit()
+            _commit(s)
         except IntegrityError:
             s.rollback()
             raise HTTPException(status_code=409, detail="A tunnel with this name already exists")
@@ -3145,7 +3310,7 @@ def api_node_reveal_token(node_id: int, request: Request, admin: Admin = Depends
             raise HTTPException(status_code=500, detail="Stored tunnel token is undecryptable — regenerate it")
         name = node.name
         audit(s, "NODE_TOKEN_REVEAL", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     return {"token": token}
 
 
@@ -3159,7 +3324,7 @@ def api_node_regen_token(node_id: int, request: Request, admin: Admin = Depends(
         node.token_enc = encrypt_text(token_plain)
         node.status = "unknown"
         audit(s, "NODE_TOKEN_REGEN", f"{node.name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
         name = node.name
     log.info("Tunnel token regenerated %s by %s", name, admin.username)
     return {"token": token_plain}
@@ -3172,7 +3337,7 @@ def api_node_delete(node_id: int, request: Request, admin: Admin = Depends(requi
         name = node.name
         s.delete(node)
         audit(s, "NODE_DELETE", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     log.info("Tunnel deleted %s by %s", name, admin.username)
     return {"ok": True}
 
@@ -3187,7 +3352,7 @@ def api_node_guide(node_id: int, request: Request, admin: Admin = Depends(requir
         ndict = node.to_dict()
         name = node.name
         audit(s, "NODE_GUIDE_DL", f"{name} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     guide = protocols.backpack_guide(ndict, token)
     safe = re.sub(r"[^a-zA-Z0-9_-]", "", name) or "tunnel"
     return PlainTextResponse(
@@ -3224,7 +3389,7 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
         out["latency_ms"] = lat
         out["reason"] = reason
         audit(s, "NODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
-        s.commit()
+        _commit(s)
     return out
 
 
@@ -3235,15 +3400,24 @@ def _get_srvnode_or_404(s, node_id: int) -> ServerNode:
     return node
 
 
-def _record_srvnode_probe(s, node: ServerNode, online: bool, latency: int | None) -> None:
+def _record_srvnode_probe(s, node: ServerNode, online: bool, latency: int | None,
+                          expect_addr: str | None = None, expect_port: int | None = None) -> bool:
     # Atomic SQL (not read-modify-write): the 5-min monitor loop and a
     # manual check can overlap — ORM increments would lose a probe and skew
     # uptime_pct. The ORM object is expired so to_dict() re-reads fresh.
+    #
+    # The probe is a network round-trip: the admin may have repointed or
+    # deleted-and-recreated the node while it was in flight. Writing that
+    # result anyway stamped node B with node A's status/counters, so the
+    # WHERE clause also pins the configuration that was actually dialled.
     now = utcnow()
-    s.execute(
-        update(ServerNode)
-        .where(ServerNode.id == node.id)
-        .values(
+    q = update(ServerNode).where(ServerNode.id == node.id)
+    if expect_addr is not None:
+        q = q.where(ServerNode.address == expect_addr)
+    if expect_port is not None:
+        q = q.where(ServerNode.check_port == expect_port)
+    res = s.execute(
+        q.values(
             status="online" if online else "offline",
             latency_ms=latency,
             last_check=now,
@@ -3253,6 +3427,7 @@ def _record_srvnode_probe(s, node: ServerNode, online: bool, latency: int | None
         )
     )
     s.expire(node)
+    return bool(res.rowcount)
 
 
 @app.get("/api/server-nodes")
@@ -3334,12 +3509,19 @@ def api_srvnodes_check(node_id: int, request: Request, admin: Admin = Depends(re
         node = s.get(ServerNode, node_id_val)
         if not node:
             raise HTTPException(status_code=404, detail="Server node not found")
-        _record_srvnode_probe(s, node, online, latency)
+        applied = _record_srvnode_probe(s, node, online, latency,
+                                        expect_addr=host, expect_port=port)
         out = node.to_dict()
         if online and latency is not None:
             out["latency_ms"] = latency
-        audit(s, "SRVNODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
-        s.commit()
+        if not applied:
+            # The node was repointed while we were dialling: the probe result
+            # belongs to the old address, so say so instead of reporting it.
+            out["status"] = "unknown"
+            out["reason"] = "configuration changed during check"
+        else:
+            audit(s, "SRVNODE_CHECK", f"{node.name} -> {out['status']} by {admin.username}", client_ip(request), ok=online)
+        _commit(s, missing="Server node not found")
     return out
 
 
@@ -3355,14 +3537,18 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
     with db.s() as s:
         users = [u.to_backup_dict() for u in s.scalars(select(VpnUser)).all()]
         admins = [a.to_backup_dict() for a in s.scalars(select(Admin)).all()]
+        # safe_text everywhere: a legacy SQLite BLOB / invalid UTF-8 value in
+        # a settings or template column used to raise "Object of type bytes is
+        # not JSON serializable" and 500 the whole backup download.
         settings = {
-            r.key: r.value
+            r.key: safe_text(r.value)
             for r in s.scalars(select(Setting).where(Setting.key.in_(SRV_KEYS | TUNNEL_KEYS | APPEARANCE_KEYS | set(AI_BACKUP_KEYS) | {"reality_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}))).all()
         }
         tpl_rows = s.scalars(select(UserTemplate)).all()
         templates_out = [
-            {"name": t.name, "protocols": t.protocols, "volume_gb": t.volume_gb,
-             "days": t.days, "start_on_first_use": t.start_on_first_use,
+            {"name": safe_text(t.name), "protocols": safe_text(t.protocols),
+             "volume_gb": t.volume_gb,
+             "days": t.days, "start_on_first_use": bool(t.start_on_first_use),
              "device_limit": t.device_limit}
             for t in tpl_rows
         ]
@@ -3370,25 +3556,38 @@ def api_backup(data: BackupIn, request: Request, admin: Admin = Depends(require_
         blocked_out = [b.to_dict() for b in blocked_rows]
         token_rows = s.scalars(select(ApiToken)).all()
         tokens_out = [t.to_backup_dict() for t in token_rows]
-        inbounds_out = [b.to_dict() for b in s.scalars(select(Inbound)).all()]
+        # Inbound node_id is meaningless in another database: export the node
+        # NAME too, otherwise restore unpins the endpoint and a pinned inbound
+        # silently becomes a local listener.
+        snode_names = {n.id: n.name for n in s.scalars(select(ServerNode)).all()}
+        inbounds_out = []
+        for b in s.scalars(select(Inbound)).all():
+            row = b.to_dict()
+            row["node_name"] = snode_names.get(b.node_id) or ""
+            inbounds_out.append(row)
         snodes_out = [
-            {"name": n.name, "address": n.address, "check_port": n.check_port,
-             "note": n.note, "enabled": n.enabled}
+            {"name": safe_text(n.name), "address": safe_text(n.address),
+             "check_port": n.check_port,
+             "note": safe_text(n.note), "enabled": bool(n.enabled)}
             for n in s.scalars(select(ServerNode)).all()
         ]
         # Tunnel tokens are server-bound secrets: export everything EXCEPT
         # the token. Restore mints a fresh token per tunnel (guide must be
         # re-downloaded, both servers updated) — never silently breaks links.
         tnodes_out = [
-            {"name": n.name, "transport": n.transport, "iran_ip": n.iran_ip,
-             "kharej_ip": n.kharej_ip, "tunnel_port": n.tunnel_port,
-             "forwarded_ports": n.forwarded_ports, "udp_forward": n.udp_forward}
+            {"name": safe_text(n.name), "transport": safe_text(n.transport),
+             "iran_ip": safe_text(n.iran_ip),
+             "kharej_ip": safe_text(n.kharej_ip), "tunnel_port": n.tunnel_port,
+             "forwarded_ports": safe_text(n.forwarded_ports),
+             "udp_forward": bool(n.udp_forward)}
             for n in s.scalars(select(TunnelNode)).all()
         ]
     payload = {
         "zefira_backup": True,
-        "version": 8,
+        "version": 9,
         "exported_at": utcnow().isoformat(timespec="seconds") + "Z",
+        # Lets restore detect OpenVPN credentials signed by another host's CA.
+        "meta": {"ca_fingerprint": _ca_fingerprint()},
         "settings": settings,
         "admins": admins,
         "users": users,
@@ -3493,15 +3692,20 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     now = utcnow()
     added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = restored_snodes = restored_ibs = restored_tnodes = 0
     prepared_users = []
-    for ru in data.users:
+    for ru_raw in data.users:
+        # Per-row validation: one bad customer must not abort the file.
         try:
-            expires = datetime.fromisoformat(ru.expires_at.replace("Z", "+00:00")).replace(tzinfo=None)
-            created = (
-                datetime.fromisoformat(ru.created_at.replace("Z", "+00:00")).replace(tzinfo=None)
-                if ru.created_at
-                else now
-            )
+            ru = RestoreUserIn.model_validate(ru_raw)
+        except Exception:
+            skipped += 1
+            continue
+        try:
+            expires = _rusdt(ru.expires_at)
+            created = _rusdt(ru.created_at) or now
         except ValueError:
+            skipped += 1
+            continue
+        if expires is None:
             skipped += 1
             continue
         # A far-future sentinel expiry without the pending flag is
@@ -3514,18 +3718,17 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             sofu, duration = True, 30
         # Quota sanity: zero/negative volumes would be instantly-limited
         # (and bypass plan logic). Skip rather than import dead rows.
-        try:
-            _vol = float(ru.volume_gb)
-            _used = float(ru.used_gb)
-        except (TypeError, ValueError):
-            skipped += 1
-            continue
-        if not 0 < _vol <= 100000 or not 0 <= _used <= 1000000:
+        _vol = _rfloat(ru.volume_gb, 0, 100000)
+        _used = _rfloat(ru.used_gb, 0, 1000000)
+        if _vol is None or _vol <= 0 or _used is None:
             skipped += 1
             continue
         # protocols is free-form in backups: intersect with known protocols so a
         # crafted/hand-edited file can neither 500 later code nor smuggle junk.
+        # dict.fromkeys: "wireguard,wireguard" used to produce two identical
+        # ZIP members, so extraction order decided which copy survived.
         clean_protos = [p for p in (ru.protocols or "").split(",") if p in protocols.PROTOCOLS]
+        clean_protos = list(dict.fromkeys(clean_protos))
         if not clean_protos:
             clean_protos = [ru.protocol if ru.protocol in protocols.PROTOCOLS else "vless"]
         # secrets ride inside backups: every secret for every restored
@@ -3538,8 +3741,17 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             sec_map = json.loads(ru.secret_data) if (ru.secret_data or "") else None
         except (ValueError, AttributeError):
             sec_map = None
-        if isinstance(sec_map, dict) and all(
-            _valid_restore_secret(p, sec_map.get(p)) for p in clean_protos
+        # OpenVPN client certs are signed by the *source* host's CA, which is
+        # not part of the backup. Keeping them on another host ships an .ovpn
+        # the client cannot verify, so re-issue against the local CA instead.
+        ca_mismatch = (
+            "openvpn" in clean_protos
+            and data.ca_fingerprint != _ca_fingerprint()
+        )
+        if (
+            isinstance(sec_map, dict)
+            and not ca_mismatch
+            and all(_valid_restore_secret(p, sec_map.get(p)) for p in clean_protos)
         ):
             secret_json = ru.secret_data
         else:
@@ -3556,16 +3768,20 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 protocol=clean_protos[0],
                 protocols=",".join(clean_protos),
                 note=ru.note or "",
-                volume_gb=ru.volume_gb,
+                volume_gb=_vol,
                 device_limit=ru.device_limit,
-                used_gb=ru.used_gb,
+                used_gb=_used,
                 token=ru.token,
                 secret_data=secret_json,
-                is_active=ru.is_active,
+                is_active=_rbool(ru.is_active, True),
                 start_on_first_use=sofu,
                 duration_days=duration if sofu else None,
                 created_at=created,
                 expires_at=expires,
+                # Presence history is part of the customer's record: it used
+                # to reset to "never seen" after every restore.
+                last_fetch_at=_rusdt(ru.last_fetch_at),
+                last_fetch_ip=(ru.last_fetch_ip or None),
             )
         )
     seen_names = set()
@@ -3588,6 +3804,19 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             s.add(pu)
             added_users += 1
         if data.settings:
+            # Host-bound secret pairs must move together or not at all: a
+            # REALITY public key whose private half cannot be decrypted (or a
+            # Telegram chat id whose bot token could not be) produced a panel
+            # whose links/notification channel silently cannot work.
+            _raw_settings = {str(k): v for k, v in data.settings.items()}
+            _reality_priv_ok = not (
+                str(_raw_settings.get("reality_priv_enc") or "")
+                and not decrypt_text(str(_raw_settings["reality_priv_enc"]))
+            )
+            _tg_token_ok = not (
+                str(_raw_settings.get("tg_bot_token") or "")
+                and not decrypt_text(str(_raw_settings["tg_bot_token"]))
+            )
             for k, v in data.settings.items():
                 if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in AI_BACKUP_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}:
                     continue
@@ -3597,6 +3826,12 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 if k == "reality_priv_enc" and sval and not decrypt_text(sval):
                     # Encrypted with another server's master key: keeping it
                     # would silently break REALITY links. Drop + count it.
+                    skipped += 1
+                    continue
+                if k == "reality_pub" and not _reality_priv_ok:
+                    skipped += 1
+                    continue
+                if k == "tg_chat_id" and not _tg_token_ok:
                     skipped += 1
                     continue
                 ok = True
@@ -3668,14 +3903,25 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     if sval and not re.fullmatch(r"^@?[a-zA-Z0-9_]{4,64}$|^[-0-9]{3,25}$", sval):
                         ok = False
                 elif k == "reality_sni":
-                    if not re.fullmatch(r"[a-zA-Z0-9.,\- ]{0,300}", sval):
+                    # Same rule as the live form: comma-separated hostnames,
+                    # each a valid DNS name (no empty labels, no spaces).
+                    if sval and not all(
+                        re.fullmatch(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+                                     r"(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*", p.strip())
+                        for p in sval.split(",") if p.strip()
+                    ):
                         ok = False
                 elif k == "wg_pub":
                     if len(sval) > 200:
                         ok = False
                 elif k in ("public_url",):
-                    if sval and not re.fullmatch(r"https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:[0-9]{1,5})?", sval):
-                        ok = False
+                    # port 0 was accepted: the stored URL then became every
+                    # subscription/QR link target ("https://host:0/...").
+                    m = re.fullmatch(
+                        r"https?://[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?(:([0-9]{1,5}))?", sval)
+                    ok = bool(m) and (
+                        m.group(3) is None or 1 <= int(m.group(3)) <= 65535
+                    )
                 elif k in ("trusted_proxies",):
                     if len(sval) > 500:
                         ok = False
@@ -3724,7 +3970,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     en = bs.get("enabled", True)
-                    s.add(BlockedSite(domain=dom, category="custom", enabled=en if isinstance(en, bool) else True))
+                    s.add(BlockedSite(domain=dom, category="custom", enabled=_rbool(en, True)))
                     restored_blocked += 1
                 except Exception:
                     skipped += 1
@@ -3737,14 +3983,10 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         continue
                     nname = str(rn.get("name", "")).strip()[:40]
                     addr = str(rn.get("address", "")).strip()
-                    try:
-                        cport = int(rn.get("check_port", 443))
-                    except (TypeError, ValueError):
-                        skipped += 1
-                        continue
-                    if (not nname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", nname)
+                    cport = _rint(rn.get("check_port", 443), 1, 65535)
+                    if (cport is None
+                            or not nname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", nname)
                             or not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", addr)
-                            or not 1 <= cport <= 65535
                             or _hostname_is_ssrf_blocked(addr)):
                         skipped += 1
                         continue
@@ -3754,7 +3996,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     s.add(ServerNode(name=nname, address=addr, check_port=cport,
-                                     note=note, enabled=en if isinstance(en, bool) else True))
+                                     note=note, enabled=_rbool(en, True)))
                     restored_snodes += 1
                 except Exception:
                     skipped += 1
@@ -3763,6 +4005,15 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             n.name: n.id
             for n in s.scalars(select(ServerNode)).all()
         }
+        # The port-conflict check needs the sub_port this restore will leave
+        # behind. load_srv() reads through a NEW session, so settings written
+        # earlier in this (uncommitted) transaction were invisible to it and
+        # a backup that moved sub_port could commit two listeners on one port.
+        restored_sub_port = load_srv().get("sub_port")
+        if isinstance(data.settings, dict) and data.settings.get("sub_port") is not None:
+            _sp = _rint(data.settings.get("sub_port"), 1, 65535)
+            if _sp is not None:
+                restored_sub_port = _sp
         if data.inbounds is not None:
             for ri in data.inbounds:
                 try:
@@ -3771,16 +4022,12 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         continue
                     iname = str(ri.get("name", "")).strip()[:32]
                     proto = str(ri.get("protocol", ""))
-                    try:
-                        iport = int(ri.get("port", 0))
-                    except (TypeError, ValueError):
-                        skipped += 1
-                        continue
+                    iport = _rint(ri.get("port", 0), 1, 65535)
                     ihost = str(ri.get("host", "") or "")
                     ien = ri.get("enabled", True)
-                    if (not iname or not re.fullmatch(r"[a-zA-Z0-9_\-]+", iname)
+                    if (iport is None
+                            or not iname or not re.fullmatch(r"[a-zA-Z0-9_\-]+", iname)
                             or proto not in protocols.INBOUND_PROTOCOLS
-                            or not 1 <= iport <= 65535
                             or (ihost and not re.fullmatch(r"[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?", ihost))):
                         skipped += 1
                         continue
@@ -3788,17 +4035,25 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     # Node IDs differ across databases: remap by node NAME.
-                    # Unknown names unpin to local (never drop the inbound).
+                    # Backups older than 1.13.9 carry only node_id, so match
+                    # that against the restored name->id map before unpinned.
                     nid = None
                     rnode = str(ri.get("node_name", "") or ri.get("node") or "")
                     if rnode and rnode in node_name_to_id:
                         nid = node_name_to_id[rnode]
-                    conflict = _inbound_port_conflict(s, proto, iport, nid)
+                    elif ri.get("node_id") is not None:
+                        want = _rint(ri.get("node_id"), 1, 2**31 - 1)
+                        if want is not None:
+                            hit = [nn for nn, nid_ in node_name_to_id.items() if nid_ == want]
+                            if len(hit) == 1:
+                                nid = node_name_to_id[hit[0]]
+                    conflict = _inbound_port_conflict(s, proto, iport, nid,
+                                                      sub_port_override={"sub_port": restored_sub_port})
                     if conflict:
                         skipped += 1
                         continue
                     s.add(Inbound(name=iname, protocol=proto, port=iport,
-                                  host=ihost, enabled=ien if isinstance(ien, bool) else True,
+                                  host=ihost, enabled=_rbool(ien, True),
                                   node_id=nid))
                     restored_ibs += 1
                 except Exception:
@@ -3810,34 +4065,38 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     if not isinstance(rn, dict):
                         skipped += 1
                         continue
-                    tname = str(rn.get("name", "")).strip()[:40]
-                    ttrans = str(rn.get("transport", "tcp"))
-                    iran = str(rn.get("iran_ip", "")).strip()
-                    kharej = str(rn.get("kharej_ip", "")).strip()
+                    # Validate through the SAME schema the live endpoint uses.
+                    # The old hand-rolled checks let "not a host",
+                    # "99999:1\nfoo" and duplicate Iran ports into the DB and
+                    # straight into the operator's setup guide.
                     try:
-                        tport = int(rn.get("tunnel_port", 0))
-                    except (TypeError, ValueError):
+                        trow_in = TunnelNodeIn.model_validate({
+                            "name": rn.get("name"),
+                            "transport": rn.get("transport", "tcp"),
+                            "iran_ip": rn.get("iran_ip"),
+                            "kharej_ip": rn.get("kharej_ip"),
+                            "tunnel_port": rn.get("tunnel_port"),
+                            "forwarded_ports": rn.get("forwarded_ports", ""),
+                            "udp_forward": rn.get("udp_forward", False),
+                        })
+                    except Exception:
                         skipped += 1
                         continue
-                    fwd = str(rn.get("forwarded_ports", "") or "")[:200]
-                    udp = rn.get("udp_forward", False)
-                    if (not tname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", tname)
-                            or ttrans not in protocols.TUNNEL_TRANSPORTS
-                            or not 1 <= tport <= 65535
-                            or _hostname_is_ssrf_blocked(iran)
-                            or _hostname_is_ssrf_blocked(kharej)):
+                    if _hostname_is_ssrf_blocked(trow_in.iran_ip) or _hostname_is_ssrf_blocked(trow_in.kharej_ip):
                         skipped += 1
                         continue
-                    if s.scalar(select(TunnelNode).where(TunnelNode.name == tname)):
+                    if s.scalar(select(TunnelNode).where(TunnelNode.name == trow_in.name)):
                         skipped += 1
                         continue
                     # Tokens never cross hosts: mint fresh (guide download +
                     # both-server update required, stated in the response).
                     fresh = secrets.token_urlsafe(24)
                     s.add(TunnelNode(
-                        name=tname, transport=ttrans, iran_ip=iran, kharej_ip=kharej,
-                        tunnel_port=tport, forwarded_ports=fwd,
-                        udp_forward=udp if isinstance(udp, bool) else False,
+                        name=trow_in.name, transport=trow_in.transport,
+                        iran_ip=trow_in.iran_ip, kharej_ip=trow_in.kharej_ip,
+                        tunnel_port=trow_in.tunnel_port,
+                        forwarded_ports=trow_in.forwarded_ports,
+                        udp_forward=bool(trow_in.udp_forward),
                         token_enc=encrypt_text(fresh),
                     ))
                     restored_tnodes += 1
@@ -3863,27 +4122,24 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     if not plist:
                         skipped += 1
                         continue
-                    tvol = float(rt.get("volume_gb", 0))
-                    tdays = int(rt.get("days", 0))
-                    if not (0 < tvol <= 100000 and 1 <= tdays <= 3650):
+                    tvol = _rfloat(rt.get("volume_gb"), 0, 100000)
+                    tdays = _rint(rt.get("days"), 1, 3650)
+                    if tvol is None or tvol <= 0 or tdays is None:
                         skipped += 1
                         continue
-                    tsofu = bool(rt.get("start_on_first_use", False))
-                    try:
-                        tdev = rt.get("device_limit")
-                        tdev = int(tdev) if tdev is not None else None
-                        if tdev is not None and not 1 <= tdev <= 1000:
-                            tdev = None
-                    except (TypeError, ValueError):
-                        tdev = None
+                    tsofu = _rbool(rt.get("start_on_first_use"), False)
+                    tdev = _rint(rt.get("device_limit"), 1, 1000)
                     existing_t = s.scalar(select(UserTemplate).where(UserTemplate.name == tname))
                     if existing_t:
-                        trow = s.get(UserTemplate, existing_t)
-                        trow.protocols = ",".join(plist)
-                        trow.volume_gb = tvol
-                        trow.days = tdays
-                        trow.start_on_first_use = tsofu
-                        trow.device_limit = tdev
+                        # existing_t IS the row (scalar() on the entity), not an
+                        # id: s.get(UserTemplate, existing_t) bound the ORM
+                        # object as a bind parameter and every restore onto an
+                        # instance that already had that template 500'd.
+                        existing_t.protocols = ",".join(plist)
+                        existing_t.volume_gb = tvol
+                        existing_t.days = tdays
+                        existing_t.start_on_first_use = tsofu
+                        existing_t.device_limit = tdev
                     else:
                         s.add(UserTemplate(
                             name=tname,
@@ -3898,6 +4154,12 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     skipped += 1
                     continue
         if data.api_tokens is not None:
+            # The backup's token set is authoritative: keeping the target's
+            # rows meant a token revoked *after* the backup came back to life
+            # on restore (same SHA-256 row re-inserted), and an empty list
+            # silently left every local token active.
+            for old_tok in s.scalars(select(ApiToken)).all():
+                s.delete(old_tok)
             for rt in data.api_tokens:
                 try:
                     if not isinstance(rt, dict):
@@ -3916,21 +4178,13 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     )):
                         skipped += 1
                         continue
+                    # A crafted prefix used to show an unrelated string in the
+                    # token list; anything unexpected falls back to the hash.
                     prefix = str(rt.get("prefix", ""))[:12]
-                    created = None
-                    if rt.get("created_at"):
-                        try:
-                            created = datetime.fromisoformat(
-                                str(rt["created_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
-                        except ValueError:
-                            created = None
-                    last_used = None
-                    if rt.get("last_used_at"):
-                        try:
-                            last_used = datetime.fromisoformat(
-                                str(rt["last_used_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
-                        except ValueError:
-                            last_used = None
+                    if not re.fullmatch(r"[A-Za-z0-9_-]{4,12}", prefix):
+                        prefix = tsha[:12]
+                    created = _rusdt(rt.get("created_at")) or now
+                    last_used = _rusdt(rt.get("last_used_at"))
                     tscopes = str(rt.get("scopes", "full") or "full").strip().lower()
                     if tscopes not in ("full", "bot"):
                         # Fail closed like _token_scope_allowed (unknown scope
@@ -3943,7 +4197,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         token_sha=tsha,
                         admin_id=admin.id,
                         scopes=tscopes,
-                        created_at=created or now,
+                        created_at=created,
                         last_used_at=last_used,
                     ))
                     restored_tokens += 1
@@ -4036,16 +4290,28 @@ def api_restore_encrypted(data: RestoreEncryptedIn, request: Request, admin: Adm
     inner = _decrypt_backup_json(data.salt, data.payload, enc_pw)
     if not inner.get("zefira_backup"):
         raise HTTPException(status_code=400, detail="Invalid encrypted backup (not a Zefira backup)")
+    if not isinstance(inner.get("users"), list):
+        # Same contract as the plain endpoint: a payload without a user list
+        # is a corrupt/hand-made file, and restoring it used to wipe every
+        # user (the old users=inner.get("users", []) default).
+        raise HTTPException(status_code=400, detail="Invalid encrypted backup (no users section)")
+    meta = inner.get("meta") if isinstance(inner.get("meta"), dict) else {}
     try:
         parsed = RestoreIn(
             password_confirm=data.password_confirm,
             zefira_backup=True,
-            users=inner.get("users", []),
+            users=inner["users"],
             admins=inner.get("admins"),
             settings=inner.get("settings"),
             templates=inner.get("templates"),
             blocked_sites=inner.get("blocked_sites"),
             api_tokens=inner.get("api_tokens"),
+            # Encrypted restore used to drop the whole endpoint topology:
+            # inbounds / server nodes / tunnels were never passed through.
+            inbounds=inner.get("inbounds"),
+            server_nodes=inner.get("server_nodes"),
+            tunnel_nodes=inner.get("tunnel_nodes"),
+            ca_fingerprint=str(meta.get("ca_fingerprint") or ""),
         )
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid encrypted backup (schema)")
@@ -4057,13 +4323,15 @@ def api_inbounds_list(admin: Admin = Depends(require_admin)):
     return load_inbounds()
 
 
-def _inbound_port_conflict(s, protocol: str, port: int, node_id, ignore_id=None) -> str | None:
+def _inbound_port_conflict(s, protocol: str, port: int, node_id, ignore_id=None,
+                           sub_port_override=None) -> str | None:
     """Reject duplicate (protocol, port) endpoints on the same node scope.
 
     Two listeners cannot share a port on one server; duplicates would only
     produce dead/duplicate links. Inbounds on different nodes may reuse
     ports (different machines). Also rejects shadowing the global server
-    port for local (unpinned) inbounds.
+    port for local (unpinned) inbounds. sub_port_override lets the restore
+    transaction check against the port it is about to commit.
     """
     q = select(Inbound.id).where(
         Inbound.protocol == protocol,
@@ -4080,6 +4348,11 @@ def _inbound_port_conflict(s, protocol: str, port: int, node_id, ignore_id=None)
             "reality": srv.get("reality_port"),
             "hysteria2": srv.get("hy2_port"),
         }.get(protocol, srv.get("sub_port"))
+        if sub_port_override is not None:
+            global_port = {
+                "reality": sub_port_override.get("reality_port", srv.get("reality_port")),
+                "hysteria2": sub_port_override.get("hy2_port", srv.get("hy2_port")),
+            }.get(protocol, sub_port_override.get("sub_port"))
         try:
             if global_port is not None and int(global_port) == int(port):
                 return f"Port {port} is already the global {protocol} port"
@@ -4221,7 +4494,7 @@ def api_blocklist_porn(data: BlockToggleIn, request: Request, admin: Admin = Dep
         else:
             row.value = val
         audit(s, "PORN_TOGGLE", f"{'ON' if data.porn_enabled else 'OFF'} by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     _settings_cache.pop("porn_block_enabled", None)
     return {"porn_enabled": data.porn_enabled}
 
@@ -4250,7 +4523,7 @@ def api_telegram_put(data: TelegramSettingsIn, request: Request, admin: Admin = 
         else:
             crow.value = data.chat_id
         audit(s, "TG_SETTINGS", f"by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     _settings_cache.pop("tg_bot_token", None)
     _settings_cache.pop("tg_chat_id", None)
     return {"ok": True}
@@ -4382,12 +4655,43 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
         raise HTTPException(status_code=429, detail="Too many users created, wait a while")
     if not USERNAME_RE.match(data.username):
         raise HTTPException(status_code=400, detail="Username: English letters, digits and _ only (3-32 chars)")
-    proto_list = list(dict.fromkeys(data.protocols))
+    proto_list = list(dict.fromkeys(data.protocols or []))
+    volume_gb = data.volume_gb
+    days = data.days
+    start_on_first_use = bool(data.start_on_first_use)
+    device_limit = data.device_limit
+    template_name = ""
+    if data.template_id is not None:
+        # Apply the saved plan, then let explicit body fields win (a caller can
+        # reuse a template and bump one field without editing it).
+        with db.s() as s:
+            tpl = s.get(UserTemplate, data.template_id)
+            if tpl is None:
+                raise HTTPException(status_code=404, detail="Template not found")
+            template_name = tpl.name
+            tpl_protos = [p for p in (tpl.protocols or "").split(",") if p]
+            if not proto_list:
+                proto_list = tpl_protos
+            if volume_gb is None:
+                volume_gb = tpl.volume_gb
+            if days is None:
+                days = tpl.days
+            if data.start_on_first_use is None:
+                start_on_first_use = bool(tpl.start_on_first_use)
+            if device_limit is None:
+                device_limit = tpl.device_limit
+    missing = [n for n, v in (("protocols", proto_list), ("volume_gb", volume_gb), ("days", days))
+               if not v]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail="Missing plan field(s): " + ", ".join(missing) + " (or pass template_id)",
+        )
     now = utcnow()
     expires = (
         datetime(PENDING_YEAR + 10, 1, 1)
-        if data.start_on_first_use
-        else now + timedelta(days=data.days)
+        if start_on_first_use
+        else now + timedelta(days=days)
     )
     with db.s() as s:
         if s.scalar(select(func.count()).select_from(VpnUser)) >= 10000:
@@ -4405,12 +4709,12 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
             protocol=proto_list[0],
             protocols=",".join(proto_list),
             note=data.note,
-            volume_gb=data.volume_gb,
-            device_limit=data.device_limit,
+            volume_gb=volume_gb,
+            device_limit=device_limit,
             token=secrets.token_hex(16),
             secret_data=protocols.serialize_secrets(secret_map),
-            start_on_first_use=data.start_on_first_use,
-            duration_days=data.days if data.start_on_first_use else None,
+            start_on_first_use=start_on_first_use,
+            duration_days=days if start_on_first_use else None,
             created_at=now,
             expires_at=expires,
         )
@@ -4419,10 +4723,12 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
         # mutation (the client would retry into a confusing 409 while the
         # first token/link was never delivered).
         flags = f" [{','.join(proto_list)}]"
-        if data.start_on_first_use:
+        if template_name:
+            flags += f" template={template_name}"
+        if start_on_first_use:
             flags += " starts-on-first-use"
-        if data.device_limit:
-            flags += f" max-{data.device_limit}-dev"
+        if device_limit:
+            flags += f" max-{device_limit}-dev"
         audit(s, "USER_CREATE", f"{data.username}{flags} by {admin.username}", client_ip(request))
         out = user.to_dict()
         try:
@@ -4984,10 +5290,30 @@ def subscription(token: str, request: Request):
         dashboard_req = not want_clash and wants_dashboard(request)
         if user.start_on_first_use and user.expires_at is not None and user.expires_at.year >= PENDING_YEAR:
             duration = user.duration_days or 30
-            user.expires_at = utcnow() + timedelta(days=duration)
-            audit(s, "USER_START", f"{user.username} activated on first connection (+{duration}d)", ip)
-            _commit(s)
-        if user.expires_at <= utcnow() and not dashboard_req:
+            # Atomic claim: a conditional UPDATE lets exactly one racer flip
+            # the sentinel. The old read-modify-write let two simultaneous
+            # first fetches both log USER_START, and a late writer could
+            # overwrite an expiry the admin had just set by hand.
+            claimed = s.execute(
+                update(VpnUser)
+                .where(
+                    VpnUser.id == user.id,
+                    VpnUser.start_on_first_use.is_(True),
+                    VpnUser.expires_at.isnot(None),
+                    VpnUser.expires_at >= datetime(PENDING_YEAR, 1, 1),
+                )
+                .values(expires_at=utcnow() + timedelta(days=duration))
+            ).rowcount
+            if claimed:
+                audit(s, "USER_START", f"{user.username} activated on first connection (+{duration}d)", ip)
+                _commit(s)
+                user.expires_at = utcnow() + timedelta(days=duration)
+            else:
+                s.rollback()
+                s.refresh(user)
+        if (user.expires_at is None or user.expires_at <= utcnow()) and not dashboard_req:
+            # NULL expiry (legacy/hand-edited row) used to 500 here: the
+            # comparison below assumed a datetime. Treat it as expired.
             raise HTTPException(status_code=404, detail="Not Found")
         # Quota enforcement (fail-closed, same 404 as expired/disabled to
         # avoid oracle): exhausted volume serves nothing, not even the
