@@ -127,6 +127,17 @@ probe_limiter = SlidingWindowLimiter(max_events=20, window_seconds=60)
 ssl_limiter = SlidingWindowLimiter(max_events=5, window_seconds=600)
 lockout_notify_limiter = SlidingWindowLimiter(max_events=3, window_seconds=600)
 ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
+# QR generation is CPU-bound and reachable with a bot token: budget it per
+# source and per token so a leaked bot cannot pin the sync worker pool.
+qr_limiter = SlidingWindowLimiter(max_events=30, window_seconds=60)
+# Restore bodies are buffered (and joined again) before the route's auth
+# dependency runs, so an anonymous client could make the process hold ~128 MiB
+# per request on the direct-port deployment. A per-source budget plus a single
+# global slot bound that to one in-flight restore; the panel's own UI always
+# sends Content-Length, and a slow upload is cut off after the deadline.
+restore_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
+_restore_buffer_slot = threading.BoundedSemaphore(1)
+_RESTORE_READ_DEADLINE = 60.0
 sensitive_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 # User creation is audited (and audit prunes to the last 2000 rows): an
 # unleashed creator (e.g. a leaked bot token) could mass-create users to
@@ -192,6 +203,18 @@ def _ip_is_ssrf_blocked(ip_str: str) -> bool:
         ip = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
+    # IPv4-mapped IPv6 (::ffff:100.100.100.200) is the SAME IPv4 endpoint.
+    # Without unwrapping, `is_link_local` is False and the textual form never
+    # matches the IPv4 metadata set, so a mapped address walked straight
+    # through this guard and received the stored provider API key. 6to4
+    # (2002::/16) and Teredo are unwrapped for the same reason.
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif ip.sixtofour is not None:
+            ip = ip.sixtofour
+        elif ip.teredo is not None:
+            ip = ip.teredo[1]
     if ip.is_multicast or ip.is_unspecified or ip.is_link_local:
         return True
     if str(ip).lower() in SSRF_METADATA_IPS:
@@ -681,9 +704,17 @@ def public_base_url(request: Request) -> str:
     dom = (cached_setting("domain") or "").strip().lower()
     if dom and re.fullmatch(r"[a-z0-9.-]{1,253}", dom):
         return f"{scheme}://{dom}" + ("" if default_port or not port else f":{port}")
-    base = str(request.base_url).rstrip("/")
-    if scheme == "https" and base.startswith("http://"):
-        base = "https://" + base[len("http://"):]
+    # Host fallback (IP/direct installs with no domain configured). The header
+    # is attacker-controlled, so it is only honoured when it actually looks
+    # like a host: a 2 KB "hostname" would otherwise inflate every generated
+    # QR/link (expensive matrix math, 300 KB+ responses).
+    host = parse_host_header(request.headers.get("host", "")).lower()
+    if not host or len(host) > 253 or not re.fullmatch(r"\[[0-9a-f:.]+\]|[a-z0-9.:_-]+", host):
+        log.warning("Ignoring implausible Host header for link generation: %r", host[:40])
+        return f"{scheme}://127.0.0.1" + ("" if default_port or not port else f":{port}")
+    base = f"{scheme}://{host}"
+    if port and not default_port:
+        base = f"{base}:{port}"
     return base
 
 
@@ -1125,18 +1156,60 @@ async def csrf_and_size_middleware(request: Request, call_next):
     # blobs); everything else stays under a strict 1 MiB cap.
     is_restore = request.url.path in ("/api/restore", "/api/restore-encrypted") and request.method == "POST"
     limit = 64 * 1048576 if is_restore else 1048576
+    # Tracks whether this request still owns the global restore slot, so every
+    # exit path (early return, exception, normal completion) releases it once.
+    restore_slot_held = False
+
+    def _release_restore_slot() -> None:
+        nonlocal restore_slot_held
+        if restore_slot_held:
+            restore_slot_held = False
+            try:
+                _restore_buffer_slot.release()
+            except ValueError:  # pragma: no cover - defensive
+                pass
+
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         content_length = request.headers.get("content-length")
+        if is_restore:
+            # The restore body is buffered (and then joined into a second
+            # copy) BEFORE the route's auth dependency runs, so an anonymous
+            # client could otherwise make the server hold ~128 MiB per
+            # request. Three cheap gates before a single byte is read:
+            #   1. a declared length is mandatory - the panel's own UI always
+            #      sends one, and a chunked upload is the shape of the attack;
+            #   2. a per-source budget, so floods are refused instantly;
+            #   3. a single global slot, bounding the process to one buffered
+            #      restore at a time (the route serialises them anyway).
+            if not content_length:
+                return JSONResponse(
+                    {"detail": "Content-Length required for restore"}, status_code=411
+                )
+            rip = client_ip(request)
+            if not restore_limiter.hit(f"restore|{rip}"):
+                return JSONResponse(
+                    {"detail": "Too many restore attempts, wait a few minutes"},
+                    status_code=429,
+                )
+            if not _restore_buffer_slot.acquire(blocking=False):
+                return JSONResponse(
+                    {"detail": "A restore is already being processed, retry shortly"},
+                    status_code=429,
+                )
+            restore_slot_held = True
         if content_length:
             try:
                 if int(content_length.strip()) > limit:
+                    _release_restore_slot()
                     return JSONResponse({"detail": "payload too large"}, status_code=413)
             except ValueError:
+                _release_restore_slot()
                 return JSONResponse({"detail": "bad request"}, status_code=400)
         # Real-body enforcement (not just Content-Length): chunked bodies
         # with no/mismatched length would otherwise bypass the gate and
         # OOM the JSON parser. Stream-count up to limit+1, replay for
         # downstream. Max buffered = limit (1 MiB, or 64 MiB for restore).
+        deadline = time_mod.monotonic() + _RESTORE_READ_DEADLINE if is_restore else 0.0
         try:
             orig_receive = request._receive
             chunks: list = []
@@ -1158,7 +1231,13 @@ async def csrf_and_size_middleware(request: Request, call_next):
                 chunk = msg.get("body", b"") or b""
                 total += len(chunk)
                 if total > limit:
+                    _release_restore_slot()
                     return JSONResponse({"detail": "payload too large"}, status_code=413)
+                # A slow trickle must not hold the global restore slot (and
+                # its memory) forever.
+                if is_restore and time_mod.monotonic() > deadline:
+                    _release_restore_slot()
+                    return JSONResponse({"detail": "restore upload too slow"}, status_code=408)
                 if chunk:
                     chunks.append(chunk)
                 if not msg.get("more_body"):
@@ -1168,12 +1247,14 @@ async def csrf_and_size_middleware(request: Request, call_next):
             # Pydantic + FastAPI's error encoder both recurse over the parsed
             # value, so a deep body otherwise becomes a 500 + huge traceback.
             if body[:1] in (b"{", b"[") and _json_too_deep(body):
+                _release_restore_slot()
                 return JSONResponse({"detail": "Malformed JSON payload (too deeply nested)"}, status_code=400)
             # Lone surrogates ("\ud800" / CESU-8) decode fine but cannot be
             # re-encoded: FastAPI echoes the offending value back in its 422,
             # which then explodes with UnicodeEncodeError -> 500. Refuse them
             # at the door instead (ED A0 80 - ED BF BF byte pattern).
             if _SURROGATE_RE.search(body):
+                _release_restore_slot()
                 return JSONResponse({"detail": "Malformed JSON payload (invalid characters)"}, status_code=400)
 
             async def _replay(body=body):
@@ -1186,6 +1267,9 @@ async def csrf_and_size_middleware(request: Request, call_next):
                 pass
         except Exception as exc:
             log.debug("body-limit pre-read failed: %s", exc)
+            # The restore slot was taken before the read; a failure here would
+            # otherwise leak it and block every later restore until restart.
+            _release_restore_slot()
     if request.url.path.startswith("/api") and request.method not in {"GET", "HEAD", "OPTIONS"}:
         # Custom Authorization headers cannot be sent cross-origin without a
         # CORS preflight (which this panel never passes), so a present Bearer
@@ -1205,6 +1289,14 @@ async def csrf_and_size_middleware(request: Request, call_next):
         ):
             if restore_lock.locked():
                 return JSONResponse({"detail": "Restore in progress, try again"}, status_code=409)
+    if is_restore:
+        # The buffered body is now owned by the route (and by the replay
+        # callable above); free the global slot whichever way the call ends.
+        try:
+            response = await call_next(request)
+        finally:
+            _release_restore_slot()
+        return response
     return await call_next(request)
 
 
@@ -4496,8 +4588,34 @@ def _api_reset_usage_impl(user_id: int, request: Request, admin: Admin):
     return out
 
 
+_QR_CACHE: dict = {}
+_QR_CACHE_MAX = 256
+
+
+def _qr_cached(sub_url: str) -> str:
+    """QR generation is CPU-bound (matrix math + PNG/SVG encode). The result
+    depends only on the URL, and a QR for a given subscription link never
+    changes, so memoise it: repeated calls (a bot polling the endpoint, a user
+    re-opening the modal) cost a dict lookup instead of ~0.4 s of CPU."""
+    hit = _QR_CACHE.get(sub_url)
+    if hit is not None:
+        return hit
+    png = protocols.qr_svg_b64(sub_url)
+    if len(_QR_CACHE) >= _QR_CACHE_MAX:
+        # Cheap bounded eviction: drop the oldest inserted entries.
+        for k in list(_QR_CACHE.keys())[: len(_QR_CACHE) // 2]:
+            _QR_CACHE.pop(k, None)
+    _QR_CACHE[sub_url] = png
+    return png
+
+
 @app.get("/api/users/{user_id}/qr")
 def api_user_qr(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    # QR is reachable with a bot token, so it needs its own budget: without
+    # one, a leaked bot token could pin every sync worker on matrix math.
+    ip = client_ip(request)
+    if not qr_limiter.hit(f"qr|{ip}") or not qr_limiter.hit(f"qrt|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many QR requests, wait a moment")
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         token = user.token
@@ -4506,7 +4624,7 @@ def api_user_qr(user_id: int, request: Request, admin: Admin = Depends(require_a
     base = public_base_url(request)
     sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
     sub_url = f"{base}{sub_path}/{token}"
-    return {"url": sub_url, "qr_b64": protocols.qr_svg_b64(sub_url)}
+    return {"url": sub_url, "qr_b64": _qr_cached(sub_url)}
 
 
 @app.get("/api/users/by-username/{username}")

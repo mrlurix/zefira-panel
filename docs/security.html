@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSecurity">Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=31">
 </head>
 <body>
 <header class="topbar">
@@ -54,9 +54,11 @@
 <tr><td data-i18n="sec.layerCsrf">CSRF</td><td><span data-i18n="sec.csrfA">Mutating</span> <code>/api</code> <span data-i18n="sec.csrfB">calls require</span> <code>X-Requested-With: XMLHttpRequest</code> <span data-i18n="sec.csrfC">(Bearer tokens exempt: they cannot be sent cross-origin without a preflight the panel never passes)</span></td></tr>
 <tr><td data-i18n="sec.layerHeaders">Headers</td><td><span data-i18n="sec.headersA">CSP,</span> <code>frame-ancestors 'none'</code><span data-i18n="sec.headersB">, X-Frame-Options DENY, nosniff, no-referrer, CORP same-origin, HSTS on HTTPS, no Server banner</span></td></tr>
 <tr><td data-i18n="sec.layerInput">Input</td><td><span data-i18n="sec.inputA">Strict Pydantic schemas everywhere, 1 MiB body cap (64 MiB only for restore) enforced on</span> <b data-i18n="sec.inputBold">actual streamed bytes</b> <span data-i18n="sec.inputB">— chunked bodies without</span> <code>Content-Length</code> <span data-i18n="sec.inputC">cannot bypass it</span></td></tr>
-<tr><td data-i18n="sec.layerSsrf">SSRF</td><td><span data-i18n="sec.ssrfA">AI</span> <code>base_url</code> <span data-i18n="sec.ssrfB">rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; node probes filter link-local/metadata dials; create/patch reject metadata addresses</span></td></tr>
+<tr><td data-i18n="sec.layerSsrf">SSRF</td><td><span data-i18n="sec.ssrfA">AI</span> <code>base_url</code> <span data-i18n="sec.ssrfB">rejects userinfo, metadata hosts, link-local/multicast targets + DNS-rebinding (any resolved IP blocked = refused) and never follows redirects; IPv4-mapped IPv6, 6to4 and Teredo forms are unwrapped first, so a wrapped metadata address cannot receive your AI key; node probes filter link-local/metadata dials; create/patch reject metadata addresses</span></td></tr>
 <tr><td data-i18n="sec.layerQuota">Quota</td><td><span data-i18n="sec.quotaA">Subscriptions with</span> <code>used_gb &gt;= volume_gb</code> <span data-i18n="sec.quotaB">404 like expired/disabled (raw, Clash and dashboard).</span> <code>device_limit</code> <span data-i18n="sec.quotaC">is advisory only — shown in panel + Clash comment, never blocks</span></td></tr>
 <tr><td data-i18n="sec.layerTokens">Tokens</td><td><span data-i18n="sec.tokensA">API tokens are</span> <code>full</code> <span data-i18n="sec.tokensB">(default) or</span> <code>bot</code> <span data-i18n="sec.tokensC">least-privilege (</span><code>GET /api/me</code><span data-i18n="sec.tokensD">,</span> <code>GET /api/stats</code><span data-i18n="sec.tokensE">,</span> <code>GET /api/users</code><span data-i18n="sec.tokensF">, username lookup,</span> <code>POST /api/users</code><span data-i18n="sec.tokensG">,</span> <code>GET /api/templates</code><span data-i18n="sec.tokensH">, QR, developer resets). Bot tokens can create and renew users including</span> <code>start_on_first_use</code> <span data-i18n="sec.tokensI">(server-computed expiry, bot-safe) but can never delete/patch, backup/restore, or manage settings/tokens</span></td></tr>
+
+<tr><td data-i18n="sec.layerRestoreBuf">Restore upload</td><td><span data-i18n="sec.restoreBufA">The body is buffered before the route authenticates, so anonymous uploads are cut off first: </span><code>Content-Length</code> <span data-i18n="sec.restoreBufB">is mandatory (chunked → 411), a per-source budget and one global slot bound it to a single in-flight restore, and a 60 s deadline stops a slow trickle from holding memory.</span></td></tr>
 <tr><td data-i18n="sec.layerRestore">Restore</td><td><span data-i18n="sec.restoreA">Admin hashes must be scrypt with</span> <code>N&gt;=2^14</code> <span data-i18n="sec.restoreB">(weak/forged hashes skipped); zero-volume users skipped;</span> <code>trusted_proxies</code> <span data-i18n="sec.restoreC">and AI URL re-validated strictly on import; token scopes preserved</span></td></tr>
 <tr><td data-i18n="sec.layerSecrets">Secrets</td><td><span data-i18n="sec.secretsA">Bot tokens, tunnel tokens and REALITY private keys encrypted with a host-local master key.</span> <code>ZEFIRA_ADMIN_PASSWORD</code> <span data-i18n="sec.secretsB">is one-time: scrubbed from</span> <code>.env</code> <span data-i18n="sec.secretsC">on first boot</span></td></tr>
 <tr><td data-i18n="sec.layerPlain">Not encrypted</td><td><span data-i18n="sec.plainA">Customer VPN credentials in the database (</span><code>secret_data</code><span data-i18n="sec.plainB">) are plain JSON — the panel rebuilds links from them without a decrypt round-trip, so they are also in plain form in an unencrypted backup. Treat the DB and unencrypted backups as customer credentials: keep</span> <code>instance/</code> <span data-i18n="sec.plainC">at 700, prefer encrypted backups (</span><code>{"encrypt": true}</code><span data-i18n="sec.plainD">) or full-disk encryption.</span></td></tr>
@@ -85,8 +87,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=30"></script>
-<script src="assets/docs.js?v=30"></script>
-<script src="assets/support-ai.js?v=30"></script>
+<script src="assets/i18n.js?v=31"></script>
+<script src="assets/docs.js?v=31"></script>
+<script src="assets/support-ai.js?v=31"></script>
 </body>
 </html>

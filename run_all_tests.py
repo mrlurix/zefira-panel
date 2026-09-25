@@ -54,8 +54,31 @@ def stop(proc):
             proc.kill()
 
 
+RESET_SQL = (
+    "import sqlite3;"
+    "c=sqlite3.connect('instance/zefira.db');"
+    "[c.execute('delete from '+t) for t in "
+    "('vpn_users','inbounds','server_nodes','tunnel_nodes','user_templates',"
+    "'api_tokens','blocked_sites')];"
+    "c.execute(\"update settings set value='' where key in "
+    "('tg_bot_token','tg_chat_id','ai_api_key_enc')\");"
+    "c.execute(\"update settings set value='0' where key='ai_enabled'\");"
+    "c.commit()"
+)
+
+
+def reset_db(when):
+    try:
+        subprocess.check_call([PY, "-c", RESET_SQL], cwd=ROOT, stdout=subprocess.DEVNULL)
+    except Exception as exc:
+        print(f"[warn] db reset {when} failed: {exc}")
+
+
 results = []
 for script, label in SUITES:
+    # Reset BEFORE each suite too: a dirty workdir (leftovers from manual
+    # testing) must never decide a suite's result.
+    reset_db(f"before {label}")
     proc = subprocess.Popen(
         [PY, "-m", "uvicorn", "main:app", "--host", HOST, "--port", str(PORT),
          "--no-server-header", "--no-proxy-headers", "--no-access-log"],
@@ -74,20 +97,7 @@ for script, label in SUITES:
     # Each suite gets a clean slate: rows the previous one intentionally left
     # (password-change token revocations, restored admins…) must not decide
     # the next suite's result.
-    try:
-        subprocess.check_call([PY, "-c", (
-            "import sqlite3;"
-            "c=sqlite3.connect('instance/zefira.db');"
-            "[c.execute('delete from '+t) for t in "
-            "('vpn_users','inbounds','server_nodes','tunnel_nodes','user_templates',"
-            "'api_tokens','blocked_sites')];"
-            "c.execute(\"update settings set value='' where key in "
-            "('tg_bot_token','tg_chat_id','ai_api_key_enc')\");"
-            "c.execute(\"update settings set value='0' where key='ai_enabled'\");"
-            "c.commit()"
-        )], cwd=ROOT, stdout=subprocess.DEVNULL)
-    except Exception as exc:
-        print(f"[warn] db reset between suites failed: {exc}")
+    reset_db(f"after {label}")
 
 print("\n===== ALL SUITES =====")
 bad = 0

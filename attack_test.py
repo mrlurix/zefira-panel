@@ -425,6 +425,123 @@ check("updater checks the upstream commit signature",
       "_commit_verification" in src and "ZEFIRA_REQUIRE_SIGNED_UPDATE" in src,
       "signature verification missing")
 
+# ---- SSRF: IPv4-mapped / 6to4 / Teredo IPv6 forms must not reach metadata.
+sys.path.insert(0, ".")
+from main import _ai_base_url_blocked, _ip_is_ssrf_blocked  # noqa: E402
+
+mapped = [
+    "::ffff:100.100.100.200", "::ffff:192.0.0.192",
+    "::ffff:169.254.169.254", "::ffff:a9fe:a9fe",
+    "2002:a9fe:a9fe::1",     # 6to4 wrapping 169.254.169.254
+]
+for m in mapped:
+    check(f"mapped/6to4 metadata address blocked: {m}", _ip_is_ssrf_blocked(m),
+          "guard let a wrapped metadata IP through")
+for u in ("http://[::ffff:100.100.100.200]", "http://[::ffff:192.0.0.192]",
+          "http://[::ffff:169.254.169.254]", "http://[::ffff:a9fe:a9fe]"):
+    check(f"AI base_url rejects wrapped metadata: {u}", _ai_base_url_blocked(u) is not None,
+          "URL guard allowed it")
+check("legitimate local AI target still allowed",
+      _ip_is_ssrf_blocked("127.0.0.1") is False
+      and _ip_is_ssrf_blocked("10.0.0.5") is False,
+      "guard now blocks loopback/private nodes")
+
+# ---- Restore: no anonymous 64 MiB buffering.
+import socket as _sock2  # noqa: E402
+
+
+def raw_post_bytes(path, headers, body_chunks=(), read_bytes=4096, timeout=25,
+                   body_delay=0.0, read_first=False):
+    """Send headers, optionally wait, then push the body.
+
+    With body_delay the probe mimics the real attack shape: headers first, so
+    a server that refuses up front answers before a single body byte is read.
+    read_first collects that early answer before the (now pointless) upload,
+    because a server that already replied usually resets the connection.
+    """
+    h, p = (HOSTPORT[0], int(HOSTPORT[1]))
+    s = _sock2.create_connection((h, p), timeout=timeout)
+    lines = [f"POST {path} HTTP/1.1", f"Host: {h}:{p}", "Connection: close"]
+    lines += [f"{k}: {v}" for k, v in headers.items()]
+    data = b""
+
+    def _drain():
+        nonlocal data
+        try:
+            while len(data) < read_bytes:
+                d = s.recv(read_bytes - len(data))
+                if not d:
+                    break
+                data += d
+        except OSError:
+            pass
+
+    try:
+        s.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
+        if read_first:
+            s.settimeout(3)
+            _drain()
+            if data:
+                s.close()
+                return data.split(b"\r\n", 1)[0]
+            s.settimeout(timeout)
+        if body_delay:
+            time.sleep(body_delay)
+        for c in body_chunks:
+            s.sendall(c)
+        _drain()
+    except OSError:
+        pass
+    try:
+        s.close()
+    except OSError:
+        pass
+    return data.split(b"\r\n", 1)[0] if data else b""
+
+
+chunked = raw_post_bytes(
+    "/api/restore",
+    {"Transfer-Encoding": "chunked", "Content-Type": "application/json",
+     "X-Requested-With": "XMLHttpRequest"},
+    [b"%x\r\n" % len(b"A" * 65536) + b"A" * 65536 + b"\r\n"] * 8 + [b"0\r\n\r\n"],
+    read_first=True)
+check("anonymous chunked restore is refused before its body is buffered",
+      b"411" in chunked or b"413" in chunked or b"429" in chunked,
+      f"status line: {chunked[:40]!r}")
+# Same for the encrypted variant.
+chunked_enc = raw_post_bytes(
+    "/api/restore-encrypted",
+    {"Transfer-Encoding": "chunked", "Content-Type": "application/json",
+     "X-Requested-With": "XMLHttpRequest"},
+    read_first=True)
+check("anonymous chunked encrypted restore is refused too",
+      b"411" in chunked_enc or b"429" in chunked_enc, f"status line: {chunked_enc[:40]!r}")
+# A declared oversize length is still a clean 413 without reading the body.
+oversize = raw_post_bytes(
+    "/api/restore",
+    {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest",
+     "Content-Length": str(70 * 1048576)},
+    [b"{}"])
+check("oversize declared restore is refused immediately",
+      b"413" in oversize or b"429" in oversize, f"status line: {oversize[:40]!r}")
+
+# ---- QR: bot-reachable, CPU-bound -> must be budgeted and cached.
+st_qr1, _, qr1 = req("GET", f"/api/users/{uid}/qr", headers=AUTH) if uid else (0, {}, b"")
+st_qr2, _, qr2 = req("GET", f"/api/users/{uid}/qr", headers=AUTH) if uid else (0, {}, b"")
+check("QR endpoint works for an admin", st_qr1 == 200, f"{st_qr1}")
+check("QR is cached (identical repeat response, no re-render)",
+      st_qr1 == 200 and st_qr2 == 200 and qr1 == qr2, "QR not stable")
+qr_codes = []
+for _ in range(45):
+    st_q, _, _ = req("GET", f"/api/users/{uid}/qr", headers=AUTH) if uid else (0, {}, b"")
+    qr_codes.append(st_q)
+check("QR endpoint is rate-limited", 429 in qr_codes, f"no 429 in {len(qr_codes)} calls")
+# A pathological Host must not inflate the generated link.
+st_h, _, hb = raw_request("GET", f"/api/users/{uid}/qr", b"", {"X-Requested-With": "XMLHttpRequest"},
+                          "a" * 2000 + ":8000")
+check("implausible Host cannot bloat the subscription link",
+      b"a" * 200 not in hb, "2 KB Host leaked into the generated URL")
+
 # ---------------------------------------------------------------- unicode / normalization
 weird_users = [
     "Ａ" * 3,           # fullwidth
