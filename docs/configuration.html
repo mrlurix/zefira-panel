@@ -73,8 +73,9 @@
 <h2 id="https-ssl" data-i18n="cfg.httpsTitle">HTTPS / SSL</h2>
 <ul>
   <li><b data-i18n="cfg.duringInstall">During install</b><span data-i18n="cfg.duringInstallT"> (step 7): Nginx reverse proxy + Let's Encrypt with auto-renew cron.</span></li>
-  <li><b data-i18n="cfg.fromPanel">From the panel</b><span data-i18n="cfg.fromPanelT"> (Settings → SSL): issue or renew a certificate for</span> <code>domain</code> <span data-i18n="cfg.fromPanelOr">or</span> <code>sub.domain</code> <span data-i18n="cfg.fromPanelT2">— standalone HTTP-01 on port 80, expiry shown in the panel.</span></li>
+  <li><b data-i18n="cfg.fromPanel">From the panel</b><span data-i18n="cfg.fromPanelT"> (Settings → SSL): request or renew a certificate for</span> <code>domain</code> <span data-i18n="cfg.fromPanelOr">or</span> <code>sub.domain</code> <span data-i18n="cfg.fromPanelT2">— standalone HTTP-01 on port 80, expiry shown in the panel.</span></li>
 </ul>
+<div class="callout warn"><span data-i18n="cfg.certRoot">Issuing from the panel needs root for certbot</span> (<code>sudo</code> <span data-i18n="cfg.certRoot2">on PATH). The certificate is</span> <b data-i18n="cfg.certStored">stored, not deployed</b><span data-i18n="cfg.certRoot3">: your nginx vhost keeps the paths from install time, so point</span> <code>ssl_certificate</code> <span data-i18n="cfg.certRoot4">at the new files and reload nginx yourself. Easier: let step 7 of the installer issue and wire everything.</span></div>
 <div class="callout info"><span data-i18n="cfg.behindNginx">Behind Nginx the panel honors</span> <code>X-Forwarded-Proto</code> <span data-i18n="cfg.behindNginx2">from localhost/trusted proxies, so cookies get the</span> <code>Secure</code> <span data-i18n="cfg.behindNginx3">flag and HSTS is emitted.</span></div>
 
 <h2 id="data-locations" data-i18n="cfg.dataTitle">Data locations</h2>
