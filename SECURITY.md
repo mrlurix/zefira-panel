@@ -1,10 +1,33 @@
 # Security Policy
 
 Zefira takes security seriously: scrypt password hashing, HttpOnly
-SameSite cookies, rate-limited login, CSRF + CSP headers, encrypted secrets
-at rest, audit logging, and a `security_test.py` penetration suite (119/119
-checks, plus 60/60 functional and a permanent i18n-coverage suite) that
-runs against a live panel.
+SameSite cookies, rate-limited login, CSRF + CSP headers, audit logging, and
+four test suites that run against a live panel: `security_test.py` (119
+penetration/abuse checks), `feature_test.py` (177 feature checks),
+`functional_test.py` (60 end-to-end checks) and `attack_test.py` (80 live
+adversarial probes).
+
+## What is encrypted, and what is not
+
+Encrypted at rest with `instance/secret.key` (AES/Fernet):
+
+- Telegram bot token, AI API key
+- REALITY / WireGuard host private keys
+- Tunnel (BackPack) tokens
+- Encrypted backups
+
+**Not** encrypted: the per-customer VPN credentials in `vpn_users.secret_data`
+(generated UUIDs, per-protocol passwords, WireGuard/OpenVPN client keys). They
+are stored as plain JSON in the SQLite database and are therefore also present
+in plain form in an unencrypted backup JSON.
+
+Treat the database and every unencrypted backup as customer credential material:
+
+- keep `instance/` mode `700` and the database `600` (the installer does);
+- use encrypted backups (`POST /api/backup {"encrypt": true}`) or full-disk
+  encryption;
+- never send an unencrypted backup over chat or email;
+- a leaked database is a leaked customer account, not just panel data.
 
 ## Reporting a vulnerability
 

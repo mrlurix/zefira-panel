@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=29">
+<link rel="stylesheet" href="assets/style.css?v=30">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,16 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1136"><span>v1.13.6</span> <span data-i18n="chg.v1136">— White-hat round: login DoS, Telegram injection, malformed input</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1136a_lead">Login flood contained:</b> <span data-i18n="chg.v1136a">every source IP now has its own budget (100 attempts / 15 min) checked <i>before</i> any password hashing, so rotating usernames can no longer turn the login form into a CPU/memory amplifier. Only four password hashes run at a time; surplus requests get 429 instead of parking a worker, and rate-limit buckets that are currently blocked can no longer be flushed by flooding throwaway keys.</span></li>
+  <li><b data-i18n="chg.v1136b_lead">Telegram injection closed:</b> <span data-i18n="chg.v1136b">values shown in notifications (the login username, the IP, a user name) are HTML-escaped before Telegram renders them, so an unauthenticated visitor can no longer plant a clickable phishing link in your security alerts.</span></li>
+  <li><b data-i18n="chg.v1136c_lead">Malformed input never 500s:</b> <span data-i18n="chg.v1136c">over-nested JSON, lone-surrogate characters and invalid UTF-8 rows are answered with 400 (and sanitised on read) instead of crashing the request — or, for a hand-edited database row, the entire users list.</span></li>
+  <li><b data-i18n="chg.v1136d_lead">Canonical links:</b> <span data-i18n="chg.v1136d">subscription links and QR codes now prefer the configured domain over the spoofable Host header.</span></li>
+  <li><b data-i18n="chg.v1136e_lead">Attack suite:</b> <span data-i18n="chg.v1136e">new <code>attack_test.py</code> fires 80 live adversarial probes (header spoofing, stored XSS, path traversal, body bombs, unicode, timing oracles, auth matrix) against a running panel.</span></li>
+  <li><b data-i18n="chg.v1136f_lead">Installer &amp; updater:</b> <span data-i18n="chg.v1136f">no privileged <code>ExecStartPre=+</code> helpers left (they turned a service compromise into root via <code>LD_PRELOAD</code>), <code>umask 077</code> so <code>.env</code> is never briefly world-readable, the copy step can no longer carry a planted <code>secret.key</code>, the panel binds loopback and the firewall keeps the port private when nginx is enabled, <code>ZEFIRA_TRUSTED_PROXIES=127.0.0.1</code> is set so every visitor gets their own login bucket, nginx no longer records subscription tokens and a broken vhost aborts instead of reporting success, and the updater installs exactly the commit SHA it advertised while showing that commit's signature state.</span></li>
+</ul>
 
 <h2 id="v1135"><span>v1.13.5</span> <span data-i18n="chg.v1135">— Feature QA: customer dashboard, Telegram hint, CSP</span></h2>
 <ul>
@@ -226,8 +236,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=29"></script>
-<script src="assets/docs.js?v=29"></script>
-<script src="assets/support-ai.js?v=29"></script>
+<script src="assets/i18n.js?v=30"></script>
+<script src="assets/docs.js?v=30"></script>
+<script src="assets/support-ai.js?v=30"></script>
 </body>
 </html>

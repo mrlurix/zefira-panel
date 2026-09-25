@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleInstall">Installation — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=29">
+<link rel="stylesheet" href="assets/style.css?v=30">
 </head>
 <body>
 <header class="topbar">
@@ -85,16 +85,26 @@
 # Local : http://127.0.0.1:8000
 
 systemctl status zefira
-journalctl -u zefira -n 100 --no-pager   # logs</pre>
+journalctl -u zefira -n 100 --no-pager   # logs
+sudo cat /opt/zefira/instance/first-run-credentials.txt   # first-run login
+sudo rm /opt/zefira/instance/first-run-credentials.txt    # then delete it</pre>
 <div class="callout warn" data-i18n="inst.firstLogin">First login: open Settings and change the password. Do this before creating users.</div>
 
 <h2 id="non-interactive-install" data-i18n="inst.nonInteractive">Non-interactive install</h2>
-<pre>ZEFIRA_DOMAIN=vpn.example.com \
-ZEFIRA_SSL_EMAIL=admin@example.com \
-ZEFIRA_SETUP_NGINX=y ZEFIRA_USE_SSL=y \
-ZEFIRA_ADMIN_USERNAME=admin \
-ZEFIRA_ADMIN_PASSWORD='S3cure-Pass-99' \
-bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)</pre>
+<pre># Read a password from a hidden prompt - never type it on the command line,
+# where it lands in your shell history and in /proc/*/cmdline.
+read -rsp "Admin password: " ZEFIRA_ADMIN_PASSWORD; echo
+
+curl -fsSLO https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh
+less install.sh          # it runs as root: read it first
+sudo env ZEFIRA_DOMAIN=vpn.example.com \
+  ZEFIRA_SSL_EMAIL=admin@example.com \
+  ZEFIRA_SETUP_NGINX=y ZEFIRA_USE_SSL=y \
+  ZEFIRA_ADMIN_USERNAME=admin \
+  ZEFIRA_ADMIN_PASSWORD="$ZEFIRA_ADMIN_PASSWORD" \
+  bash install.sh
+unset ZEFIRA_ADMIN_PASSWORD</pre>
+<div class="callout" data-i18n="inst.fetchFirst">Download the installer before running it. <code>sudo bash &lt;(curl ...)</code> hands whatever is on the branch to root with no review step; pinning a tag (for example <code>/v1.13.6/install.sh</code>) also makes the install reproducible.</div>
 
 <h2 id="uninstall" data-i18n="inst.uninstall">Uninstall</h2>
 <pre>sudo bash install.sh --uninstall</pre>
@@ -102,8 +112,8 @@ bash &lt;(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=29"></script>
-<script src="assets/docs.js?v=29"></script>
-<script src="assets/support-ai.js?v=29"></script>
+<script src="assets/i18n.js?v=30"></script>
+<script src="assets/docs.js?v=30"></script>
+<script src="assets/support-ai.js?v=30"></script>
 </body>
 </html>

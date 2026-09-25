@@ -1596,6 +1596,24 @@ async function loadUpdate(announce) {
         uw.classList.add("hidden");
       }
     }
+    // Upstream commit signature: advisory by default, a hard gate when the
+    // operator sets ZEFIRA_REQUIRE_SIGNED_UPDATE=1. Say which one it is.
+    const sw = $("#update-signature");
+    if (sw) {
+      if (st.signature === "verified") {
+        sw.textContent = t("update.sigOk");
+        sw.className = "hint ok-text";
+      } else if (st.signature === "unverified") {
+        sw.textContent = t("update.sigBad", {why: st.signature_detail || "unsigned"});
+        sw.className = "hint warn-text";
+      } else if (st.signature === "unknown") {
+        sw.textContent = t("update.sigUnknown");
+        sw.className = "hint";
+      } else {
+        sw.classList.add("hidden");
+        sw.textContent = "";
+      }
+    }
     if (announce) toast(t("msg.updateChecked"));
     return st;
   } catch (err) {

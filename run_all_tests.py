@@ -1,6 +1,7 @@
-"""Run all three suites back-to-back on one panel, restarting between them.
+"""Run every suite back-to-back on one panel, restarting between them.
 
-Proves the suites are order-independent (no hidden state carried over).
+Proves the suites are order-independent (no hidden state carried over) and
+that the security fixes hold under the live adversarial probes too.
 Usage: .venv\\Scripts\\python run_all_tests.py [admin] [password]
 """
 import os
@@ -24,6 +25,7 @@ SUITES = [
     ("feature_test.py", "feature coverage"),
     ("security_test.py", "security / abuse"),
     ("functional_test.py", "functional flows"),
+    ("attack_test.py", "live attack probes"),
 ]
 
 

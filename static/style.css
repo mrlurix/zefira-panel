@@ -496,6 +496,7 @@ td strong { font-weight: 700; letter-spacing: .3px; }
 .form-card .btn { margin-top: 6px; }
 .hint { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.8; }
 .hint.warn-text { color: var(--orange); }
+.hint.ok-text { color: var(--green); }
 
 .sec-list { list-style: none; }
 .sec-list li {

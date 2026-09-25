@@ -53,6 +53,12 @@ fi
 
 if [[ $EUID -ne 0 ]]; then echo "[!] Run as root (sudo)."; exit 1; fi
 
+# Every file this installer creates (source tree, .env with the admin password
+# and DB credentials, secret.key, vhost backups) must be private from the moment
+# it exists. Without this, a partial write or an interrupted run leaves a
+# mode-644 .env readable by every local account.
+umask 077
+
 INTERACTIVE=0
 [[ -t 0 ]] && INTERACTIVE=1
 
@@ -85,7 +91,9 @@ ask_secret() {
     if [[ $INTERACTIVE -eq 0 ]]; then echo ""; return; fi
     read -r -sp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
 }
-urlencode() { python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$1"; }
+# The value arrives on STDIN, never as argv: any local user can read another
+# process's command line (`ps`, /proc/*/cmdline) while it runs.
+urlencode() { python3 -c "import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))"; }
 is_valid_domain() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] && [[ "$1" != *".."* ]]; }
 is_valid_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; }
 is_valid_dbident() { [[ "$1" =~ ^[A-Za-z0-9_.-]{1,253}$ ]]; }
@@ -185,7 +193,7 @@ if [[ "$DB_CHOICE" == "2" || "$DB_CHOICE" == "3" ]]; then
     DB_NAME=$(ask "DB name" "zefira")
     DB_USER=$(ask "DB user" "zefira")
     DB_PASS=$(ask_secret "DB password")
-    DB_PASS_ENC=$(urlencode "$DB_PASS")
+    DB_PASS_ENC=$(printf '%s' "$DB_PASS" | urlencode)
     DB_URL="mysql+pymysql://$DB_USER:$DB_PASS_ENC@$DB_HOST:$DB_PORT/$DB_NAME"
 elif [[ "$DB_CHOICE" == "4" ]]; then
     DB_HOST=$(ask "DB host" "127.0.0.1")
@@ -193,7 +201,7 @@ elif [[ "$DB_CHOICE" == "4" ]]; then
     DB_NAME=$(ask "DB name" "zefira")
     DB_USER=$(ask "DB user" "zefira")
     DB_PASS=$(ask_secret "DB password")
-    DB_PASS_ENC=$(urlencode "$DB_PASS")
+    DB_PASS_ENC=$(printf '%s' "$DB_PASS" | urlencode)
     DB_URL="postgresql+psycopg2://$DB_USER:$DB_PASS_ENC@$DB_HOST:$DB_PORT/$DB_NAME"
 fi
 [[ -n "${DATABASE_URL:-}" ]] && DB_URL="$DATABASE_URL"
@@ -269,15 +277,42 @@ elif command -v dnf >/dev/null; then
 elif command -v yum >/dev/null; then
     yum install -y python3 python3-pip python3-devel gcc git curl rsync 2>/dev/null || yum install -y python3 git curl
 fi
+# The app uses PEP 604 unions (`str | None`) and current FastAPI/SQLAlchemy,
+# which need 3.10+. Failing here beats a stack trace on first boot.
+_PY_OK="$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 10) else 0)' 2>/dev/null || echo 0)"
+if [[ "$_PY_OK" != "1" ]]; then
+    fail "Python 3.10+ is required (found: $(python3 -V 2>&1))."
+    fail "Install a newer python3 (e.g. `apt install python3.11 python3.11-venv`) and re-run."
+    exit 1
+fi
 
 # ---------- Fetch ----------
 echo "==> [2/6] Fetching Zefira..."
+# Copy WITHOUT the runtime state. A plain `cp -r` fallback used to drag
+# instance/secret.key along: anyone who could seed that file with a key they
+# knew could mint a valid admin session cookie. Never copy secrets or state.
+copy_tree() {
+    local src="$1" dst="$2"
+    mkdir -p "$dst"
+    # shellcheck disable=SC2164
+    ( cd "$src" && tar -cf - \
+        --exclude='./.venv' --exclude='./instance' --exclude='./.git' \
+        --exclude='./.env' --exclude='./__pycache__' . ) | ( cd "$dst" && tar -xf - )
+}
 if [[ -f "main.py" && -f "requirements.txt" ]]; then
-    SRC="$(pwd)"; mkdir -p "$TARGET"
-    rsync -a --exclude .venv --exclude instance --exclude .git "$SRC"/ "$TARGET"/ 2>/dev/null || cp -r "$SRC"/. "$TARGET"/
+    SRC="$(pwd)"
+    # Re-running from inside the install dir: copying a tree onto itself is a
+    # no-op at best and an infinite read at worst. Nothing to do.
+    if [[ "$(cd "$SRC" && pwd -P)" != "$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")" ]]; then
+        copy_tree "$SRC" "$TARGET"
+    else
+        echo "[*] Already running from $TARGET - keeping the existing tree"
+    fi
 else
-    rm -rf "$TARGET.tmp"; git clone --depth 1 "$REPO_URL" "$TARGET.tmp" || { rm -rf "$TARGET.tmp"; echo "[!] clone failed"; exit 1; }
-    mkdir -p "$TARGET"; cp -r "$TARGET.tmp"/. "$TARGET"/; rm -rf "$TARGET.tmp"
+    rm -rf "$TARGET.tmp"
+    git clone --depth 1 "$REPO_URL" "$TARGET.tmp" || { rm -rf "$TARGET.tmp"; echo "[!] clone failed"; exit 1; }
+    copy_tree "$TARGET.tmp" "$TARGET"
+    rm -rf "$TARGET.tmp"
 fi
 cd "$TARGET"
 
@@ -307,6 +342,13 @@ if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base6
     echo "ZEFIRA_DOMAIN=$(env_escape "$DOMAIN")"
     echo "ZEFIRA_PORT=$(env_escape "$PORT")"
     echo "SUBSCRIPTION_PATH=$(env_escape "$SUB_PATH")"
+    if [[ "$SETUP_NGINX" == [yY] ]]; then
+        # Without this every request looks like it came from 127.0.0.1: the
+        # audit log records the proxy instead of the customer, and all visitors
+        # share ONE login rate-limit bucket (so one attacker locks out
+        # everyone). Only the exact loopback proxy is trusted - never 0.0.0.0/0.
+        echo "ZEFIRA_TRUSTED_PROXIES=127.0.0.1"
+    fi
     [[ -n "$DB_URL" ]] && echo "DATABASE_URL=$(env_escape "$DB_URL")"
     [[ -n "$TG_TOKEN" ]] && echo "TG_BOT_TOKEN=$(env_escape "$TG_TOKEN")"
     [[ -n "$TG_CHAT" ]] && echo "TG_CHAT_ID=$(env_escape "$TG_CHAT")"
@@ -337,16 +379,20 @@ chmod 600 "$ENV_FILE"
 # Resolve the binary path (merged-/usr systems keep /bin as a symlink,
 # but never assume it): the rule names one exact binary + unit.
 _SYSCTL="$(command -v systemctl 2>/dev/null || echo /bin/systemctl)"
-echo "zefira ALL=(root) NOPASSWD: $_SYSCTL restart $SERVICE, $_SYSCTL reload $SERVICE" > /etc/sudoers.d/zefira
+# Least privilege: the updater only ever runs `restart`. `reload` was never
+# used and would have doubled the allowed root commands.
+echo "zefira ALL=(root) NOPASSWD: $_SYSCTL restart $SERVICE" > /etc/sudoers.d/zefira
 chmod 440 /etc/sudoers.d/zefira
 visudo -c >/dev/null 2>&1 || { rm -f /etc/sudoers.d/zefira; warn "sudoers check failed, update restart will need manual systemctl restart"; }
 
 # ---------- systemd ----------
 echo "==> [5/6] systemd service (non-root)..."
-# Resolve helper binaries for ExecStartPre (same merged-/usr care as systemctl).
-_MKDIR="$(command -v mkdir 2>/dev/null || echo /bin/mkdir)"
-_CHOWN="$(command -v chown 2>/dev/null || echo /bin/chown)"
-_CHMOD="$(command -v chmod 2>/dev/null || echo /bin/chmod)"
+# Bind decision: with the nginx reverse proxy in front, the panel must listen on
+# loopback only. A wildcard bind would keep serving plain HTTP straight to the
+# internet on $PORT, bypassing the TLS redirect, HSTS and Secure cookies, and
+# exposing the admin login to passive observers.
+BIND_HOST="0.0.0.0"
+[[ "$SETUP_NGINX" == [yY] ]] && BIND_HOST="127.0.0.1"
 cat > "/etc/systemd/system/$SERVICE.service" <<EOF
 [Unit]
 Description=Zefira Proxy Sales Panel
@@ -358,16 +404,18 @@ User=zefira
 Group=zefira
 WorkingDirectory=$TARGET
 EnvironmentFile=-$ENV_FILE
-# Belt and braces for ReadWritePaths below: if instance/ ever goes missing
-# (deleted by hand, fresh mount), recreate it as root before the namespace
-# is set up — otherwise systemd fails with 226/NAMESPACE.
-ExecStartPre=+$_MKDIR -p $TARGET/instance
-ExecStartPre=+$_CHOWN zefira:zefira $TARGET/instance
-ExecStartPre=+$_CHMOD 700 $TARGET/instance
+# NOTE: there are deliberately NO privileged ExecStartPre=+ helpers here.
+# A `+` command runs as full root while inheriting the service environment and
+# the service-writable working tree, so a compromised panel could drop
+# LD_PRELOAD=/opt/zefira/x.so into its own .env and get root code execution the
+# next time the unit started. instance/ is created by the installer and, if it
+# ever goes missing, re-created by the app itself as the unprivileged user
+# (/opt/zefira is writable by zefira for the updater).
+UnsetEnvironment=LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT PYTHONPATH PYTHONHOME
 # SINGLE WORKER ONLY. Rate limiters, the restore/update locks, the node
 # monitor loop and the settings cache are process-local: --workers N would
 # multiply limit budgets, interleave restores and fork monitor loops.
-ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port $PORT --no-server-header --no-proxy-headers --no-access-log
+ExecStart=$TARGET/.venv/bin/python -m uvicorn main:app --host $BIND_HOST --port $PORT --no-server-header --no-proxy-headers --no-access-log
 Restart=always
 RestartSec=3
 # Least privilege + filesystem lockdown (update still works: /opt/zefira
@@ -415,14 +463,50 @@ fi
 if [[ -n "$NGINX_CONF" ]]; then
     echo "==> Setting up Nginx for $DOMAIN ..."
     # Re-run safety: back up a hand-edited vhost before overwriting it.
+    VHOST_BAK=""
     if [[ -f "$NGINX_CONF" ]]; then
         cp -a "$NGINX_CONF" "$NGINX_CONF.bak-$(date +%Y%m%d%H%M%S)"
-        echo "[*] Existing vhost backed up to $NGINX_CONF.bak-<timestamp>"
+        VHOST_BAK="$NGINX_CONF.bak-$(date +%Y%m%d%H%M%S)"
+        echo "[*] Existing vhost backed up to $VHOST_BAK"
     fi
+    # Fail closed: a broken/rejected vhost must never be reported as a
+    # successful install. The previous file (or "no vhost") is restored and
+    # nginx is put back in a running state before we abort.
+    nginx_apply() {
+        if ! nginx -t >/dev/null 2>&1; then
+            warn "nginx rejected the configuration - restoring the previous vhost"
+            if [[ -n "$VHOST_BAK" && -f "$VHOST_BAK" ]]; then
+                cp -a "$VHOST_BAK" "$NGINX_CONF" || true
+            else
+                rm -f "$NGINX_CONF"
+            fi
+            nginx -t >/dev/null 2>&1 || true
+            systemctl start nginx 2>/dev/null || systemctl reload nginx 2>/dev/null || true
+            fail "nginx configuration is invalid. Nothing was deployed; fix nginx and re-run."
+            nginx -t 2>&1 | tail -n 5 || true
+            exit 1
+        fi
+        systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || {
+            warn "nginx refused to reload/restart - restoring the previous vhost"
+            if [[ -n "$VHOST_BAK" && -f "$VHOST_BAK" ]]; then
+                cp -a "$VHOST_BAK" "$NGINX_CONF" || true
+            else
+                rm -f "$NGINX_CONF"
+            fi
+            systemctl start nginx 2>/dev/null || true
+            fail "nginx could not be started. Nothing was deployed."
+            exit 1
+        }
+    }
+    # access_log is off on purpose: nginx's default format records the full
+    # request line, and /sub/<token> IS a bearer credential for that customer's
+    # config. The panel keeps its own audit log instead. Re-enable with a
+    # redacting log_format if you need web-server access logs.
     cat > "$NGINX_CONF" <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
+    access_log off;
     location / {
         proxy_pass http://127.0.0.1:$PORT;
         proxy_set_header Host \$host;
@@ -435,7 +519,7 @@ EOF
     if [[ "$NGINX_CONF" == "/etc/nginx/sites-available/zefira" ]]; then
         ln -sf /etc/nginx/sites-available/zefira /etc/nginx/sites-enabled/zefira 2>/dev/null || true
     fi
-    nginx -t && systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+    nginx_apply
     if [[ "$USE_SSL" == [yY] ]]; then
         echo "==> Issuing SSL certificate for $DOMAIN ..."
         # Standalone certbot needs :80 free but nginx (just configured
@@ -460,6 +544,7 @@ server {
     listen 80;
     server_name $DOMAIN;
     server_tokens off;
+    access_log off;
     # HSTS on the redirect itself; app responses carry the panel's own HSTS.
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     location / {
@@ -470,6 +555,7 @@ server {
     listen 443 ssl;
     server_name $DOMAIN;
     server_tokens off;
+    access_log off;
     ssl_certificate $SSL_CERT;
     ssl_certificate_key $SSL_KEY;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -482,7 +568,7 @@ server {
     }
 }
 EOF
-                nginx -t && systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+                nginx_apply
                 # Standalone renewals need :80 free, but nginx now holds it:
                 # stop/start around renew (3am, seconds of downtime).
                 echo "0 3 * * * root certbot renew --quiet --pre-hook 'systemctl stop nginx' --post-hook 'systemctl start nginx' --deploy-hook 'systemctl reload nginx'" > /etc/cron.d/zefira-ssl-renew
@@ -502,10 +588,17 @@ fi
 
 # ---------- Firewall ----------
 echo "==> [6/6] Firewall ..."
-command -v ufw >/dev/null && ufw allow "$PORT/tcp" 2>/dev/null || true
-command -v firewall-cmd >/dev/null && firewall-cmd --add-port="$PORT/tcp" --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
 if [[ "$SETUP_NGINX" == [yY] ]]; then
+    # nginx terminates TLS on 80/443 and proxies to 127.0.0.1:$PORT, which is
+    # now loopback-only. Opening $PORT here would publish a second, unencrypted
+    # copy of the admin login that bypasses the redirect, HSTS and Secure
+    # cookies - so the port stays closed.
     command -v ufw >/dev/null && ufw allow 80/tcp 2>/dev/null && ufw allow 443/tcp 2>/dev/null || true
+    ok "Panel port $PORT kept private (nginx handles 80/443)"
+else
+    command -v ufw >/dev/null && ufw allow "$PORT/tcp" 2>/dev/null || true
+    command -v firewall-cmd >/dev/null && firewall-cmd --add-port="$PORT/tcp" --permanent 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
+    warn "No reverse proxy: the panel answers plain HTTP on $PORT. Put it behind TLS before using real accounts."
 fi
 
 sleep 3

@@ -37,6 +37,12 @@ form.addEventListener("submit", async (e) => {
     }
     let data = null;
     try { data = await res.json(); } catch (_) {}
+    // 429 covers both the per-source login budget and the saturated password
+    // hashing gate; the operator gets one clear, translated explanation.
+    if (res.status === 429) {
+      showError(t("login.throttled"));
+      return;
+    }
     showError((data && typeof data.detail === "string" && data.detail) || t("login.unreachable"));
   } catch (_) {
     showError(t("login.unreachable"));

@@ -21,6 +21,29 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def safe_text(value):
+    """Read-path sanitizer for strings leaving the database.
+
+    Two ways a stored TEXT column can break response encoding:
+      * SQLite accepted a lone surrogate (U+D800-U+DFFF), e.g. from a
+        hand-edited DB or an old import. It reads back as a valid `str` but
+        cannot be re-encoded to UTF-8.
+      * SQLite stores raw bytes that are not valid UTF-8 at all; pysqlite then
+        hands them back as `bytes`, and JSON encoding blows up on `.decode()`.
+    Either way a single bad row 500s the entire collection endpoint, which is
+    a panel-wide DoS. Writes are blocked at the HTTP edge; this keeps
+    pre-existing rows readable.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        value = bytes(value).decode("utf-8", "replace")
+    if type(value) is str and not value.isascii():
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            value = value.encode("utf-8", "replace").decode("utf-8")
+    return value
+
+
 class Admin(Base):
     __tablename__ = "admins"
 
@@ -32,8 +55,8 @@ class Admin(Base):
 
     def to_backup_dict(self) -> dict:
         return {
-            "username": self.username,
-            "password_hash": self.password_hash,
+            "username": safe_text(self.username),
+            "password_hash": safe_text(self.password_hash),
             "token_version": self.token_version,
             "created_at": self.created_at.isoformat(timespec="seconds"),
         }
@@ -66,9 +89,9 @@ class VpnUser(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "username": self.username,
+            "username": safe_text(self.username),
             "protocols": self.protocols_list(),
-            "note": self.note,
+            "note": safe_text(self.note),
             "volume_gb": round(self.volume_gb or 0, 2),
             "used_gb": round(self.used_gb or 0, 2),
             "token": self.token,
@@ -89,8 +112,8 @@ class VpnUser(Base):
     def protocols_list(self) -> list:
         raw = (self.protocols or "").strip()
         if raw:
-            return [p for p in raw.split(",") if p]
-        return [self.protocol or "vless"]
+            return [safe_text(p) for p in raw.split(",") if p]
+        return [safe_text(self.protocol or "vless")]
 
     def to_full_dict(self) -> dict:
         data = self.to_dict()
@@ -103,14 +126,14 @@ class VpnUser(Base):
         created = self.created_at or utcnow()
         expires = self.expires_at or utcnow()
         return {
-            "username": self.username,
-            "protocol": self.protocol,
-            "protocols": self.protocols,
-            "note": self.note,
+            "username": safe_text(self.username),
+            "protocol": safe_text(self.protocol),
+            "protocols": safe_text(self.protocols),
+            "note": safe_text(self.note),
             "volume_gb": self.volume_gb,
             "used_gb": self.used_gb,
-            "token": self.token,
-            "secret_data": self.secret_data,
+            "token": safe_text(self.token),
+            "secret_data": safe_text(self.secret_data),
             "is_active": self.is_active,
             "device_limit": self.device_limit,
             "start_on_first_use": self.start_on_first_use,
@@ -134,8 +157,8 @@ class UserTemplate(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "name": self.name,
-            "protocols": [p for p in (self.protocols or "").split(",") if p],
+            "name": safe_text(self.name),
+            "protocols": [safe_text(p) for p in (self.protocols or "").split(",") if p],
             "volume_gb": self.volume_gb,
             "days": self.days,
             "start_on_first_use": self.start_on_first_use,
@@ -177,10 +200,10 @@ class Inbound(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "name": self.name,
-            "protocol": self.protocol,
+            "name": safe_text(self.name),
+            "protocol": safe_text(self.protocol),
             "port": self.port,
-            "host": self.host,
+            "host": safe_text(self.host),
             "enabled": self.enabled,
             "node_id": self.node_id,
         }
@@ -211,10 +234,10 @@ class ServerNode(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "name": self.name,
-            "address": self.address,
+            "name": safe_text(self.name),
+            "address": safe_text(self.address),
             "check_port": self.check_port,
-            "note": self.note,
+            "note": safe_text(self.note),
             "enabled": self.enabled,
             "status": self.status,
             "latency_ms": self.latency_ms,
@@ -238,8 +261,8 @@ class BlockedSite(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "domain": self.domain,
-            "category": self.category,
+            "domain": safe_text(self.domain),
+            "category": safe_text(self.category),
             "enabled": self.enabled,
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
         }
@@ -264,12 +287,12 @@ class TunnelNode(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "name": self.name,
-            "transport": self.transport,
-            "iran_ip": self.iran_ip,
-            "kharej_ip": self.kharej_ip,
+            "name": safe_text(self.name),
+            "transport": safe_text(self.transport),
+            "iran_ip": safe_text(self.iran_ip),
+            "kharej_ip": safe_text(self.kharej_ip),
             "tunnel_port": self.tunnel_port,
-            "forwarded_ports": self.forwarded_ports,
+            "forwarded_ports": safe_text(self.forwarded_ports),
             "udp_forward": self.udp_forward,
             "status": self.status,
             "last_check": (
@@ -293,9 +316,9 @@ class AuditLog(Base):
         return {
             "id": self.id,
             "ts": self.ts.isoformat(timespec="seconds") + "Z",
-            "event": self.event,
-            "detail": self.detail[:200],
-            "ip": self.ip,
+            "event": safe_text(self.event),
+            "detail": safe_text(self.detail[:200]),
+            "ip": safe_text(self.ip),
             "ok": self.ok,
         }
 
@@ -322,8 +345,8 @@ class ApiToken(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "name": self.name,
-            "prefix": self.prefix,
+            "name": safe_text(self.name),
+            "prefix": safe_text(self.prefix),
             "scopes": self.scopes or "full",
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
             "last_used_at": (
@@ -333,9 +356,9 @@ class ApiToken(Base):
 
     def to_backup_dict(self) -> dict:
         return {
-            "name": self.name,
-            "prefix": self.prefix,
-            "token_sha": self.token_sha,
+            "name": safe_text(self.name),
+            "prefix": safe_text(self.prefix),
+            "token_sha": safe_text(self.token_sha),
             "scopes": self.scopes or "full",
             "created_at": self.created_at.isoformat(timespec="seconds"),
             "last_used_at": (

@@ -84,8 +84,11 @@ from security import (
     dummy_verify,
     encrypt_text,
     hash_password,
+    login_ip_limiter,
     login_limiter,
     login_user_limiter,
+    ScryptBusy,
+    tg_message,
     verify_password,
 )
 
@@ -660,11 +663,26 @@ def request_scheme(request: Request) -> str:
 
 
 def public_base_url(request: Request) -> str:
+    """Canonical base URL for subscription links / QR codes.
+
+    Preference order: explicit public_url → configured `domain` → Host header.
+    The Host header is attacker-controllable, so a configured domain always
+    wins: otherwise a spoofed Host (a domain the attacker points at this IP)
+    would make the customer dashboard hand out links/QR to that domain. The
+    request's scheme and port are still honoured (the panel may be served on
+    a non-default port), only the hostname is canonicalised.
+    """
     pub = cached_setting("public_url")
     if pub:
         return pub.rstrip("/")
+    scheme = "https" if request_scheme(request) == "https" else "http"
+    port = request.url.port
+    default_port = (scheme == "https" and port == 443) or (scheme == "http" and port == 80)
+    dom = (cached_setting("domain") or "").strip().lower()
+    if dom and re.fullmatch(r"[a-z0-9.-]{1,253}", dom):
+        return f"{scheme}://{dom}" + ("" if default_port or not port else f":{port}")
     base = str(request.base_url).rstrip("/")
-    if request_scheme(request) == "https" and base.startswith("http://"):
+    if scheme == "https" and base.startswith("http://"):
         base = "https://" + base[len("http://"):]
     return base
 
@@ -802,7 +820,19 @@ def load_blocked_for_clash() -> list:
 TG_KEYS = {"tg_bot_token", "tg_chat_id"}
 
 
-def notify_async(text: str) -> None:
+def notify_async(fmt: str, *untrusted: object) -> None:
+    """Send a Telegram HTML message.
+
+    `fmt` is TRUSTED markup owned by this file (it may contain the <b> tags
+    Telegram renders). Every interpolated value must be passed as an
+    `untrusted` argument instead of being f-string-concatenated: values are
+    HTML-escaped by security.tg_message, so request-controlled text (a login
+    username, an IP, a node name) can never become a clickable link or a tag
+    in the operator's chat. f-string interpolation into `fmt` defeats
+    parse_mode=HTML and is exactly the injection this signature prevents.
+    """
+    text = tg_message(fmt, *untrusted)
+
     def _send():
         try:
             token = decrypt_text(cached_setting("tg_bot_token"))
@@ -812,11 +842,8 @@ def notify_async(text: str) -> None:
             import urllib.parse
             import urllib.request
 
-            # parse_mode=HTML renders the <b> tags call sites embed.
-            # Interpolated values (usernames, admin names, IPs) are all
-            # charset-constrained ([A-Za-z0-9_.]), so no tag injection.
             data = urllib.parse.urlencode(
-                {"chat_id": chat, "text": text[:500], "parse_mode": "HTML"}
+                {"chat_id": chat, "text": text, "parse_mode": "HTML"}
             ).encode()
             req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
             with urllib.request.urlopen(req, timeout=6) as resp:
@@ -846,7 +873,7 @@ async def lifespan(_: FastAPI):
             if not STRONG_PW_RE.match(password):
                 # Never lock the operator out with a weak env password: fall
                 # back to a printed random one (same policy as the installer).
-                log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one (printed below)")
+                log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one")
                 password = secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
             try:
@@ -855,14 +882,42 @@ async def lifespan(_: FastAPI):
                 # Dual-worker cold start (unsupported, but cheap to survive):
                 # the other worker won the insert race.
                 s.rollback()
-            print("=" * 58)
-            print("  ZEFIRA PANEL - FIRST RUN")
-            print(f"  URL:      http://127.0.0.1:8000/")
-            print(f"  USERNAME: {username}")
-            print(f"  PASSWORD: {password}")
-            print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
-            print("=" * 58)
-            log.warning("First-run admin created. Password printed above.")
+            # The password must NOT go to stdout: under systemd that is the
+            # journal, which every member of `adm`/`systemd-journal` can read
+            # for the lifetime of the boot. Write it to a 0600 file inside the
+            # 0700 instance directory instead and print only the path.
+            cred_path = BASE_DIR / "instance" / "first-run-credentials.txt"
+            try:
+                cred_path.write_text(
+                    "Zefira first-run credentials\n"
+                    f"  URL:      http://127.0.0.1:8000/\n"
+                    f"  USERNAME: {username}\n"
+                    f"  PASSWORD: {password}\n\n"
+                    "  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!\n"
+                    "  !! DELETE THIS FILE WHEN YOU ARE DONE !!\n",
+                    encoding="utf-8",
+                )
+                try:
+                    os.chmod(cred_path, 0o600)
+                except OSError:
+                    pass
+                print("=" * 58)
+                print("  ZEFIRA PANEL - FIRST RUN")
+                print(f"  USERNAME: {username}")
+                print(f"  PASSWORD: written to {cred_path} (mode 600)")
+                print("  !! CHANGE THE PASSWORD AFTER LOGIN, THEN DELETE THAT FILE !!")
+                print("=" * 58)
+            except OSError as exc:
+                # Could not protect the file: fall back to stdout rather than
+                # locking the operator out, but say so loudly.
+                print("=" * 58)
+                print("  ZEFIRA PANEL - FIRST RUN")
+                print(f"  USERNAME: {username}")
+                print(f"  PASSWORD: {password}")
+                print(f"  !! could not write the credentials file: {exc}")
+                print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
+                print("=" * 58)
+            log.warning("First-run admin created. Credentials stored at %s.", cred_path)
             # One-time use: the installer wrote the password to .env for
             # systemd. Scrub it now so a later .env leak cannot replay it.
             try:
@@ -936,6 +991,69 @@ def _srvnode_monitor_loop() -> None:
 
 
 app = FastAPI(title="Zefira", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+
+# UTF-8 encoding of U+D800..U+DFFF (lone surrogates). Python decodes these
+# happily; json.dumps and .encode("utf-8") then explode.
+_SURROGATE_RE = re.compile(rb"\xed[\xa0-\xbf][\x80-\xbf]")
+
+
+def _json_too_deep(raw: bytes, limit: int = 64) -> bool:
+    """True when a JSON body nests deeper than `limit`.
+
+    Pydantic/FastAPI happily accept a 2000-level nested body and then blow
+    the interpreter's recursion limit — twice: once validating, once while
+    encoding the validation error for the response. The result is a 500 plus
+    a giant traceback in the log for what is merely malformed input. Real
+    payloads here (user objects, restore datasets) are shallow, so we reject
+    over-nested bodies up front with a cheap, allocation-free scan of the
+    bytes we already buffered in the size middleware.
+    """
+    depth = 0
+    in_str = False
+    esc = False
+    for b in raw:
+        if in_str:
+            if esc:
+                esc = False
+            elif b == 0x5C:      # backslash
+                esc = True
+            elif b == 0x22:      # closing quote
+                in_str = False
+            continue
+        if b == 0x22:            # opening quote
+            in_str = True
+        elif b in (0x7B, 0x5B):  # { [
+            depth += 1
+            if depth > limit:
+                return True
+        elif b in (0x7D, 0x5D):  # } ]
+            depth -= 1
+            if depth < 0:
+                return True
+    return depth > 0
+
+
+@app.exception_handler(ScryptBusy)
+async def _scrypt_busy_handler(request: Request, exc: ScryptBusy):
+    """The concurrent-hashing gate is saturated (a password operation is
+    already running its full scrypt cost). Answer 429 immediately instead of
+    parking a thread-pool worker: the request never allocates 16 MiB and the
+    rest of the panel keeps serving."""
+    log.warning("password-hash gate saturated on %s", request.url.path)
+    return JSONResponse(
+        {"detail": "Too many concurrent attempts, try again in a moment"},
+        status_code=429,
+        headers={"Retry-After": "5"},
+    )
+
+
+@app.exception_handler(RecursionError)
+async def _recursion_error_handler(request: Request, exc: RecursionError):
+    """Belt-and-braces for nesting that slips past the depth scan (e.g. a
+    pathological string escape pattern). Never surface as a 500."""
+    log.warning("RecursionError on %s (over-nested JSON body)", request.url.path)
+    return JSONResponse({"detail": "Malformed JSON payload"}, status_code=400)
 
 SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
@@ -1046,6 +1164,17 @@ async def csrf_and_size_middleware(request: Request, call_next):
                 if not msg.get("more_body"):
                     break
             body = b"".join(chunks) if chunks else b""
+            # Reject over-nested JSON here, while the raw bytes are in hand:
+            # Pydantic + FastAPI's error encoder both recurse over the parsed
+            # value, so a deep body otherwise becomes a 500 + huge traceback.
+            if body[:1] in (b"{", b"[") and _json_too_deep(body):
+                return JSONResponse({"detail": "Malformed JSON payload (too deeply nested)"}, status_code=400)
+            # Lone surrogates ("\ud800" / CESU-8) decode fine but cannot be
+            # re-encoded: FastAPI echoes the offending value back in its 422,
+            # which then explodes with UnicodeEncodeError -> 500. Refuse them
+            # at the door instead (ED A0 80 - ED BF BF byte pattern).
+            if _SURROGATE_RE.search(body):
+                return JSONResponse({"detail": "Malformed JSON payload (invalid characters)"}, status_code=400)
 
             async def _replay(body=body):
                 return {"type": "http.request", "body": body, "more_body": False}
@@ -1195,18 +1324,33 @@ def panel_page(request: Request):
 def api_login(data: LoginIn, request: Request, response: Response):
     ip = client_ip(request)
     safe_user = re.sub(r"[\x00-\x1f\x7f]", "", data.username)[:64]
-    ukey = f"u|{data.username.lower()}"
-    key = f"{ip}|{data.username.lower()}"
-    if not login_user_limiter.hit(ukey) or not login_limiter.hit(key):
+    uname = data.username.lower()
+    ukey = f"u|{uname}"
+    key = f"{ip}|{uname}"
+    ipkey = f"login|{ip}"
+
+    def _throttled() -> None:
         log.warning("Rate-limited login attempt ip=%s user=%s", ip, safe_user)
         # Throttled: without this, an attacker rotating IPs/usernames could
         # flood the admin's Telegram bot with lockout alerts (spam amplifier).
         if lockout_notify_limiter.hit(f"lockout|{ip}"):
-            notify_async(f"\u26a0 Zefira: brute-force lockout triggered from IP {ip} (user: {safe_user})")
+            notify_async(
+                "\u26a0 Zefira: brute-force lockout triggered from IP {} (user: {})",
+                ip, safe_user,
+            )
         raise HTTPException(status_code=429, detail="Too many attempts, try again in a few minutes")
+
+    # Per-source budget, independent of the username and checked BEFORE any
+    # password hashing: without it every unique username gets a fresh 8-shot
+    # bucket, so an anonymous attacker can drive scrypt (~16 MiB each) and an
+    # audit write per request. Guessing never resets it - only a real login.
+    if not login_ip_limiter.hit(ipkey):
+        _throttled()
+    if not login_user_limiter.hit(ukey) or not login_limiter.hit(key):
+        _throttled()
     fail_msg = "Invalid username or password"
     with db.s() as s:
-        admin = s.scalar(select(Admin).where(Admin.username == data.username.lower()))
+        admin = s.scalar(select(Admin).where(Admin.username == uname))
         if admin is None:
             dummy_verify(data.password)
             audit(s, "LOGIN_FAIL", f"user={safe_user}", ip, ok=False)
@@ -1220,6 +1364,7 @@ def api_login(data: LoginIn, request: Request, response: Response):
             raise HTTPException(status_code=401, detail=fail_msg)
         login_limiter.reset(key)
         login_user_limiter.reset(ukey)
+        login_ip_limiter.reset(ipkey)
         set_session_cookie(response, request, admin.id, admin.token_version)
         audit(s, "LOGIN_OK", f"user={admin.username}", ip)
         s.commit()
@@ -2304,7 +2449,10 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
                 return False, f"username {data.username!r} is already taken"
         base = public_base_url(request)
         sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
-        notify_async(f"\u2713 Zefira: user <b>{data.username}</b> created via AI by {admin.username}")
+        notify_async(
+            "\u2713 Zefira: user <b>{}</b> created via AI by {}",
+            data.username, admin.username,
+        )
         log.info("User created via AI %s %s by %s", data.username, proto_list, admin.username)
         return True, (
             f"created {data.username} [{','.join(proto_list)}] "
@@ -2617,6 +2765,7 @@ def _update_status() -> dict:
         unit_warning = _unit_stale_warning()
     except Exception:
         unit_warning = ""
+    ver_state, ver_detail = _commit_verification(repo, remote_sha) if remote_sha else ("", "")
     return {
         "repo": repo,
         "branch": branch,
@@ -2629,6 +2778,8 @@ def _update_status() -> dict:
         "incoming": incoming,
         "error": error,
         "unit_warning": unit_warning,
+        "signature": ver_state,
+        "signature_detail": ver_detail,
     }
 
 
@@ -2645,6 +2796,34 @@ def api_update_status(admin: Admin = Depends(require_admin)):
     return out
 
 
+def _commit_verification(repo: str, sha: str) -> tuple:
+    """Ask GitHub whether a commit carries a valid signature.
+
+    Returns (state, detail) where state is "verified", "unverified",
+    "unknown" (API unreachable / rate-limited) or "" (no SHA). The panel
+    fetches code from a branch, so a compromised upstream or a hijacked
+    account is the realistic threat; a signature check is the only in-band
+    signal the panel can obtain. It is advisory by default because an
+    unsigned-but-genuine commit must not brick updates; set
+    ZEFIRA_REQUIRE_SIGNED_UPDATE=1 to make it a hard gate.
+    """
+    if not sha:
+        return "", ""
+    okc, data = _github_json(f"/repos/{repo}/commits/{sha}")
+    if not okc or not isinstance(data, dict):
+        return "unknown", ""
+    ver = (data.get("commit") or {}).get("verification") or data.get("verification") or {}
+    if not isinstance(ver, dict) or "verified" not in ver:
+        return "unknown", ""
+    if ver.get("verified"):
+        return "verified", str(ver.get("reason") or "")[:80]
+    return "unverified", str(ver.get("reason") or "")[:80]
+
+
+def _signed_update_required() -> bool:
+    return (os.environ.get("ZEFIRA_REQUIRE_SIGNED_UPDATE", "") or "").strip() == "1"
+
+
 def _do_update(admin_name: str, ip: str) -> None:
     repo, branch, service = _update_conf()
     # Pull from the SAME source the status page compared against, never from
@@ -2657,6 +2836,9 @@ def _do_update(admin_name: str, ip: str) -> None:
         ok, remote = _git("ls-remote", fetch_url, f"refs/heads/{branch}", timeout=60)
         if not ok:
             raise RuntimeError(f"cannot reach {repo}: {remote}")
+        advertised_sha = (remote.split() or [""])[0].strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", advertised_sha):
+            raise RuntimeError("upstream returned an unusable ref - refusing to update")
         ok, out = _git("status", "--porcelain", timeout=30)
         if not ok:
             raise RuntimeError(out)
@@ -2665,6 +2847,20 @@ def _do_update(admin_name: str, ip: str) -> None:
         ok, out = _git("fetch", fetch_url, f"{branch}:refs/remotes/origin/{branch}", timeout=180)
         if not ok:
             raise RuntimeError(out)
+        # The branch could be force-pushed between ls-remote and fetch. Only
+        # accept the exact commit the panel advertised to the operator.
+        ok, fetched_sha = _git("rev-parse", f"origin/{branch}", timeout=30)
+        if not ok or fetched_sha.strip() != advertised_sha:
+            raise RuntimeError(
+                "upstream moved during the update (refusing to install an unreviewed commit) - retry"
+            )
+        ver_state, ver_detail = _commit_verification(repo, advertised_sha)
+        log.warning("Update target %s@%s %s (%s)", repo, advertised_sha[:12], ver_state, ver_detail)
+        if _signed_update_required() and ver_state != "verified":
+            raise RuntimeError(
+                f"commit {advertised_sha[:12]} is not signed ({ver_state}"
+                f"{': ' + ver_detail if ver_detail else ''}) and ZEFIRA_REQUIRE_SIGNED_UPDATE=1"
+            )
         ok, out = _git("rev-list", "--count", "FETCH_HEAD..HEAD", timeout=30)
         if not ok:
             raise RuntimeError(out)
@@ -4141,7 +4337,10 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
             _commit(s)
         except IntegrityError:
             raise HTTPException(status_code=409, detail="This username is already taken")
-    notify_async(f"\u2713 Zefira: user <b>{data.username}</b> created [{','.join(proto_list)}] by {admin.username}")
+    notify_async(
+        "\u2713 Zefira: user <b>{}</b> created [{}] by {}",
+        data.username, ",".join(proto_list), admin.username,
+    )
     log.info("User created %s %s by %s", data.username, proto_list, admin.username)
     return out
 
@@ -4249,7 +4448,7 @@ def _api_delete_user_impl(user_id: int, request: Request, admin: Admin):
         s.delete(user)
         audit(s, "USER_DELETE", f"{name} by {admin.username}", client_ip(request))
         _commit(s, missing="User not found")
-    notify_async(f"\u2715 Zefira: user <b>{name}</b> deleted by {admin.username}")
+    notify_async("\u2715 Zefira: user <b>{}</b> deleted by {}", name, admin.username)
     log.info("User deleted %s by %s", name, admin.username)
     return {"ok": True}
 

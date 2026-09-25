@@ -19,13 +19,27 @@ Built with FastAPI + SQLite. No Docker required, just Python.
 ![User dashboard](screenshots/screenshot-user-dashboard.png)
 ![Appearance settings](screenshots/screenshot-appearance.png)
 
-### Install on a server (one line)
+### Install on a server
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)
+curl -fsSLO https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh
+less install.sh          # read it: it runs as root
+sudo bash install.sh
 ```
 
-The script installs Python deps, creates a systemd service and prints your login URL + password. Works on Ubuntu / Debian / Alma / Rocky.
+> Why not `sudo bash <(curl ...)`? Because piping a remote script straight into
+> a root shell means whatever is on the `main` branch at that moment runs as
+> root with no review step. Downloading first lets you read it, and pinning a
+> release tag (`.../v1.13.6/install.sh`) makes the install reproducible.
+
+The script installs Python deps, creates a systemd service and stores your
+first-run credentials in `instance/first-run-credentials.txt` (mode 600) -
+`sudo cat` it, then delete it after the first login. Works on Ubuntu / Debian /
+Alma / Rocky (needs Python 3.10+).
+
+With the nginx option enabled the panel binds `127.0.0.1` only and the firewall
+opens just 80/443; without it the panel answers plain HTTP on the chosen port,
+so put TLS in front of it before you use real accounts.
 
 To remove later: `sudo bash install.sh --uninstall`
 
@@ -37,10 +51,15 @@ cd zefira-panel
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-server-header --no-proxy-headers
+python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-proxy-headers
 ```
 
-First run prints the admin username/password in the terminal. If you set `ZEFIRA_ADMIN_PASSWORD` before starting, it will use that instead.
+Bind `127.0.0.1` and put a TLS reverse proxy in front of it. `--host 0.0.0.0`
+publishes the admin login in clear text (no Secure cookies, no HSTS).
+
+First run writes the admin username/password to
+`instance/first-run-credentials.txt` (mode 600) and prints only the path. If
+you set `ZEFIRA_ADMIN_PASSWORD` before starting, it will use that instead.
 
 > **Run exactly one worker.** Rate limiters, the restore/update locks, the node monitor loop and the settings cache live in process memory — `--workers N` multiplies rate-limit budgets and can interleave restores. Scale with more machines, not more workers.
 
@@ -74,24 +93,37 @@ If you prefer env files, copy `.env.example` to `.env`. Env vars are only used a
 
 ### Security
 
-I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login, CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, encrypted secrets at rest, and audit logging. 
+I tried to keep it tight: scrypt for passwords, JWT in HttpOnly cookies, rate limits on login (per source IP, checked before any hashing), CSRF checks, strict CSP, parameterized queries, no innerHTML for user data, and audit logging.
 
-There are three test suites that hit the running panel from the outside. Start
+**What is encrypted:** the Telegram/AI credentials, REALITY and WireGuard host
+keys, tunnel tokens and encrypted backups (AES/Fernet with
+`instance/secret.key`). **What is not:** the per-customer VPN credentials in
+the database (`secret_data`) - they are plain JSON in `instance/zefira.db` and
+in an unencrypted backup, by design so the panel can rebuild links without a
+decrypt round-trip. Treat the database and unencrypted backups as customer
+credentials: keep `instance/` at `700`, use encrypted backups or full-disk
+encryption, and see [SECURITY.md](SECURITY.md).
+
+There are four test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
 python security_test.py  http://127.0.0.1:8000 admin YOURPASS   # 119 abuse/defense checks
 python functional_test.py http://127.0.0.1:8000 admin YOURPASS  #  60 end-to-end flows
 python feature_test.py   http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
+python attack_test.py    http://127.0.0.1:8000 admin YOURPASS   #  80 live attack probes
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
 asserts each capability is actually usable (real links in a subscription, a
 decodable QR, a working config archive, the bot-scope matrix, backup/restore
-round-trips…), not merely reachable. It restores the panel to its shipped
-defaults afterwards, so the suites are order-independent and can run against a
-live panel. A green run prints `119/119`, `60/60` and `177/177` - if not, open
-an issue.
+round-trips…), not merely reachable. `attack_test.py` fires the hostile
+traffic itself: header spoofing, stored XSS, path traversal, oversized and
+over-nested bodies, unicode/encoding tricks, timing oracles, a login flood and
+the full auth matrix. Both restore the panel to its shipped defaults
+afterwards, so the suites are order-independent and can run against a live
+panel. A green run prints `119/119`, `60/60`, `177/177` and `80/80` - if not,
+open an issue.
 
 ### API
 
