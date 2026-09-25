@@ -291,7 +291,10 @@ if stmk == 200:
     sth, hdrh, htmlb = req("GET", f"/sub/{tok}", headers=CHROME_UA)
     html = htmlb.decode("utf-8", "replace") if isinstance(htmlb, bytes) else htmlb
     dash_ok = sth == 200 and "dashtest1" in html and "text/html" in hget(hdrh, "Content-Type")
-    dash_esc = "&lt;script&gt;" in html and "<script>alert" not in html
+    # The seller's internal note is NOT rendered on the customer page at all
+    # (it is operator workspace: payment refs, ticket ids). It must appear
+    # neither raw nor HTML-escaped.
+    dash_esc = "alert(1)" not in html and "&lt;script&gt;" not in html
     stc, hdrc, _ = req("GET", f"/sub/{tok}", headers=V2RAY_UA)
     dash_client = stc == 200 and "text/html" not in hget(hdrc, "Content-Type")
     stcf, _, cfb = req("GET", f"/sub/{tok}?format=%20Clash%20", headers=V2RAY_UA)
@@ -465,26 +468,37 @@ if strs == 200:
         req("DELETE", f"/api/users/{u['id']}", headers=AUTH2)
 check("restore atomic: bad row skipped, good row kept", ok_atomic)
 
-# ---- 25b. Restore imports API tokens (fresh session: restore reissues cookies) ----
+# ---- 25b. Restore must NOT import credentials (a backup is unsigned) ----
+# Importing `api_tokens` from a backup file meant a crafted file could ship
+# token_sha=sha256(attacker_chosen) with scope "full" and become a working
+# backdoor admin token after the operator typed their current password.
 strst, _, rsb = req("POST", "/api/restore", json.dumps({
     "zefira_backup": True, "users": [], "password_confirm": PASSWORD,
     "api_tokens": [{"name": "restored-bot", "prefix": "zfp_abc",
-                    "token_sha": "d" * 64}]}), AUTH2)
+                    "token_sha": "d" * 64, "scopes": "full"}],
+    "admins": [{"username": "backdoor_admin",
+                "password_hash": "scrypt$16384$8$1$" + "a" * 43 + "$" + "b" * 86}]}), AUTH2)
 try:
-    check("restore imports api tokens", strst == 200 and json.loads(rsb).get("restored_tokens") == 1, f"got {strst}")
+    rj2 = json.loads(rsb)
+    check("restore accepts the file but imports no credentials",
+          strst == 200 and rj2.get("restored_tokens") == 0
+          and rj2.get("restored_admins") == 0
+          and "credentials_note" in rj2, f"got {strst} {str(rj2)[:120]}")
 except Exception:
-    check("restore imports api tokens", False, f"got {strst}")
+    check("restore accepts the file but imports no credentials", False, f"got {strst}")
 _st, _tokx, _ = login_with(PASSWORD)
 AUTH2 = {"Cookie": f"zefira_session={_tokx}", "X-Requested-With": "XMLHttpRequest"}
 stlst2, _, lsb2 = req("GET", "/api/api-tokens", headers=AUTH2)
 try:
     items2 = json.loads(lsb2)
     tid2 = next((t["id"] for t in items2 if t["name"] == "restored-bot"), None)
-    check("restored token listed", tid2 is not None)
+    check("the crafted token is not in the token list", tid2 is None, str(items2)[:140])
     if tid2:
         req("DELETE", f"/api/api-tokens/{tid2}", headers=AUTH2)
 except Exception:
-    check("restored token listed", False)
+    check("the crafted token is not in the token list", False)
+_st, _hd, _b = req("GET", "/api/stats", headers={"Authorization": "Bearer " + "d" * 32})
+check("the crafted token hash is not a usable credential", _st in (401, 403), f"got {_st}")
 
 
 # ---- 22. CORP header ----

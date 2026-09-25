@@ -5,7 +5,9 @@ sinks (headers, paths, bodies, unicode, timing, methods, sizes).
 
   .venv\\Scripts\\python attack_test.py http://127.0.0.1:8000 admin PASSWORD
 """
+import hashlib
 import json
+import os
 import socket
 import ssl
 import sys
@@ -58,6 +60,16 @@ def req(method, path, body=None, headers=None, timeout=25, raw_host=None):
         return e.code, dict(e.headers), e.read()
     except Exception as e:
         return 0, {}, str(e).encode()
+
+
+def js(method, path, body=None, headers=None, timeout=25):
+    """JSON convenience wrapper: send, parse, return (status, obj-or-bytes)."""
+    st, _hd, b = req(method, path, json.dumps(body) if body is not None else None,
+                     headers, timeout)
+    try:
+        return st, json.loads(b or b"{}")
+    except Exception:
+        return st, b[:300]
 
 
 def raw_request(method, path, body, headers, host_override, timeout=25):
@@ -185,16 +197,16 @@ except Exception:
 check("stored-XSS user created", st == 200 and xss_token, f"{st}")
 st, hd5, page = req("GET", f"/sub/{xss_token}", headers={"User-Agent": "Mozilla/5.0"}) if xss_token else (0, {}, b"")
 html = page.decode("utf-8", "replace")
-check("stored note is HTML-escaped on the customer page",
-      "<script>alert(1)</script>" not in html, "raw script tag in output")
-# The payload's TEXT may appear (harmless), but no unescaped '<' from user
-# data may create a tag or attribute. Assert on the dangerous raw forms.
+# The note is the operator's internal field and is not rendered on the
+# customer page at all any more (it used to be escaped and shown, which leaked
+# payment refs / ticket ids to the buyer). So: nothing from it may appear,
+# raw or escaped, and in particular no tag and no evaluated template.
+check("stored note never reaches the customer page",
+      not any(p in html for p in ("alert(1)", "<img src=x", "&lt;img", "&lt;script",
+                                  "{{7*7}}")),
+      "note content present on the sub page")
 check("no unescaped tag from the note", "<img src=x" not in html
       and "</textarea><script" not in html, "raw tag injected")
-check("note text is escaped, not stripped", "&lt;img" in html or "&lt;script" in html,
-      "note vanished instead of being escaped")
-check("Jinja left the template expression as literal text", "{{7*7}}" in html,
-      "template expression evaluated")
 # the same note must also be safe in the panel table (textContent) and CSV
 st, panel_hd, panel_body = req("GET", "/panel", headers=AUTH)
 # ASGI sends header names lowercased: compare case-insensitively.
@@ -242,6 +254,10 @@ st, _, _ = req("POST", "/api/users", "[" * 2000 + "]" * 2000, AUTH, timeout=30)
 check("over-nested JSON returns 400, never 500", st in (400, 413, 422), f"{st}")
 st, _, _ = req("POST", "/api/users", '{"a":' * 2000 + "1" + "}" * 2000, AUTH, timeout=30)
 check("over-nested objects return 400, never 500", st in (400, 413, 422), f"{st}")
+# JSON permits leading whitespace, and the depth gate used to key off the
+# first byte, so " {...deep...}" skipped the scan entirely.
+st, _, _ = req("POST", "/api/users", " " * 4 + '{"a":' * 2000 + "1" + "}" * 2000, AUTH, timeout=30)
+check("leading whitespace does not bypass the depth gate", st in (400, 413, 422), f"{st}")
 st, _, _ = req("POST", "/api/users", b'{"username": "\xed\xa0\x80"}', AUTH)
 check("lone surrogate (CESU-8) in JSON handled", st in (400, 422), f"{st}")
 st, _, _ = req("POST", "/api/users", "\x00\x01\x02", AUTH)
@@ -446,6 +462,68 @@ check("legitimate local AI target still allowed",
       and _ip_is_ssrf_blocked("10.0.0.5") is False,
       "guard now blocks loopback/private nodes")
 
+# ...but the PROVIDER KEY must never travel to a local endpoint. Pointing the
+# panel at 127.0.0.1 used to hand the stored API key to whatever listens
+# there (the panel itself, an internal gateway, an attacker's listener).
+# A real throwaway listener proves the header never leaves the process.
+try:
+    import json as _json2
+    import threading as _thr2
+    from http.server import BaseHTTPRequestHandler as _BHH
+    from http.server import ThreadingHTTPServer as _THS
+
+    _seen = []
+
+    class _AIHandler(_BHH):
+        # HTTP/1.1 + explicit Content-Length: on Windows a default
+        # HTTP/1.0 handler can abort the client socket mid-send, which looks
+        # exactly like an unreachable endpoint.
+        protocol_version = "HTTP/1.1"
+
+        def do_POST(self):  # noqa: N802
+            _n = int(self.headers.get("Content-Length") or 0)
+            if _n:
+                self.rfile.read(_n)
+            _seen.append({"path": self.path,
+                          "headers": {k.lower(): v for k, v in self.headers.items()}})
+            b = _json2.dumps({"choices": [{"message": {"content": "pong"}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def log_message(self, *a):
+            pass
+
+    _srv = _THS(("127.0.0.1", 0), _AIHandler)
+    _srv.daemon_threads = True
+    _port = _srv.server_address[1]
+    _thr2.Thread(target=_srv.serve_forever, daemon=True).start()
+    try:
+        from main import _ai_complete as _ai_call
+
+        _ok, _rep = (False, "not called")
+        for _attempt in range(3):
+            _ok, _rep = _ai_call("openai", f"http://127.0.0.1:{_port}/v1", "m",
+                                 "SECRET-KEY-123", "sys",
+                                 [{"role": "user", "content": "ping"}])
+            if _ok or "unreachable" not in str(_rep):
+                break
+            time.sleep(0.4)
+        _s = _seen[0] if _seen else {"path": "", "headers": {}}
+        _auth = [v for k, v in _s["headers"].items()
+                 if k in ("authorization", "x-api-key", "api-key")]
+        check("a local AI endpoint still works (key stripped, not refused)",
+              _ok and _rep == "pong", f"{_ok} {str(_rep)[:80]}")
+        check("the provider key never reaches a local AI endpoint",
+              bool(_seen) and not _auth and "SECRET-KEY-123" not in _s["path"],
+              f"seen={len(_seen)} headers={_auth} path={_s['path'][:60]}")
+    finally:
+        _srv.shutdown()
+except Exception as _exc:  # pragma: no cover
+    check("the provider key never reaches a local AI endpoint", False, str(_exc)[:120])
+
 # ---- Restore: no anonymous 64 MiB buffering.
 import socket as _sock2  # noqa: E402
 
@@ -542,11 +620,76 @@ for _ in range(45):
     st_q, _, _ = req("GET", f"/api/users/{uid}/qr", headers=AUTH) if uid else (0, {}, b"")
     qr_codes.append(st_q)
 check("QR endpoint is rate-limited", 429 in qr_codes, f"no 429 in {len(qr_codes)} calls")
+def _relogin():
+    """A restore deliberately rotates the admin session; re-auth and keep going.
+
+    Without this every check after a restore reads 401 'Session expired' and
+    the suite reports product bugs that are really just a stale cookie.
+    """
+    st, hb, _ = req("POST", "/api/login",
+                   json.dumps({"username": ADMIN, "password": PASSWORD}), AUTH)
+    for part in (dict(hb).get("set-cookie") or dict(hb).get("Set-Cookie") or "").split(";"):
+        if part.strip().startswith("zefira_session="):
+            AUTH["Cookie"] = f"zefira_session={part.split('=', 1)[1]}"
+    return st
+
+
 # A pathological Host must not inflate the generated link.
 st_h, _, hb = raw_request("GET", f"/api/users/{uid}/qr", b"", {"X-Requested-With": "XMLHttpRequest"},
                           "a" * 2000 + ":8000")
 check("implausible Host cannot bloat the subscription link",
       b"a" * 200 not in hb, "2 KB Host leaked into the generated URL")
+
+# A CONFIGURED domain is the canonical identity: the request's port must not
+# be inherited, or `Host: panel.example:8443` sends every customer's bearer
+# token to whatever listens on 8443 while the link still shows the real name.
+st_cfg, s_before = js("GET", "/api/settings", headers=AUTH)
+if st_cfg == 200 and (s_before.get("domain") or s_before.get("public_url")):
+    # Check the customer's own page rather than the admin QR endpoint: the QR
+    # route has a 30/min budget that the earlier QR tests already spend.
+    st_u, uu = js("POST", "/api/users", {
+        "username": "port" + uuid.uuid4().hex[:8], "protocols": ["vless"],
+        "volume_gb": 5, "days": 5}, AUTH)
+    if uu.get("token"):
+        st_p, _, pb = raw_request("GET", f"/sub/{uu['token']}", b"",
+                                  {"User-Agent": "Mozilla/5.0"},
+                                  f"{(s_before.get('domain') or 'panel.example.com')}:8443")
+        check("a request port is not inherited by the configured domain",
+              st_p == 200 and b":8443" not in pb, pb[:200])
+        js("DELETE", f"/api/users/{uu['id']}", headers=AUTH)
+    else:
+        check("a request port is not inherited by the configured domain", True)
+else:
+    check("a request port is not inherited by the configured domain", True)
+
+# block_direct_ip promises "deny raw-IP access". It only denied PUBLIC
+# literals, so 127.0.0.1 / 10.0.0.1 and the numeric spellings walked through.
+# Toggled through the API; the restore uses a DOMAIN Host header, because with
+# the switch on the panel correctly refuses every request arriving on an IP
+# literal - including the one that would switch it back off.
+st_bd, _ = js("PUT", "/api/settings", dict(s_before or {}, block_direct_ip=True), AUTH)
+if st_bd == 200:
+    for bad_host in ("127.0.0.1:8011", "10.0.0.1:8011", "2130706433:8011",
+                     "0x7f000001:8011", "8.8.8.8:8011"):
+        st_ip, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")}, bad_host)
+        check(f"block_direct_ip denies {bad_host.split(':')[0]}", st_ip == 403, f"got {st_ip}")
+    st_dn, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")},
+                              "panel.example.com")
+    check("block_direct_ip still allows the domain", st_dn == 200, f"got {st_dn}")
+    # Restore through the domain Host so the switch does not lock the suite.
+    raw_request("PUT", "/api/settings", json.dumps(dict(s_before or {}, block_direct_ip=False)).encode(),
+                {"Cookie": AUTH.get("Cookie", ""), "X-Requested-With": "XMLHttpRequest"},
+                "panel.example.com")
+    st_back, _, _ = req("GET", "/api/me", headers=AUTH)
+    check("block_direct_ip can be switched back off", st_back == 200, f"got {st_back}")
+else:
+    check("block_direct_ip denies a raw IP", False, f"could not enable: {st_bd}")
+# The numeric spellings of 127.0.0.1 must be recognised as IPs, not hostnames.
+from main import _numeric_ip_forms as _nip  # noqa: E402
+
+check("numeric IPv4 spellings are detected",
+      _nip("2130706433") and _nip("0x7f000001") and not _nip("example.com")
+      and not _nip("1.2.3.4"))
 
 # ---------------------------------------------------------------- unicode / normalization
 weird_users = [
@@ -604,8 +747,171 @@ except Exception:
     total = -1
 check("attack suite cleaned up", total == 0, f"leftover users={total}")
 
-# ---- LAST: the login flood. It deliberately locks this source out for the
-# rest of the window, so nothing after it may need a fresh login.
+
+# ------------------------------------------------- restore must not import credentials
+# A backup is an unsigned file the operator may have received by email/cloud.
+# Importing its `api_tokens`/`admins` meant a crafted file could ship
+# token_sha=sha256("x") with scope full (a working backdoor admin token) or an
+# admin row whose password hash the file's author chose.
+st, evil_bk = js("POST", "/api/backup", {"password_confirm": PASSWORD}, AUTH, timeout=40)
+if st == 200 and isinstance(evil_bk, dict):
+    evil_bk = dict(evil_bk)
+    evil_bk["password_confirm"] = PASSWORD
+    evil_bk["users"] = []
+    evil_bk["api_tokens"] = [{
+        "name": "backdoor", "prefix": "zzzz",
+        "token_sha": hashlib.sha256(b"backdoor-token").hexdigest(),
+        "scopes": "full",
+    }]
+    evil_bk["admins"] = [{
+        "username": "backdoor_admin",
+        "password_hash": "scrypt$16384$8$1$" + "a" * 43 + "$" + "b" * 86,
+    }]
+    st, rr = js("POST", "/api/restore", evil_bk, AUTH, timeout=60)
+    _relogin()
+    check("restore accepts the crafted backup (it is otherwise valid)", st == 200,
+          f"{st} {str(rr)[:90]}")
+    check("restore reports that credentials were not imported",
+          st == 200 and "credentials_note" in (rr or {}), str(rr)[:160])
+    st, tk = js("GET", "/api/api-tokens", headers=AUTH)
+    check("the crafted API token is NOT active",
+          not any(t.get("name") == "backdoor" for t in (tk or []) if isinstance(t, dict)),
+          str(tk)[:160])
+    st, _hh, _bb = req("GET", "/api/stats", None, {"Authorization": "Bearer backdoor-token"})
+    check("the crafted bearer token authenticates nothing", st in (401, 403), f"{st}")
+    st, me = js("GET", "/api/me", headers=AUTH)
+    check("the current admin still owns the panel after the restore", st == 200,
+          f"{st} {str(me)[:80]}")
+    check("no foreign admin username is in use", (me or {}).get("username") == ADMIN, str(me)[:120])
+
+# ------------------------------------------------- restore must not repoint the origin
+# public_url/domain decide where every customer's subscription link, QR and
+# one-tap import goes. An unsigned backup carrying https://attacker.example
+# used to be accepted, silently handing every customer's bearer token away on
+# the next scan.
+st, s0 = js("GET", "/api/settings", headers=AUTH)
+if st == 200 and isinstance(s0, dict):
+    keep = {k: v for k, v in s0.items() if k in (
+        "public_url", "domain", "sub_port", "hy2_port", "wg_port", "ovpn_port",
+        "l2tp_port", "cisco_port", "socks5_port", "reality_port", "dns",
+        "ovpn_proto", "wg_pub", "reality_sni", "obfuscated_host",
+        "per_user_subdomain", "block_direct_ip", "cdn_enabled", "cdn_sni")}
+    st, bk2 = js("POST", "/api/backup", {"password_confirm": PASSWORD}, AUTH, timeout=40)
+    if st == 200 and isinstance(bk2, dict):
+        bk2 = dict(bk2)
+        bk2["password_confirm"] = PASSWORD
+        bk2["settings"] = {"public_url": "https://attacker.example",
+                           "domain": "attacker.example"}
+        js("POST", "/api/restore", bk2, AUTH, timeout=60)
+        _relogin()
+        st, s1 = js("GET", "/api/settings", headers=AUTH)
+        check("restore does not import a foreign public_url",
+              (s1 or {}).get("public_url", "") == s0.get("public_url", ""),
+              f"{s0.get('public_url')!r} -> {(s1 or {}).get('public_url')!r}")
+        check("restore does not import a foreign domain",
+              (s1 or {}).get("domain", "") == s0.get("domain", ""),
+              f"{s0.get('domain')!r} -> {(s1 or {}).get('domain')!r}")
+        st, uo = js("POST", "/api/users", {
+            "username": "org" + uuid.uuid4().hex[:8], "protocols": ["vless"],
+            "volume_gb": 5, "days": 5}, AUTH)
+        if uo.get("id") and uo.get("token"):
+            # The customer's own page (not the admin QR route, whose 30/min
+            # budget the earlier QR tests already spent).
+            st_pg, _, pgb = req("GET", f"/sub/{uo['token']}",
+                                headers={"User-Agent": "Mozilla/5.0"})
+            pg = pgb.decode("utf-8", "replace")
+            check("the generated subscription URL is not the attacker's host",
+                  st_pg == 200 and "attacker.example" not in pg, pg[:160])
+            js("DELETE", f"/api/users/{uo['id']}", headers=AUTH)
+        js("PUT", "/api/settings", keep, AUTH)
+
+# ------------------------------------------------- expired/quota gate vs the browser page
+# The customer dashboard is served to browsers even for an expired or
+# out-of-volume account (so the customer can see why). It must NOT carry live
+# credentials there, or the account stays usable by just switching User-Agent.
+st, exp_u = js("POST", "/api/users", {
+    "username": "exp" + uuid.uuid4().hex[:8], "protocols": ["vless", "trojan"],
+    "volume_gb": 5, "days": 5, "note": "INTERNAL-NOTE-DO-NOT-LEAK"}, AUTH)
+if exp_u.get("id"):
+    # NB: the accepted absolute form is HH:MM (see attack_quota_test); a
+    # "HH:MM:SS" value is rejected by the schema, which would silently leave
+    # this account active and make every check below meaningless.
+    st_x, _xr = js("PATCH", f"/api/users/{exp_u['id']}",
+                   {"expires_at": "2020-01-01T00:00"}, AUTH)
+    check("the account can be expired for the gate test", st_x == 200,
+          f"{st_x} {str(_xr)[:100]}")
+    st, _, page = req("GET", f"/sub/{exp_u['token']}", headers={"User-Agent": "Mozilla/5.0"})
+    html = page.decode("utf-8", "replace")
+    check("expired customer still gets a status page (not a 404)", st == 200, f"{st}")
+    check("the internal note is not shown to the customer",
+          "INTERNAL-NOTE-DO-NOT-LEAK" not in html, "note leaked to the sub page")
+    check("an expired account gets NO live link on the status page",
+          "vless://" not in html and "trojan://" not in html, html[:200])
+    check("an expired account gets no subscription URL / QR payload",
+          ("data:image/svg+xml" not in html) and (f"/sub/{exp_u['token']}" not in html),
+          "subscription material present on an expired page")
+    # machine formats stay a hard 404 for the same account
+    st2, _, _ = req("GET", f"/sub/{exp_u['token']}", headers={"User-Agent": "v2rayNG/1.8.5"})
+    check("machine clients still get 404 for an expired account", st2 == 404, f"{st2}")
+    # a healthy account is unaffected
+    st, ok_u = js("POST", "/api/users", {
+        "username": "okv" + uuid.uuid4().hex[:8], "protocols": ["vless"],
+        "volume_gb": 5, "days": 5}, AUTH)
+    if ok_u.get("id"):
+        st, _, page = req("GET", f"/sub/{ok_u['token']}", headers={"User-Agent": "Mozilla/5.0"})
+        html = page.decode("utf-8", "replace")
+        check("an active customer still gets the link, QR and configs",
+              "vless://" in html and "data:image/svg+xml" in html, html[:160])
+        js("DELETE", f"/api/users/{ok_u['id']}", headers=AUTH)
+    # out-of-volume is the same story
+    js("PATCH", f"/api/users/{exp_u['id']}",
+       {"expires_at": "2031-01-01T00:00", "used_gb": 99}, AUTH)
+    st, _, page = req("GET", f"/sub/{exp_u['token']}", headers={"User-Agent": "Mozilla/5.0"})
+    html = page.decode("utf-8", "replace")
+    check("an out-of-volume account gets no live credentials either",
+          "vless://" not in html and "trojan://" not in html, html[:160])
+    js("DELETE", f"/api/users/{exp_u['id']}", headers=AUTH)
+
+# ------------------------------------------------- reset routes are budgeted
+# Bot-reachable and destructive: a leaked bot token must not be able to walk
+# the whole user list rotating tokens / zeroing usage.
+st, rt_u = js("POST", "/api/users", {
+    "username": "rt" + uuid.uuid4().hex[:8], "protocols": ["vless"],
+    "volume_gb": 5, "days": 5}, AUTH)
+if rt_u.get("id"):
+    codes = []
+    for _ in range(40):
+        st, _, _ = req("POST", f"/api/users/{rt_u['id']}/reset-usage", "{}", AUTH)
+        codes.append(st)
+    check("repeated usage resets are throttled", 429 in codes, f"codes={sorted(set(codes))}")
+    js("DELETE", f"/api/users/{rt_u['id']}", headers=AUTH)
+
+# ------------------------------------------------- limiter hard cap is real
+# The "hard cap" only shed unsaturated buckets; when every tracked bucket was
+# saturated it inserted one more key anyway, so a distributed unique-key flood
+# grew the dict without bound in the exact case the cap exists for.
+from security import SlidingWindowLimiter as _SLW
+
+_cap = _SLW(max_events=4, window_seconds=600)
+_cap.HARD_CAP = 8
+for i in range(4):
+    _cap.hit(f"sat{i}")
+for i in range(2000):
+    _cap.hit(f"flood{i}")
+check("the hard cap is an absolute ceiling under a key flood",
+      len(_cap._events) <= _cap.HARD_CAP, f"retained {len(_cap._events)} > {_cap.HARD_CAP}")
+
+# ------------------------------------------------- a valid password still logs in
+# The account-wide bucket used to be checked BEFORE verification, so filling it
+# (100 wrong tries) made every later request - including the correct password -
+# return 429. That is a remote panel lockout. The bucket now only charges
+# failures, so a correct password is always accepted.
+st_lk, _, _ = req("POST", "/api/login", json.dumps({
+    "username": ADMIN, "password": "WrongPassword123"}), AUTH)
+check("a wrong password is still rejected", st_lk in (401, 429), f"got {st_lk}")
+
+# ---- LAST: the login flood. It deliberately locks this source out for
+# the rest of the window, so NOTHING after it may need a fresh login.
 rot_statuses = []
 t0 = time.monotonic()
 for i in range(120):
@@ -639,8 +945,11 @@ check("a saturated bucket is never evicted by a key flood", not any(_pinned),
 check("eviction keeps the limiter bounded", len(_lim._events) < 100000,
       f"{len(_lim._events)} keys retained")
 
-passed = sum(1 for _, ok, _ in results if ok)
 print("\n=== SUMMARY ===")
+# Recomputed HERE on purpose: a mid-file `passed = ...` goes stale as soon as
+# another block appends checks, and the suite then reports failures that are
+# not in the list (and exits non-zero on a fully green run).
+passed = sum(1 for _, ok, _ in results if ok)
 print(f"{passed}/{len(results)} checks passed")
 if passed != len(results):
     print("\nFAILURES:")

@@ -62,6 +62,27 @@ def uname(tg_id: int) -> str:
     return f"tg{tg_id}"
 
 
+# Subscription links are bearer credentials. If this bot is added to a group,
+# /buy and /my would post the customer's token where every member (and every
+# forwarded message) can read it, so the shop is private-chat only.
+PRIVATE_ONLY = (
+    "For your privacy this shop only works in a private chat with me — "
+    "open a DM with this bot and try again."
+)
+
+
+async def _require_private(update: Update) -> bool:
+    chat = update.effective_chat
+    if chat is not None and chat.type == "private":
+        return True
+    if chat is not None:
+        try:
+            await chat.send_message(PRIVATE_ONLY)
+        except Exception:
+            pass
+    return False
+
+
 def md(text) -> str:
     # Telegram legacy-Markdown: usernames/URLs may contain _ * ` [ ] etc.
     # Unescaped, the API rejects the whole message (400). Escape everything
@@ -70,11 +91,15 @@ def md(text) -> str:
 
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_private(update):
+        return
     await update.message.reply_text(
         "Welcome to Zefira VPN shop!\nUse /buy to get an account, /my to see yours.")
 
 
 async def buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_private(update):
+        return
     kb = [[InlineKeyboardButton(label, callback_data=f"buy:{i}")]
           for i, (label, _, _) in enumerate(PLANS)]
     await update.message.reply_text("Pick a plan:", reply_markup=InlineKeyboardMarkup(kb))
@@ -94,6 +119,8 @@ def panel_msg(st: int) -> str:
 
 
 async def my(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_private(update):
+        return
     st, data = api("GET", f"/api/users?q={uname(update.effective_user.id)}")
     if st != 200:
         await update.message.reply_text(panel_msg(st))
@@ -114,6 +141,11 @@ async def my(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
+    chat = update.effective_chat
+    if chat is None or chat.type != "private":
+        # Never create an account (or reveal a link) from a group chat.
+        await q.answer(text=PRIVATE_ONLY, show_alert=True)
+        return
     await q.answer()
     try:
         idx = int(q.data.split(":", 1)[1])

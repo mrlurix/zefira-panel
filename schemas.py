@@ -524,6 +524,14 @@ class RestoreConfirmIn(BaseModel):
     password_confirm: str = Field(min_length=8, max_length=128)
 
 
+class UpdateApplyIn(RestoreConfirmIn):
+    # The exact commit the Update card showed. Required (checked after the
+    # password, so a wrong password still reports 400 rather than 422) so the
+    # panel installs what the operator reviewed, not whatever the branch points
+    # at when the request lands.
+    expected_sha: str = Field(default="", max_length=64)
+
+
 class BackupIn(RestoreConfirmIn):
     # encrypt=True returns a Fernet-encrypted blob (key derived from
     # password_confirm via scrypt) instead of plaintext JSON. Use it when
@@ -550,7 +558,9 @@ class RestoreIn(RestoreConfirmIn):
     # customer in the file. Rows are validated per-row inside the restore
     # transaction and the bad ones are skipped + counted.
     users: List[dict] = Field(max_length=10000)
-    admins: Optional[List[RestoreAdminIn]] = Field(default=None, max_length=50)
+    # Raw dicts for the same reason as `users`: one admin row with a foreign
+    # hash must be skipped, not 422 the whole restore.
+    admins: Optional[List[dict]] = Field(default=None, max_length=50)
     settings: Optional[dict] = None
     templates: Optional[List[dict]] = Field(default=None, max_length=500)
     blocked_sites: Optional[List[dict]] = Field(default=None, max_length=600)

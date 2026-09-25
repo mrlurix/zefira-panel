@@ -142,23 +142,47 @@ class SlidingWindowLimiter:
         #    the security state itself: evicting it would let an attacker
         #    clear a locked-out account with a flood of throwaway keys
         #    (the old code deleted the oldest keys unconditionally).
-        for k in [k for k, q in self._events.items() if len(q) < self.max]:
+        #
+        #    Near-saturated buckets are protected too: a login bucket at 99/100
+        #    is exactly the state an attacker is trying to erase, and dropping
+        #    it handed them a fresh 100 guesses for free. The floor is
+        #    proportional, so generous buckets (100 events) are only evictable
+        #    once they are under ~70% full.
+        evict_floor = max(1, int(self.max * 0.7))
+        for k in [k for k, q in self._events.items() if len(q) < evict_floor]:
             self._events.pop(k, None)
             if len(self._events) <= self.MAX_KEYS // 2:
                 break
         if len(self._events) > self.HARD_CAP:
+            # Extreme key pressure (a distributed flood of unique keys). Shed
+            # the LEAST loaded buckets, never the throttled ones: a fail-open
+            # here would silently disable the protection under load, which is
+            # precisely when an attacker is testing it.
             logging.getLogger("zefira").warning(
-                "rate limiter %s over hard cap (%d keys) - dropping oldest buckets",
+                "rate limiter %s over hard cap (%d keys) - shedding idle buckets",
                 self.max, len(self._events),
             )
+            idle = sorted(
+                (k for k, q in self._events.items() if len(q) < self.max),
+                key=lambda k: len(self._events[k]),
+            )
             overflow = len(self._events) - self.HARD_CAP // 2
-            for k in list(self._events.keys())[:overflow]:
+            for k in idle[:max(0, overflow)]:
                 self._events.pop(k, None)
 
     def hit(self, key: str) -> bool:
         with self._lock:
             self._evict_if_needed()
             now = time.monotonic()
+            if key not in self._events and len(self._events) >= self.HARD_CAP:
+                # Absolute admission ceiling. If EVERY tracked bucket is
+                # saturated there is nothing left to shed, and the old code
+                # happily inserted one more key anyway - so the "hard cap"
+                # grew without bound in exactly the distributed-key-flood
+                # case it exists for. Refuse the new key instead: a flood of
+                # unique keys then cannot inflate memory, and the tracked
+                # (already throttled) buckets stay intact.
+                return False
             q = self._events[key]
             while q and now - q[0] > self.window:
                 q.popleft()

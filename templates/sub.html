@@ -46,6 +46,7 @@
       </div>
     </div>
     {% elif b.id == "link" %}
+    {% if live %}
     <div class="card">
       <div class="card-head"><h2 data-i18n="sub.link">Subscription link</h2></div>
       <p class="mono sub-url">{{ sub_url }}</p>
@@ -63,7 +64,9 @@
         </div>
       </div>
     </div>
+    {% endif %}
     {% elif b.id == "group" %}
+    {% if live and b.links or live and b.config %}
     {% set outer = loop.index %}
     <div class="card">
       <div class="card-head"><h2>{{ b.label }}</h2></div>
@@ -80,6 +83,7 @@
       </div>
       {% endif %}
     </div>
+    {% endif %}
     {% elif b.id == "apps" %}
     <div class="card sub-span">
       <div class="card-head"><h2 data-i18n="sub.apps">Apps</h2></div>

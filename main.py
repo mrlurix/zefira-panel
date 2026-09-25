@@ -1,4 +1,5 @@
-﻿import base64
+﻿import asyncio
+import base64
 import hashlib
 import ipaddress
 import json
@@ -73,6 +74,7 @@ from schemas import (
     TemplateCreateIn,
     TunnelNodeIn,
     TunnelSettingsIn,
+    UpdateApplyIn,
     UserCreateIn,
     UserPatchIn,
     UserResetIn,
@@ -139,12 +141,46 @@ qr_limiter = SlidingWindowLimiter(max_events=30, window_seconds=60)
 # sends Content-Length, and a slow upload is cut off after the deadline.
 restore_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 _restore_buffer_slot = threading.BoundedSemaphore(1)
+# Ordinary API bodies are pre-read before auth too (to enforce the byte cap).
+# Bound how many can be in flight: each holds up to 1 MiB plus the joined
+# copy, so without this an anonymous client can pile up memory and occupy
+# every worker with requests that are all going to end in 401/403.
+_api_buffer_slots = threading.BoundedSemaphore(32)
+# Telegram notifications: a small fixed pool with a bounded queue. One thread
+# per notification let an unauthenticated flood (failed logins -> lockout
+# alerts, rotating IPs) create unbounded threads and outbound requests.
+_notify_pool: "queue.Queue | None" = None
+# Public subscription rendering (QR matrix, Clash YAML, every protocol link) is
+# the most CPU-heavy unauthenticated path, and it is bearer-authenticated: a
+# leaked token could otherwise be replayed from many IPs to occupy every
+# worker. Per-token budget + a global concurrency cap.
+sub_token_limiter = SlidingWindowLimiter(max_events=60, window_seconds=60)
+_sub_render_slots = threading.BoundedSemaphore(8)
+
+
+def _init_notify_pool() -> None:
+    global _notify_pool
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _notify_pool = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="zefira-notify"
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("notify pool unavailable, notifications disabled: %s", exc)
+        _notify_pool = None
 _RESTORE_READ_DEADLINE = 60.0
+# Ordinary API bodies are far smaller; 15s is generous for a 1 MiB JSON POST
+# and still bounds how long a stalled anonymous client can hold a body slot.
+_API_READ_DEADLINE = 15.0
 sensitive_limiter = SlidingWindowLimiter(max_events=10, window_seconds=600)
 # User creation is audited (and audit prunes to the last 2000 rows): an
 # unleashed creator (e.g. a leaked bot token) could mass-create users to
 # rotate the audit trail away AND spam Telegram notifications. Bound it.
 user_create_limiter = SlidingWindowLimiter(max_events=120, window_seconds=3600)
+# Reset routes are bot-reachable and destructive (token rotation kills the
+# customer's working link, usage resets keep a quota topped up forever).
+reset_limiter = SlidingWindowLimiter(max_events=30, window_seconds=300)
 # Serialize restores: two concurrent full-wipes interleave badly, and a
 # second restore right after the first is never legitimate operator flow.
 restore_lock = threading.Lock()
@@ -168,6 +204,11 @@ TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
 
 APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted", "brand_name", "dash_note", "menu_layout", "dash_layout"}
+# Settings that define WHERE this deployment lives. Never imported from a
+# backup: the file is unsigned, and a crafted `public_url`/`domain` silently
+# repoints every customer's subscription link, QR and one-tap import at the
+# attacker's host. The operator changes these explicitly in Settings.
+RESTORE_ORIGIN_KEYS = {"public_url", "domain"}
 APPEARANCE_DEFAULTS = {
     "theme_accent": "#ff2740",
     "theme_bg": "#06060a",
@@ -243,28 +284,43 @@ def _hostname_is_ssrf_blocked(host: str) -> bool:
         return False
 
 
-def _resolved_ips_blocked(host: str) -> bool:
+def _resolved_ips_blocked(host: str, allow_private: bool = True) -> bool:
     """DNS-rebinding guard: True if ANY resolved A/AAAA is SSRF-blocked.
 
     A hostname that resolves to both public and metadata/private-link
     addresses must be rejected outright: urllib/socket may pick the
     blocked one after validation (TOCTOU).
+
+    `allow_private` keeps the documented "point the panel at a local Ollama
+    or an internal gateway" setup working; pass False for any destination
+    that will receive a third-party credential.
     """
     import socket as _sock
 
     try:
         infos = _sock.getaddrinfo(host, None, 0, _sock.SOCK_STREAM)
     except OSError:
-        # Unresolvable at check time: fail-open for save-time UX, but
-        # request-time callers treat failure as unreachable (no fetch).
-        return False
+        # FAIL CLOSED. This used to return "not blocked", which meant a
+        # transient DNS failure (or a resolver that only answers for the
+        # attacker's second lookup) sailed through validation and then
+        # urllib resolved the name again on its own - the classic
+        # validate-then-resolve rebound.
+        return True
     found = False
     for _fam, _typ, _proto, _canon, sa in infos[:8]:
         ip_str = sa[0] if isinstance(sa, tuple) else str(sa)
         found = True
         if _ip_is_ssrf_blocked(ip_str):
             return True
-    return False if found else False
+        if not allow_private:
+            try:
+                ip = ipaddress.ip_address(ip_str)
+            except ValueError:
+                return True
+            if (ip.is_private or ip.is_loopback or ip.is_reserved
+                    or ip.is_link_local or ip.is_multicast or ip.is_unspecified):
+                return True
+    return not found
 
 
 def _ai_base_url_blocked(base_url: str) -> str | None:
@@ -291,8 +347,37 @@ def _ai_base_url_blocked(base_url: str) -> str | None:
     if port is not None and not 1 <= port <= 65535:
         return "port out of range"
     if _resolved_ips_blocked(host):
-        return "host resolves to a blocked (metadata/link-local) address"
+        return "host resolves to a blocked address"
     return None
+
+
+def _ai_target_is_local(host: str) -> bool:
+    """True when the AI endpoint is on this host's own network.
+
+    A provider key is a third-party credential. A local Ollama / internal
+    gateway does not need it, and sending it there turns a hijacked admin
+    session into key exfiltration against a listener the attacker controls
+    (the panel can even be pointed at itself).
+    """
+    import socket as _sock
+
+    candidates = set()
+    try:
+        for _f, _t, _p, _c, sa in _sock.getaddrinfo(host, None, 0, _sock.SOCK_STREAM)[:8]:
+            candidates.add(sa[0] if isinstance(sa, tuple) else str(sa))
+    except OSError:
+        return True  # unresolvable -> treat as unsafe for credentials
+    if not candidates:
+        return True
+    for ip_str in candidates:
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            return True
+    return False
 
 
 def _is_strong_scrypt_hash(h: str | None) -> bool:
@@ -367,6 +452,16 @@ def _valid_restore_secret(proto: str, value: object) -> bool:
         cert_pem = cert_pem.replace("<ZEFIRA-CERT>", "").strip()
         key_pem = key_pem.strip()
         if not cert_pem or not key_pem:
+            return False
+        # EXACT round-trip, not "does it parse": both loaders silently ignore
+        # trailing bytes, so a backup carrying a real cert+key FOLLOWED BY
+        # `up /tmp/pwn.sh` / a second <ca> / a rogue `remote` passed
+        # validation and those directives were emitted verbatim into every
+        # generated .ovpn (command execution as root on the customer's
+        # machine, or a full MITM of the tunnel).
+        if not protocols.pem_block_is_exact(cert_pem, "CERTIFICATE"):
+            return False
+        if not protocols.pem_block_is_exact(key_pem, "PRIVATE KEY"):
             return False
         try:
             from cryptography import x509
@@ -814,7 +909,14 @@ def public_base_url(request: Request) -> str:
         from config import DOMAIN as _ENV_DOMAIN
         dom = (_ENV_DOMAIN or "").strip().lower()
     if dom and re.fullmatch(r"[a-z0-9.-]{1,253}", dom):
-        return f"{scheme}://{dom}" + ("" if default_port or not port else f":{port}")
+        # A CONFIGURED identity is canonical: scheme + host only. Inheriting
+        # the request's port let a caller send `Host: panel.example.com:8443`
+        # and every generated subscription link / QR / one-tap import then
+        # pointed at that other port while keeping the real hostname - the
+        # customer hands their bearer token to whatever listens there.
+        # Direct-port installs have no configured domain, so they keep using
+        # the request port in the fallback below.
+        return f"{scheme}://{dom}"
     # Host fallback (IP/direct installs with no domain configured). The header
     # is attacker-controlled, so it is only honoured when it actually looks
     # like a host: a 2 KB "hostname" would otherwise inflate every generated
@@ -1001,15 +1103,23 @@ def notify_async(fmt: str, *untrusted: object) -> None:
         except Exception as e:
             log.warning("telegram notify failed: %s", e)
 
+    # A thread PER NOTIFICATION was unbounded on an unauthenticated path: a
+    # lockout alert is triggered by failed logins, so rotating source IPs
+    # could spawn thousands of daemon threads (and Telegram requests) that
+    # all pile up before the worker even checks whether Telegram is set up.
+    # A small fixed pool with a bounded queue drops the overflow instead.
+    if _notify_pool is None:
+        return
     try:
-        threading.Thread(target=_send, daemon=True).start()
+        _notify_pool.submit(_send)
     except Exception as e:
-        log.warning("notify thread spawn failed: %s", e)
+        log.warning("notify enqueue failed (dropped): %s", e)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init()
+    _init_notify_pool()
     psutil.cpu_percent(interval=None)
     with db.s() as s:
         if not s.scalar(select(Admin).limit(1)):
@@ -1020,9 +1130,15 @@ async def lifespan(_: FastAPI):
                 log.warning("Invalid ZEFIRA_ADMIN_USERNAME, falling back to 'admin'")
                 username = "admin"
             password = (os.environ.get("ZEFIRA_ADMIN_PASSWORD") or "").strip() or secrets.token_urlsafe(14)
+            # Drop it from the process environment immediately. Scrubbing .env
+            # was not enough: /proc/<pid>/environ keeps the value for the life
+            # of the process, so ANY process running as the same UID (a web
+            # shell, a stray script) could read the bootstrap admin password
+            # long after startup.
+            os.environ.pop("ZEFIRA_ADMIN_PASSWORD", None)
             if not STRONG_PW_RE.match(password):
                 # Never lock the operator out with a weak env password: fall
-                # back to a printed random one (same policy as the installer).
+                # back to a random one (same policy as the installer).
                 log.warning("ZEFIRA_ADMIN_PASSWORD too weak, using a random one")
                 password = secrets.token_urlsafe(14)
             s.add(Admin(username=username, password_hash=hash_password(password)))
@@ -1073,15 +1189,26 @@ async def lifespan(_: FastAPI):
                     print("  !! CHANGE THE PASSWORD AFTER LOGIN, THEN DELETE THAT FILE !!")
                     print("=" * 58)
                 except OSError as exc:
-                    # Could not protect the file: fall back to stdout rather than
-                    # locking the operator out, but say so loudly.
+                    # Could not write the 0600 file. Printing the password to
+                    # stdout would put it in the systemd journal, readable by
+                    # every member of `adm`/`systemd-journal` for the lifetime
+                    # of the boot. Say how to recover instead; the account
+                    # exists and the operator has console access.
                     print("=" * 58)
                     print("  ZEFIRA PANEL - FIRST RUN")
                     print(f"  USERNAME: {username}")
-                    print(f"  PASSWORD: {password}")
-                    print(f"  !! could not write the credentials file: {exc}")
-                    print("  !! CHANGE THIS PASSWORD FROM SETTINGS AFTER LOGIN !!")
+                    print(f"  !! could not write {cred_path}: {exc}")
+                    print("  !! the password was NOT printed on purpose (it would")
+                    print("     land in the system journal). Recover it from the")
+                    print("     ZEFIRA_ADMIN_PASSWORD you set in .env, or reset it")
+                    print("     from a console with:")
+                    print("       systemctl stop zefira")
+                    print("       sudo -u zefira ./venv/bin/python -c \"")
+                    print("         import sqlite3,secrets;")
+                    print("         print(secrets.token_urlsafe(14))\"")
+                    print("     then store that value as the new password hash.")
                     print("=" * 58)
+                    log.error("First-run credentials file could not be created: %s", exc)
             if won_insert:
                 log.warning("First-run admin created. Credentials stored at %s.", cred_path)
             # One-time use: the installer wrote the password to .env for
@@ -1183,7 +1310,14 @@ def _json_too_deep(raw: bytes, limit: int = 64) -> bool:
     depth = 0
     in_str = False
     esc = False
+    # Skip leading JSON whitespace so a body that starts with a space is
+    # scanned exactly like one that starts with '{'.
+    started = False
     for b in raw:
+        if not started:
+            if b in (0x20, 0x09, 0x0A, 0x0D):
+                continue
+            started = True
         if in_str:
             if esc:
                 esc = False
@@ -1293,19 +1427,49 @@ def parse_host_header(raw_host: str | None) -> str:
     return host.strip().rstrip(".")
 
 
+def _numeric_ip_forms(host: str) -> bool:
+    """True for the alternate numeric spellings of an IPv4 address.
+
+    `http://2130706433/` and `http://0x7f000001/` are 127.0.0.1 to curl and
+    every browser. ipaddress only accepts dotted-quad, so an IP-deny switch
+    that trusts it lets the exact thing it blocks in by another spelling.
+    """
+    h = (host or "").strip()
+    if not h or "." in h or ":" in h:
+        return False
+    try:
+        n = int(h, 0) if h.lower().startswith(("0x", "0o", "0b")) else int(h)
+    except ValueError:
+        return False
+    return 0 <= n <= 0xFFFFFFFF
+
+
 @app.middleware("http")
 async def block_direct_ip_middleware(request: Request, call_next):
     if cached_setting("block_direct_ip") == "1":
         host = parse_host_header(request.headers.get("host", ""))
         if host:
+            # The documented policy is "deny raw-IP access, use the domain".
+            # The old check only denied PUBLIC literals, so 127.0.0.1,
+            # 10.0.0.1 and every private address walked straight through it -
+            # the exact cases an operator enables the switch for. Reject every
+            # valid IP literal, and also the non-canonical numeric spellings
+            # that a resolver still understands.
+            looks_like_ip = True
             try:
                 ip = ipaddress.ip_address(host)
-                if not ip.is_private and not ip.is_loopback and not ip.is_link_local and not ip.is_multicast:
-                    if request.url.path in ("/", "/login", "/panel") or request.url.path.startswith("/api/"):
-                        if not request.url.path.startswith("/sub"):
-                            return JSONResponse({"detail": "Direct IP access to panel is disabled, use domain"}, status_code=403)
             except ValueError:
-                pass
+                looks_like_ip = False
+                ip = None
+                # 2130706433 / 0x7f000001 / 017700000001: ip_address rejects
+                # these, but curl and browsers accept them as 127.0.0.1, so
+                # they must not slip past an IP-deny switch either.
+                if _numeric_ip_forms(host):
+                    looks_like_ip = True
+            if looks_like_ip:
+                if request.url.path in ("/", "/login", "/panel") or request.url.path.startswith("/api/"):
+                    if not request.url.path.startswith("/sub"):
+                        return JSONResponse({"detail": "Direct IP access to panel is disabled, use domain"}, status_code=403)
     return await call_next(request)
 
 
@@ -1318,13 +1482,20 @@ async def csrf_and_size_middleware(request: Request, call_next):
     # Tracks whether this request still owns the global restore slot, so every
     # exit path (early return, exception, normal completion) releases it once.
     restore_slot_held = False
+    api_slot_held = False
 
     def _release_restore_slot() -> None:
-        nonlocal restore_slot_held
+        nonlocal restore_slot_held, api_slot_held
         if restore_slot_held:
             restore_slot_held = False
             try:
                 _restore_buffer_slot.release()
+            except ValueError:  # pragma: no cover - defensive
+                pass
+        if api_slot_held:
+            api_slot_held = False
+            try:
+                _api_buffer_slots.release()
             except ValueError:  # pragma: no cover - defensive
                 pass
 
@@ -1356,6 +1527,22 @@ async def csrf_and_size_middleware(request: Request, call_next):
                     status_code=429,
                 )
             restore_slot_held = True
+        else:
+            # Same reasoning for ordinary API bodies, scaled to 1 MiB. The
+            # pre-read happens BEFORE the route's auth dependency, so without a
+            # bound here an anonymous client could pin a worker and a MiB of
+            # memory per request with a promise that ends in 401/403/404.
+            # The panel's own UI and API clients always send Content-Length;
+            # a chunked body here is either a mistake or the attack.
+            if not content_length and request.headers.get("transfer-encoding", "").lower() == "chunked":
+                return JSONResponse(
+                    {"detail": "Content-Length required"}, status_code=411
+                )
+            if not _api_buffer_slots.acquire(blocking=False):
+                return JSONResponse(
+                    {"detail": "Server busy, retry shortly"}, status_code=503
+                )
+            api_slot_held = True
         if content_length:
             try:
                 if int(content_length.strip()) > limit:
@@ -1368,14 +1555,33 @@ async def csrf_and_size_middleware(request: Request, call_next):
         # with no/mismatched length would otherwise bypass the gate and
         # OOM the JSON parser. Stream-count up to limit+1, replay for
         # downstream. Max buffered = limit (1 MiB, or 64 MiB for restore).
-        deadline = time_mod.monotonic() + _RESTORE_READ_DEADLINE if is_restore else 0.0
+        # The deadline is ABSOLUTE and wraps each receive() call: checking it
+        # only after a chunk arrives did nothing against the real attack,
+        # which is a client that declares Content-Length and then sends
+        # nothing (or one byte) and stalls. The await below never returns, so
+        # the restore slot - or one of the 32 API body slots - stayed held
+        # indefinitely, unauthenticated.
+        deadline = (
+            time_mod.monotonic() + (_RESTORE_READ_DEADLINE if is_restore else _API_READ_DEADLINE)
+        )
         try:
             orig_receive = request._receive
             chunks: list = []
             total = 0
             while True:
+                remaining = deadline - time_mod.monotonic()
+                if remaining <= 0:
+                    _release_restore_slot()
+                    return JSONResponse(
+                        {"detail": "upload too slow"}, status_code=408
+                    )
                 try:
-                    msg = await orig_receive()
+                    msg = await asyncio.wait_for(orig_receive(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    _release_restore_slot()
+                    return JSONResponse(
+                        {"detail": "upload too slow"}, status_code=408
+                    )
                 except Exception:
                     break
                 mtype = msg.get("type")
@@ -1405,7 +1611,9 @@ async def csrf_and_size_middleware(request: Request, call_next):
             # Reject over-nested JSON here, while the raw bytes are in hand:
             # Pydantic + FastAPI's error encoder both recurse over the parsed
             # value, so a deep body otherwise becomes a 500 + huge traceback.
-            if body[:1] in (b"{", b"[") and _json_too_deep(body):
+            # Leading JSON whitespace (space/tab/CR/LF) is legal, and the
+            # first-byte check used to skip the whole scan because of it.
+            if _json_too_deep(body):
                 _release_restore_slot()
                 return JSONResponse({"detail": "Malformed JSON payload (too deeply nested)"}, status_code=400)
             # Lone surrogates ("\ud800" / CESU-8) decode fine but cannot be
@@ -1436,6 +1644,7 @@ async def csrf_and_size_middleware(request: Request, call_next):
         auth_h = request.headers.get("authorization", "")
         bearer = auth_h[:7].lower() == "bearer " and len(auth_h) > 7
         if not bearer and request.headers.get("x-requested-with") != "XMLHttpRequest":
+            _release_restore_slot()
             return JSONResponse({"detail": "forbidden"}, status_code=403)
     # Restore isolation: a restore wipes users while merging the rest, so a
     # write landing mid-restore is silently wiped (or half-merged). Reject
@@ -1449,16 +1658,28 @@ async def csrf_and_size_middleware(request: Request, call_next):
             ("/api/restore", "/api/login", "/api/update/status")
         ):
             if restore_lock.locked():
+                _release_restore_slot()
                 return JSONResponse({"detail": "Restore in progress, try again"}, status_code=409)
-    if is_restore:
+    if is_restore or api_slot_held:
         # The buffered body is now owned by the route (and by the replay
-        # callable above); free the global slot whichever way the call ends.
+        # callable above); free the slot whichever way the call ends.
         try:
             response = await call_next(request)
         finally:
             _release_restore_slot()
         return response
     return await call_next(request)
+
+
+def actor(admin: Admin, request: Request) -> str:
+    """Audit/log attribution that names the API token when one was used.
+
+    Every audit row used to say only "by admin", so a reseller's bot and the
+    human operator were indistinguishable in the log - exactly the gap you
+    need when a bot token leaks and you are deciding what it touched.
+    """
+    name = getattr(request.state, "token_name", None)
+    return f"{admin.username} via token {name}" if name else admin.username
 
 
 def client_ip(request: Request) -> str:
@@ -1582,7 +1803,7 @@ def api_login(data: LoginIn, request: Request, response: Response):
     key = f"{ip}|{uname}"
     ipkey = f"login|{ip}"
 
-    def _throttled() -> None:
+    def _throttled(retry_after: int = 0) -> None:
         log.warning("Rate-limited login attempt ip=%s user=%s", ip, safe_user)
         # Throttled: without this, an attacker rotating IPs/usernames could
         # flood the admin's Telegram bot with lockout alerts (spam amplifier).
@@ -1591,26 +1812,49 @@ def api_login(data: LoginIn, request: Request, response: Response):
                 "\u26a0 Zefira: brute-force lockout triggered from IP {} (user: {})",
                 ip, safe_user,
             )
+        if retry_after > 0:
+            # An account-wide budget is trivially reachable by an attacker who
+            # knows the admin username (8 wrong tries from 13 IPs fills it), and
+            # a hard 429 here meant "nobody can log in for 15 minutes" - a
+            # remote denial of service on the panel itself. Back off
+            # progressively instead and keep the correct password working:
+            # scrypt is the real cost, so an attacker pays full price per try.
+            raise HTTPException(
+                status_code=429,
+                detail="Too many attempts for this account - wait a moment and try again",
+                headers={"Retry-After": str(retry_after)},
+            )
         raise HTTPException(status_code=429, detail="Too many attempts, try again in a few minutes")
 
     # Per-source budget, independent of the username and checked BEFORE any
     # password hashing: without it every unique username gets a fresh 8-shot
     # bucket, so an anonymous attacker can drive scrypt (~16 MiB each) and an
     # audit write per request. Guessing never resets it - only a real login.
+    #
+    # The ACCOUNT-wide bucket is deliberately NOT checked here. It is filled
+    # by 100 wrong passwords, so anybody who knows the admin username could
+    # spend it and then have every subsequent request - including the correct
+    # password - refused before verification. It is charged on a FAILED
+    # attempt below, where it slows a distributed spray without ever being
+    # able to lock a legitimate login out.
     if not login_ip_limiter.hit(ipkey):
         _throttled()
-    if not login_user_limiter.hit(ukey) or not login_limiter.hit(key):
+    if not login_limiter.hit(key):
         _throttled()
     fail_msg = "Invalid username or password"
     with db.s() as s:
         admin = s.scalar(select(Admin).where(Admin.username == uname))
         if admin is None:
             dummy_verify(data.password)
+            if not login_user_limiter.hit(ukey):
+                _throttled(retry_after=30)
             audit(s, "LOGIN_FAIL", f"user={safe_user}", ip, ok=False)
             s.commit()
             log.warning("Failed login (unknown user) ip=%s user=%s", ip, safe_user)
             raise HTTPException(status_code=401, detail=fail_msg)
         if not verify_password(data.password, admin.password_hash):
+            if not login_user_limiter.hit(ukey):
+                _throttled(retry_after=30)
             audit(s, "LOGIN_FAIL", f"user={admin.username}", ip, ok=False)
             s.commit()
             log.warning("Failed login ip=%s user=%s", ip, admin.username)
@@ -1779,6 +2023,10 @@ def api_reality_generate(request: Request, admin: Admin = Depends(require_admin)
 
 @app.get("/api/reality/private")
 def api_reality_private(request: Request, admin: Admin = Depends(require_admin)):
+    # Same treatment as /api/reality/generate: revealing the private key is an
+    # expensive, sensitive action and must not be an unlimited loop.
+    if not sensitive_limiter.hit(f"realitypriv|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
     with db.s() as s:
         row = s.get(Setting, "reality_priv_enc")
         enc = row.value if row else None
@@ -1787,7 +2035,7 @@ def api_reality_private(request: Request, admin: Admin = Depends(require_admin))
         raise HTTPException(status_code=404, detail="No REALITY private key stored yet")
     with db.s() as s:
         audit(s, "REALITY_REVEAL", f"private key viewed by {admin.username}", client_ip(request))
-        s.commit()
+        _commit(s)
     return {"private_key": priv}
 
 
@@ -2180,6 +2428,8 @@ Rules: ONE action block per turn, valid JSON only. If args are missing/invalid, 
 AI_ACTION_RE = re.compile(r"```action\s*(\{.*?\})\s*```", re.S)
 AI_MAX_ACTIONS = 3
 AI_MAX_ROUNDS = 3
+# Wall-clock cap for one /api/ai/chat turn (all provider rounds combined).
+AI_TURN_DEADLINE = 120.0
 
 # Tools the model may invoke. Only ```action fences ever execute: a ```json
 # example in a normal answer (even with an allowlisted tool name inside) is
@@ -2401,6 +2651,20 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
         blocked_reason = _ai_base_url_blocked(eff_base)
         if blocked_reason:
             return False, f"AI base URL blocked ({blocked_reason})"
+        # A LOCAL endpoint (Ollama, an internal gateway, even the panel
+        # itself) must never RECEIVE the provider key: it is a third-party
+        # secret and pointing the panel at 127.0.0.1 turned a hijacked admin
+        # session into "mail me your OpenAI key". Local models do not need
+        # one, so the credential is STRIPPED rather than the call refused -
+        # stripping keeps the documented local-AI setup working.
+        if api_key and _ai_target_is_local((urlparse(eff_base).hostname or "").lower()):
+            log.warning(
+                "AI base URL %s is local/internal - provider key not sent", eff_base
+            )
+            for _h in ("Authorization", "x-api-key", "api-key", "api_key"):
+                headers.pop(_h, None)
+            if "key=" in url:
+                url = url.split("?", 1)[0]
         # No-redirect fetch: urllib follows 301/302 by default, so a public
         # URL that 302s to 169.254.169.254 would bypass the check above.
         # Refuse redirects outright (AI APIs never legitimately redirect).
@@ -2428,7 +2692,11 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
                 # error bodies only, key scrubbed, capped. Never raw HTML.
                 extra = ""
                 try:
-                    raw = he.read().decode("utf-8", "replace")
+                    # Cap the error body too: only the success path was
+                    # bounded, so a hostile/compromised endpoint could answer
+                    # 400 with a gigabyte and OOM the worker before the hint
+                    # was even built.
+                    raw = he.read(8192).decode("utf-8", "replace")
                     detail = (json.loads(raw).get("error") or {}).get("message", "")
                     if isinstance(detail, str) and detail.strip():
                         clean = detail.replace(api_key, "***") if api_key else detail
@@ -2790,8 +3058,6 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
 
 @app.post("/api/ai/chat")
 def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require_admin)):
-    if not ai_limiter.hit(f"ai|{admin.id}"):
-        raise HTTPException(status_code=429, detail="AI quota used up, try again later")
     s = _ai_settings()
     api_key = decrypt_text(cached_setting("ai_api_key_enc"))
     if not s["enabled"] or not api_key or not s["model"]:
@@ -2808,7 +3074,21 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
     # blocks; the server validates + executes against the same rules as the
     # HTTP API, then feeds the result back. Capped rounds AND actions so a
     # chatty model cannot chain unbounded operations.
+    #
+    # The socket timeout is per-read, so a provider that dribbles bytes could
+    # otherwise hold a worker for many minutes. A wall-clock deadline caps the
+    # whole turn, and EVERY provider round is charged to the quota: one
+    # accepted /api/ai/chat used to be able to make up to AI_MAX_ROUNDS
+    # billable calls.
+    turn_deadline = time_mod.monotonic() + AI_TURN_DEADLINE
     for _ in range(AI_MAX_ROUNDS):
+        if time_mod.monotonic() > turn_deadline:
+            reply = (
+                (reply + "\nStopped: this turn took too long — continue in a new message.").strip()
+                if reply
+                else "Stopped: this turn took too long — send the message again."
+            )
+            break
         if len(actions_done) >= AI_MAX_ACTIONS:
             # Cap BEFORE the provider call: a wasted round-trip (up to 60s
             # + quota) whose action would be silently dropped is worse than
@@ -2819,6 +3099,12 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
                 else "Action limit reached for this turn — continue in a new message."
             )
             break
+        if not ai_limiter.hit(f"ai|{admin.id}"):
+            # Quota is charged per PROVIDER call, not per chat request: the
+            # agentic loop can make several outbound calls for one message,
+            # and an unbilled round is a free amplification of the operator's
+            # provider spend.
+            raise HTTPException(status_code=429, detail="AI quota used up, try again later")
         ok, reply = _ai_complete(s["provider"], s["base_url"], s["model"], api_key, system, history)
         if not ok:
             log.warning("AI chat failed for %s: %s", admin.username, reply[:150])
@@ -2863,6 +3149,49 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
 UPDATE_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SERVICE_RE = re.compile(r"\A[A-Za-z0-9_@.:-]{1,64}\Z")
 _update_lock = threading.Lock()
+# Single-flight + budget for /api/update/status?fresh=1 (git subprocesses and
+# GitHub API calls, on a 60/hour anonymous quota).
+_update_status_lock = threading.Lock()
+update_status_limiter = SlidingWindowLimiter(max_events=20, window_seconds=300)
+
+
+def _snapshot_runtime_state() -> str | None:
+    """Copy the live secrets/database aside before `git reset --hard`.
+
+    instance/ lives inside the git worktree but is gitignored, so an update
+    that force-added a path under it would replace the operator's master key,
+    CA and database with the upstream copy. The updater refuses such a commit
+    upstream of the reset; this is the belt to that braces, and it also covers
+    an operator's own bad commit.
+    """
+    import shutil as _sh
+
+    try:
+        stamp = utcnow().strftime("%Y%m%d-%H%M%S")
+        dest = INSTANCE_DIR / f"pre-update-{stamp}"
+        dest.mkdir(mode=0o700, parents=True, exist_ok=False)
+        copied = []
+        for rel in ("secret.key", "ca.key", "ca.crt", "zefira.db"):
+            src = INSTANCE_DIR / rel
+            if src.is_file():
+                _sh.copy2(src, dest / rel)
+                copied.append(rel)
+        env_src = BASE_DIR / ".env"
+        if env_src.is_file():
+            _sh.copy2(env_src, dest / ".env")
+            copied.append(".env")
+        try:
+            os.chmod(dest, 0o700)
+        except OSError:
+            pass
+        if not copied:
+            _sh.rmtree(dest, ignore_errors=True)
+            return None
+        log.warning("Pre-update runtime snapshot: %s (%s)", dest, ", ".join(copied))
+        return str(dest)
+    except Exception as exc:
+        log.warning("Could not snapshot runtime state before update: %s", exc)
+        return None
 
 
 def _update_conf() -> tuple:
@@ -2926,10 +3255,22 @@ def _unit_stale_warning() -> str:
     except OSError:
         return ""
     gaps = []
-    if "ReadWritePaths=" in text and "ReadWritePaths=$TARGET" not in text.replace("${TARGET}", "$TARGET"):
-        # Narrow pre-fix unit (instance/.venv only): git reset can't write.
-        if "ReadWritePaths=$TARGET/instance" in text or "$TARGET/.venv" in text:
-            gaps.append("narrow ReadWritePaths")
+    # Run as an unprivileged user: a root unit turns any update-path RCE into
+    # instant root, and the tree it updates is service-writable anyway.
+    if not re.search(r"(?m)^\s*User\s*=\s*zefira\s*$", text):
+        gaps.append("service does not run as User=zefira")
+    if re.search(r"(?m)^\s*ExecStartPre\s*=\s*\+", text):
+        # A `+` prefix runs the command with FULL systemd privileges,
+        # bypassing the unit's User=. A helper that loads code from the
+        # service-writable tree is then root code execution.
+        gaps.append("privileged ExecStartPre=+ helper")
+    # ProtectSystem=strict + a writable path is what keeps a service-user
+    # foothold from editing /etc. Its absence is not a finding on its own, but
+    # a narrow ReadWritePaths IS a functional problem: git reset cannot write.
+    if "ProtectSystem=strict" not in text:
+        gaps.append("ProtectSystem=strict missing")
+    if re.search(r"(?m)^\s*ReadWritePaths\s*=\s*\S*/instance\s*$", text):
+        gaps.append("ReadWritePaths too narrow for the updater")
     if "NoNewPrivileges=true" in text:
         gaps.append("NoNewPrivileges blocks sudo restart")
     if "ExecStartPre" not in text or "instance" not in text:
@@ -3025,6 +3366,9 @@ def _update_status() -> dict:
         "version": version,
         "current": local[:12],
         "latest": (remote_sha or "")[:12],
+        # Full SHA so /api/update/apply can bind to the exact commit the
+        # operator reviewed (the UI sends this back as expected_sha).
+        "latest_full": (remote_sha or "")[:40] if re.fullmatch(r"[0-9a-f]{40}", remote_sha or "") else "",
         "update_available": bool(local and remote_sha and local != remote_sha),
         "updating": _update_lock.locked(),
         "local_log": local_log,
@@ -3048,9 +3392,28 @@ def api_update_status(request: Request, admin: Admin = Depends(require_admin)):
     ent = _settings_cache.get("__update_status__")
     if not fresh and ent and now - ent[1] < 60.0:
         return ent[0]
-    out = _update_status()
-    _settings_cache["__update_status__"] = (out, now)
-    return out
+    # `?fresh=1` used to skip the cache with no limiter at all, so a hijacked
+    # admin session could spin up unlimited git subprocesses and GitHub API
+    # calls (60/hour anonymous quota) by holding the button. One refresh at a
+    # time, a floor between refreshes, and a per-admin budget.
+    if not _update_status_lock.acquire(blocking=False):
+        # Single-flight: a concurrent caller gets whatever the in-flight
+        # refresh produces instead of starting a second one.
+        return ent[0] if ent else _update_status()
+    try:
+        if fresh:
+            if not update_status_limiter.hit(f"updst|{admin.id}"):
+                raise HTTPException(
+                    status_code=429, detail="Update check throttled, wait a moment"
+                )
+            ent = _settings_cache.get("__update_status__")
+            if ent and now - ent[1] < 10.0:
+                return ent[0]
+        out = _update_status()
+        _settings_cache["__update_status__"] = (out, time_mod.monotonic())
+        return out
+    finally:
+        _update_status_lock.release()
 
 
 def _commit_verification(repo: str, sha: str) -> tuple:
@@ -3072,17 +3435,35 @@ def _commit_verification(repo: str, sha: str) -> tuple:
     ver = (data.get("commit") or {}).get("verification") or data.get("verification") or {}
     if not isinstance(ver, dict) or "verified" not in ver:
         return "unknown", ""
-    if ver.get("verified"):
+    # Strict boolean only: a truthy string ("false", "0", "") from a
+    # malformed or spoofed response must never read as "verified".
+    if ver.get("verified") is True:
         return "verified", str(ver.get("reason") or "")[:80]
     return "unverified", str(ver.get("reason") or "")[:80]
 
 
 def _signed_update_required() -> bool:
-    return (os.environ.get("ZEFIRA_REQUIRE_SIGNED_UPDATE", "") or "").strip() == "1"
+    """Fail CLOSED: unsigned upstream code is only accepted when the operator
+    has explicitly opted out.
+
+    This used to default to OFF, so the default deployment installed whatever
+    the branch tip was. Setting it to 1 opts into a hard requirement instead.
+    """
+    return (os.environ.get("ZEFIRA_REQUIRE_SIGNED_UPDATE", "1") or "").strip() != "0"
 
 
-def _do_update(admin_name: str, ip: str) -> None:
+def _do_update(admin_name: str, ip: str, expected_sha: str = "") -> None:
     repo, branch, service = _update_conf()
+    # Refuse to update through a unit that would turn a compromised upstream
+    # (or a service-user foothold) into root: a root unit, or a privileged
+    # `ExecStartPre=+` helper that loads code from the service-writable tree.
+    # The check used to be display-only, so the dangerous case was exactly the
+    # one that never blocked anything.
+    unit_gap = _unit_stale_warning()
+    if unit_gap:
+        raise RuntimeError(
+            "refusing to update: " + unit_gap
+        )
     # Pull from the SAME source the status page compared against, never from
     # whatever a local `origin` remote happens to point at.
     fetch_url = f"https://github.com/{repo}.git"
@@ -3111,6 +3492,15 @@ def _do_update(admin_name: str, ip: str) -> None:
             raise RuntimeError(
                 "upstream moved during the update (refusing to install an unreviewed commit) - retry"
             )
+        # ...and it must be the commit the operator was SHOWED and approved.
+        # A release pushed between the status page and the click otherwise got
+        # installed with no human ever seeing it.
+        if expected_sha and advertised_sha != expected_sha:
+            raise RuntimeError(
+                f"upstream now advertises {advertised_sha[:12]} but you approved "
+                f"{expected_sha[:12]} - nothing was installed. Re-check the "
+                "Update card and apply again if this is the release you want."
+            )
         ver_state, ver_detail = _commit_verification(repo, advertised_sha)
         log.warning("Update target %s@%s %s (%s)", repo, advertised_sha[:12], ver_state, ver_detail)
         if _signed_update_required() and ver_state != "verified":
@@ -3129,14 +3519,56 @@ def _do_update(admin_name: str, ip: str) -> None:
             # Operator committed on top (or diverged): reset would destroy
             # their work. Refuse loudly instead of data loss.
             raise RuntimeError(f"{ahead} local commit(s) would be destroyed — push or back them up first")
+        # A malicious or careless upstream commit can force-add files that
+        # OVERWRITE live runtime state inside the worktree:
+        #   instance/secret.key  -> attacker-chosen master key => forged
+        #                            admin session cookies
+        #   instance/zefira.db   -> attacker-known admin password hash
+        #   instance/ca.key      -> their own OpenVPN CA
+        #   .env                 -> reconfigured database / proxy trust
+        # None of these are visible to `git status` (instance/ is ignored), so
+        # the clean-tree check above cannot see them coming. Refuse before the
+        # reset, and snapshot the live files so a clobber is recoverable.
+        ok, out = _git("ls-tree", "-r", "--name-only", advertised_sha, timeout=30)
+        if not ok:
+            raise RuntimeError(out)
+        forbidden = (
+            "instance/", ".env", ".venv/", "*.db", "*.pem", "*.key",
+        )
+        intrusions = []
+        for line in (out or "").splitlines():
+            p = line.strip()
+            if not p or p in ("instance", ".env", ".venv"):
+                continue
+            if p.startswith(forbidden) or p == ".env" or p.endswith((".db-wal", ".db-shm")):
+                intrusions.append(p)
+        if intrusions:
+            raise RuntimeError(
+                "upstream commit adds runtime state that would overwrite this "
+                f"installation, refusing: {', '.join(intrusions[:5])}"
+            )
+        # Snapshot the paths reset --hard can touch, so a partially hostile
+        # tree still leaves the operator with their own secrets/database.
+        runtime_backup = _snapshot_runtime_state()
         ok, out = _git("reset", "--hard", f"origin/{branch}", timeout=120)
         if not ok:
             raise RuntimeError(out)
         try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
-                capture_output=True, text=True, timeout=600,
-            )
+            # Hash-locked install (see install.sh). requirements.txt alone pins
+            # only the direct dependencies: pip would resolve a different
+            # TRANSITIVE graph on every update and execute whatever the index
+            # served that day, as the service user that owns secret.key and the
+            # database. --require-hashes makes any substituted artifact a hard
+            # failure instead of a silent install.
+            lock = BASE_DIR / "requirements.lock"
+            req = BASE_DIR / "requirements.txt"
+            cmd = [sys.executable, "-m", "pip", "install", "-q"]
+            if lock.is_file():
+                cmd += ["--require-hashes", "--no-deps", "-r", str(lock)]
+            else:
+                log.warning("requirements.lock missing - falling back to the unlocked requirements.txt")
+                cmd += ["-r", str(req)]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
         except subprocess.TimeoutExpired:
             raise RuntimeError("pip install timed out")
         except OSError as exc:
@@ -3196,7 +3628,7 @@ def _do_update(admin_name: str, ip: str) -> None:
 
 
 @app.post("/api/update/apply")
-def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = Depends(require_admin)):
+def api_update_apply(data: UpdateApplyIn, request: Request, admin: Admin = Depends(require_admin)):
     ip = client_ip(request)
     reason = _update_allowed()
     if reason:
@@ -3206,13 +3638,23 @@ def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = De
     if not verify_password(data.password_confirm, admin.password_hash):
         with db.s() as s:
             audit(s, "UPDATE_FAIL", f"wrong confirm password by {admin.username}", ip, ok=False)
-            s.commit()
+            _commit(s)
         raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     if not shutil.which("git"):
         raise HTTPException(status_code=400, detail="git is not installed on this server")
     ok, out = _git("rev-parse", "--git-dir")
     if not ok:
         raise HTTPException(status_code=400, detail="Panel directory is not a git checkout")
+    # Bind the install to the commit the operator actually reviewed. Without
+    # this the panel asked GitHub for "whatever main is now" at apply time: an
+    # upstream attacker (or an ordinary release pushed between the status page
+    # and the click) got their commit installed without anyone seeing it.
+    expected = (data.expected_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", expected):
+        raise HTTPException(
+            status_code=422,
+            detail="expected_sha is required: send the 40-char commit the Update card showed",
+        )
     # Pre-flight: under ProtectSystem=strict an outdated narrow unit makes
     # $TARGET/.git read-only → git reset fails mid-apply. Refuse early with
     # an actionable message instead of a half-applied update.
@@ -3238,7 +3680,8 @@ def api_update_apply(data: RestoreConfirmIn, request: Request, admin: Admin = De
         _update_lock.release()
         raise
     try:
-        threading.Thread(target=_do_update, args=(admin.username, ip), daemon=True).start()
+        threading.Thread(target=_do_update, args=(admin.username, ip, expected),
+                         daemon=True).start()
     except Exception:
         _update_lock.release()
         raise HTTPException(status_code=500, detail="Could not start update worker")
@@ -3808,6 +4251,12 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             # REALITY public key whose private half cannot be decrypted (or a
             # Telegram chat id whose bot token could not be) produced a panel
             # whose links/notification channel silently cannot work.
+            # Hard cap on the key count: the live settings table has well under
+            # 100 keys, and a 50k-key dict otherwise ran the whole per-key
+            # validator chain (str() + regex + int()) inside one request.
+            if len(data.settings) > 500:
+                data.settings = dict(list(data.settings.items())[:500])
+                skipped += len(data.settings)
             _raw_settings = {str(k): v for k, v in data.settings.items()}
             _reality_priv_ok = not (
                 str(_raw_settings.get("reality_priv_enc") or "")
@@ -3818,7 +4267,22 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 and not decrypt_text(str(_raw_settings["tg_bot_token"]))
             )
             for k, v in data.settings.items():
-                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in AI_BACKUP_KEYS and k not in {"reality_priv_enc", "wg_self_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}:
+                if k not in SRV_KEYS and k not in TUNNEL_KEYS and k not in APPEARANCE_KEYS and k not in AI_BACKUP_KEYS and k not in {"reality_priv_enc", "porn_block_enabled", "tg_bot_token", "tg_chat_id"}:
+                    # wg_self_priv_enc is deliberately NOT here: the panel
+                    # never reads or writes it, so accepting it only let a
+                    # crafted backup plant an arbitrary orphan value in the
+                    # settings table forever.
+                    continue
+                if k in RESTORE_ORIGIN_KEYS:
+                    # The origin keys decide where EVERY customer's
+                    # subscription link, QR code and one-tap import points.
+                    # A crafted backup could set public_url/domain to
+                    # https://attacker.example: the customer then hands their
+                    # own bearer token to the attacker on the next scan, with
+                    # no error anywhere. An unsigned file does not get to
+                    # repoint a deployment's public identity - that is an
+                    # explicit operator action in Settings after a migration.
+                    skipped += 1
                     continue
                 sval = str(v)
                 if len(sval) > 500:
@@ -4154,77 +4618,26 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     skipped += 1
                     continue
         if data.api_tokens is not None:
-            # The backup's token set is authoritative: keeping the target's
-            # rows meant a token revoked *after* the backup came back to life
-            # on restore (same SHA-256 row re-inserted), and an empty list
-            # silently left every local token active.
-            for old_tok in s.scalars(select(ApiToken)).all():
-                s.delete(old_tok)
-            for rt in data.api_tokens:
-                try:
-                    if not isinstance(rt, dict):
-                        skipped += 1
-                        continue
-                    tname = str(rt.get("name", "")).strip()[:40]
-                    tsha = str(rt.get("token_sha", "")).strip().lower()
-                    if not tname or not re.fullmatch(r"[a-zA-Z0-9 _\-]+", tname):
-                        skipped += 1
-                        continue
-                    if not re.fullmatch(r"[a-f0-9]{64}", tsha):
-                        skipped += 1
-                        continue
-                    if s.scalar(select(ApiToken).where(
-                        (ApiToken.name == tname) | (ApiToken.token_sha == tsha)
-                    )):
-                        skipped += 1
-                        continue
-                    # A crafted prefix used to show an unrelated string in the
-                    # token list; anything unexpected falls back to the hash.
-                    prefix = str(rt.get("prefix", ""))[:12]
-                    if not re.fullmatch(r"[A-Za-z0-9_-]{4,12}", prefix):
-                        prefix = tsha[:12]
-                    created = _rusdt(rt.get("created_at")) or now
-                    last_used = _rusdt(rt.get("last_used_at"))
-                    tscopes = str(rt.get("scopes", "full") or "full").strip().lower()
-                    if tscopes not in ("full", "bot"):
-                        # Fail closed like _token_scope_allowed (unknown scope
-                        # defaults to 403): never restore as full.
-                        skipped += 1
-                        continue
-                    s.add(ApiToken(
-                        name=tname,
-                        prefix=prefix,
-                        token_sha=tsha,
-                        admin_id=admin.id,
-                        scopes=tscopes,
-                        created_at=created,
-                        last_used_at=last_used,
-                    ))
-                    restored_tokens += 1
-                except (TypeError, ValueError, AttributeError):
-                    skipped += 1
-                    continue
+            # CREDENTIALS ARE NOT RESTORABLE DATA.
+            #
+            # A backup is a file the operator may have received by email, cloud
+            # or from a "support" contact, and it is pasted into the panel
+            # without a signature. Importing `api_tokens` meant a crafted file
+            # could carry `token_sha = sha256("x")` with scope "full": after the
+            # operator typed their current password, `Authorization: Bearer x`
+            # was a working admin token - a backdoor delivered as a backup.
+            # Tokens are cheap to re-create, so the local set is kept as-is and
+            # the file's token section is reported, never activated.
+            skipped += len(data.api_tokens)
+            restored_tokens = 0
         if data.admins:
-            for ra in data.admins:
-                # scrypt-hardening: reject weak/forged hashes (low-cost
-                # scrypt or non-scrypt strings). A crafted backup must not
-                # plant a brute-forceable admin or lock the account.
-                if not _is_strong_scrypt_hash(ra.password_hash):
-                    skipped += 1
-                    continue
-                existing = s.scalar(select(Admin).where(Admin.username == ra.username.lower()))
-                if existing:
-                    existing.password_hash = ra.password_hash
-                    existing.token_version += 1
-                else:
-                    s.add(
-                        Admin(
-                            username=ra.username.lower(),
-                            password_hash=ra.password_hash,
-                            token_version=1,
-                        )
-                    )
-                restored_admins += 1
+            # Same reason, higher stakes: an `admins` row carries a password
+            # HASH, i.e. a credential the file's author chose. Restoring it
+            # either changed the operator's password to one they do not know,
+            # or created a second admin nobody sees in the login form. Admin
+            # credentials are never imported; the operator keeps their own.
+            skipped += len(data.admins)
+            restored_admins = 0
         current = s.get(Admin, admin.id)
         current.token_version += 1
         fresh_version = current.token_version
@@ -4250,6 +4663,12 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             "restored_inbounds": restored_ibs,
             "restored_tunnels": restored_tnodes,
             "tunnel_note": "Tunnel tokens are never restored: fresh tokens were minted, re-download each guide and update both servers" if restored_tnodes else "",
+            "credentials_note": (
+                "Admin passwords and API tokens in the file were NOT imported "
+                "(a backup is unsigned, so its credentials are untrusted). "
+                "Your current password and tokens still work; re-create any "
+                "bot/integration tokens the restored customers need."
+            ),
         }
     )
     set_session_cookie(response, request, admin.id, fresh_version)
@@ -4729,7 +5148,7 @@ def api_create_user(data: UserCreateIn, request: Request, admin: Admin = Depends
             flags += " starts-on-first-use"
         if device_limit:
             flags += f" max-{device_limit}-dev"
-        audit(s, "USER_CREATE", f"{data.username}{flags} by {admin.username}", client_ip(request))
+        audit(s, "USER_CREATE", f"{data.username}{flags} by {actor(admin, request)}", client_ip(request))
         out = user.to_dict()
         try:
             _commit(s)
@@ -4873,6 +5292,11 @@ def _api_delete_user_impl(user_id: int, request: Request, admin: Admin):
 
 @app.post("/api/users/{user_id}/reset-token")
 def api_reset_token(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
+    # Bot-reachable and destructive (the customer's working link dies), so it
+    # shares the reset budget: a leaked bot token cannot rotate every user.
+    caller = f"reset|{getattr(request.state, 'token_id', None) or admin.id}"
+    if not reset_limiter.hit(caller):
+        raise HTTPException(status_code=429, detail="Too many resets, wait a minute")
     with _user_stripe(user_id):
         return _api_reset_token_impl(user_id, request, admin)
 
@@ -4889,7 +5313,7 @@ def _api_reset_token_impl(user_id: int, request: Request, admin: Admin):
             # instead of an unhandled 500.
             log.warning("Token reset refused (bad protocols=%s) id=%s", proto_list, user_id)
             raise HTTPException(status_code=422, detail="User has unknown protocols; delete and recreate it")
-        audit(s, "TOKEN_RESET", f"{user.username} by {admin.username}", client_ip(request))
+        audit(s, "TOKEN_RESET", f"{user.username} by {actor(admin, request)}", client_ip(request))
         _commit(s, missing="User not found")
         out = user.to_dict()
     log.info("Token+secrets reset id=%s by %s", user_id, admin.username)
@@ -4899,6 +5323,9 @@ def _api_reset_token_impl(user_id: int, request: Request, admin: Admin):
 @app.post("/api/users/{user_id}/reset-usage")
 def api_reset_usage(user_id: int, request: Request, admin: Admin = Depends(require_admin)):
     """Dedicated reset endpoint for developers: zeroes used traffic."""
+    caller = f"reset|{getattr(request.state, 'token_id', None) or admin.id}"
+    if not reset_limiter.hit(caller):
+        raise HTTPException(status_code=429, detail="Too many resets, wait a minute")
     with _user_stripe(user_id):
         return _api_reset_usage_impl(user_id, request, admin)
 
@@ -4907,7 +5334,7 @@ def _api_reset_usage_impl(user_id: int, request: Request, admin: Admin):
     with db.s() as s:
         user = _get_user_or_404(s, user_id)
         user.used_gb = 0.0
-        audit(s, "USAGE_RESET", f"{user.username} by {admin.username}", client_ip(request))
+        audit(s, "USAGE_RESET", f"{user.username} by {actor(admin, request)}", client_ip(request))
         _commit(s, missing="User not found")
         out = user.to_dict()
     log.info("Usage reset id=%s by %s", user_id, admin.username)
@@ -4979,9 +5406,17 @@ def api_reset_user(
     One call for renew/top-up flows: {"reset_usage": true} only clears the
     meter, {"reset_token": true} additionally kills the old subscription
     link and issues fresh secrets. At least one flag must be true.
+
+    Reachable with a bot token and destructive for the customer (a rotated
+    token kills their working link), so it gets its own budget per caller: a
+    leaked bot token must not be able to walk the user list resetting
+    everyone, and every reset is a fresh audit row that prunes the log.
     """
     if not data.reset_usage and not data.reset_token:
         raise HTTPException(status_code=400, detail="Nothing to reset: enable reset_usage and/or reset_token")
+    caller = f"reset|{getattr(request.state, 'token_id', None) or admin.id}"
+    if not reset_limiter.hit(caller):
+        raise HTTPException(status_code=429, detail="Too many resets, wait a minute")
     with _user_stripe(user_id):
         return _api_reset_user_impl(user_id, data, request, admin)
 
@@ -5012,12 +5447,12 @@ def _api_reset_user_impl(
         audit(
             s,
             "USER_RESET",
-            f"{user.username} ({', '.join(changes)}) by {admin.username}",
+            f"{user.username} ({', '.join(changes)}) by {actor(admin, request)}",
             client_ip(request),
         )
         _commit(s, missing="User not found")
         out = user.to_dict()
-    log.info("User reset id=%s (%s) by %s", user_id, ",".join(changes), admin.username)
+    log.info("User reset id=%s (%s) by %s", user_id, ",".join(changes), actor(admin, request))
     return out
 
 
@@ -5178,7 +5613,6 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     base = public_base_url(request)
     sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
     sub_url = f"{base}{sub_path}/{udict['token']}"
-    groups_raw = protocols.user_links(udict, srv, inbounds)
     vol = float(udict.get("volume_gb") or 0)
     used = float(udict.get("used_gb") or 0)
     pct = int(min(100, used / vol * 100)) if vol > 0 else 0
@@ -5209,6 +5643,21 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         status_label, status_cls = W("active"), "ok"
         days_label = W("days_left").format(n=left) if exp else ""
         expires_label = _sub_expires(lang, exp) if exp else W("no_expiry")
+    # A browser (not a VPN client) gets the status page even when the account
+    # is expired or out of volume - that is the whole point of it. It must
+    # NOT also get live credentials: rendering the protocol links, the QR and
+    # the file configs there meant a customer could keep using the service
+    # forever by simply opening the link in a browser instead of an app.
+    # The machine formats below are already hard-404 for those accounts.
+    live = (
+        bool(udict.get("is_active"))
+        and not udict.get("pending_start")
+        and exp is not None
+        and exp > now
+        and vol > 0
+        and used + 1e-9 < vol
+    )
+    groups_raw = protocols.user_links(udict, srv, inbounds) if live else {}
     enc = urlquote(sub_url, safe="")
     app = load_appearance()
     last_at_raw = udict.get("last_fetch_at")
@@ -5234,7 +5683,10 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
             last_seen_label = W("d_ago").format(n=secs // 86400)
     return {
         "username": udict.get("username", ""),
-        "note": udict.get("note") or "",
+        # The seller's internal note (payment refs, ticket IDs, "telegram:123")
+        # is NOT shown here: this page is opened by the customer, and the note
+        # is operator workspace, not customer copy. It stays in the panel.
+        "note": "",
         "brand_name": app.get("brand_name") or "ZEFIRA",
         "dash_note": app.get("dash_note") or "",
         "lang": lang,
@@ -5250,9 +5702,13 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
         "last_seen_label": last_seen_label,
         "last_seen_ip": udict.get("last_fetch_ip") or "",
         "proto_labels": list(groups_raw.keys()),
-        "sub_url": sub_url,
-        "clash_url": sub_url + "?format=clash",
-        "qr_b64": protocols.qr_svg_b64(sub_url),
+        # Status-only page: the link/QR/config sections stay empty so an
+        # expired or out-of-volume customer cannot keep using the service by
+        # switching User-Agent. The template hides those cards when empty.
+        "live": live,
+        "sub_url": sub_url if live else "",
+        "clash_url": (sub_url + "?format=clash") if live else "",
+        "qr_b64": protocols.qr_svg_b64(sub_url) if live else "",
         "groups": [
             {"label": label, "links": v["links"], "config": v["config"]}
             for label, v in groups_raw.items()
@@ -5266,6 +5722,27 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
 
 @app.get("/sub/{token}")
 def subscription(token: str, request: Request):
+    ip = client_ip(request)
+    if not sub_limiter.hit(f"sub|{ip}"):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    if not TOKEN_RE.fullmatch(token or ""):
+        raise HTTPException(status_code=404, detail="Not Found")
+    # The per-IP budget above is trivially spread across source addresses, and
+    # this endpoint is bearer-authenticated: a leaked subscription token could
+    # be replayed from anywhere to burn CPU on QR/Clash/link rendering. Add a
+    # per-token budget and a global concurrency cap so N tokens cannot occupy
+    # every worker thread at once.
+    if not sub_token_limiter.hit(f"subt|{token[:16]}"):
+        raise HTTPException(status_code=429, detail="Too many requests")
+    if not _sub_render_slots.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="Busy, retry shortly")
+    try:
+        return _subscription_inner(token, request)
+    finally:
+        _sub_render_slots.release()
+
+
+def _subscription_inner(token: str, request: Request):
     ip = client_ip(request)
     if not sub_limiter.hit(f"sub|{ip}"):
         raise HTTPException(status_code=429, detail="Too many requests")

@@ -2,10 +2,11 @@
 
 Zefira takes security seriously: scrypt password hashing, HttpOnly
 SameSite cookies, rate-limited login, CSRF + CSP headers, audit logging, and
-four test suites that run against a live panel: `security_test.py` (119
-penetration/abuse checks), `feature_test.py` (177 feature checks),
-`functional_test.py` (60 end-to-end checks) and `attack_test.py` (80 live
-adversarial probes).
+six test suites that run against a live panel: `security_test.py` (120
+penetration/abuse checks), `feature_test.py` (178 feature checks),
+`functional_test.py` (60 end-to-end checks), `attack_test.py` (live
+adversarial probes), `attack_quota_test.py` (46 quota/schema boundaries) and
+`attack_paths_test.py` (93 operator-path checks).
 
 ## What is encrypted, and what is not
 
@@ -47,6 +48,23 @@ Please include:
 - Never share backup JSON files: they contain password hashes and secrets.
 - Back up `instance/secret.key` offline — without it, encrypted data
   (tunnel tokens, REALITY keys, Telegram/AI credentials) is unrecoverable.
+  If the file exists but is shorter than 32 characters the panel now refuses
+  to start instead of silently generating a new one, because that would
+  invalidate every session and make every encrypted setting undecryptable.
+- **A backup file is untrusted input.** Restoring one deliberately does NOT
+  import admin passwords, API tokens, or the public origin
+  (`public_url` / `domain`): a crafted file could otherwise install a
+  credential its author knows, or repoint every customer's subscription link
+  and QR at an attacker's host. Change those in Settings after a migration,
+  and re-create any integration tokens the restored customers need.
+- Dependencies install from `requirements.lock` (every artifact pinned with
+  its sha256) via `pip install --require-hashes --no-deps`, never from a
+  floating resolution of `requirements.txt`.
+- The in-panel updater refuses any incoming commit that adds runtime state
+  (`instance/`, `.env`, database/key files), binds the install to the exact
+  commit the Update card showed, requires a GitHub-verified signature by
+  default, and will not run while the systemd unit is unsafe (running as root
+  or carrying a privileged `ExecStartPre=+`).
 - One panel = one reseller trust domain: any `bot`-scoped API token can
   list all users and renew anyone's plan (by design for a single
   reseller). Never give bot tokens to two independent resellers on the

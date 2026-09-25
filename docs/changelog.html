@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=34">
+<link rel="stylesheet" href="assets/style.css?v=35">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,18 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1140"><span>v1.14.0</span> <span data-i18n="chg.v1140">— Security audit: what an attacker can reach with a backup, a browser or a bad update</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1140a_lead">A backup file is no longer a backdoor:</b> <span data-i18n="chg.v1140a">admin passwords and API tokens in a backup are <b>never</b> imported (a crafted file could ship a known token hash with full scope, or an admin row whose password the file's author knew), and <code>public_url</code>/<code>domain</code> stay yours too — they decide where every customer's link and QR point. One malformed admin row no longer aborts the whole file either.</span></li>
+  <li><b data-i18n="chg.v1140b_lead">An expired account cannot keep using the service:</b> <span data-i18n="chg.v1140b">opening the subscription link in a <i>browser</i> used to bypass the expiry and quota gates and hand back live credentials, QR and configs. The status page is now status-only, and the seller's internal note (payment refs, ticket ids) is no longer shown to the customer at all.</span></li>
+  <li><b data-i18n="chg.v1140c_lead">OpenVPN directive injection closed:</b> <span data-i18n="chg.v1140c">a crafted backup could append <code>up &lt;script&gt;</code> / a second <code>&lt;ca&gt;</code> / a rogue <code>remote</code> after the certificate block, and those lines were written verbatim into every generated <code>.ovpn</code> — command execution as root on the customer's machine, or a full MITM of the tunnel. PEM blocks must now be <i>exactly</i> one block.</span></li>
+  <li><b data-i18n="chg.v1140d_lead">The update path is fail-closed:</b> <span data-i18n="chg.v1140d">an incoming commit that adds <code>instance/secret.key</code>, the database or <code>.env</code> is refused (it could have replaced your master key and forged admin sessions), the install is bound to the exact commit the Update card showed, a root or privileged-<code>ExecStartPre</code> systemd unit now blocks the update instead of only warning, signed commits are required by default, and dependencies install from a hash-locked set instead of a floating resolution.</span></li>
+  <li><b data-i18n="chg.v1140e_lead">Nobody can lock you out remotely:</b> <span data-i18n="chg.v1140e">the account-wide login budget used to return a hard 429 for everyone (a known admin username + 13 IPs was enough). It is now a progressive backoff that keeps the correct password working, rate-limit counters near saturation are no longer evictable by a key flood, request bodies are bounded before authentication, and the destructive bot-scope routes got their own budget.</span></li>
+  <li><b data-i18n="chg.v1140f_lead">Installer and secrets hardened:</b> <span data-i18n="chg.v1140f">no <code>curl | sudo bash</code> one-liner, the source comes from the installer's own directory (not the working directory a service foothold can edit), a symlinked <code>.env</code> or <code>instance/</code> is refused instead of followed as root, a truncated <code>secret.key</code> fails closed instead of silently destroying every encrypted setting, the OpenVPN CA key is written 0600 atomically, and the first-run password is never printed to the journal.</span></li>
+  <li><b data-i18n="chg.v1140g_lead">Smaller fixes:</b> <span data-i18n="chg.v1140g">audit rows name the API token that acted (incident response), the reseller bots in <code>examples/</code> refuse group chats so a subscription token can never be posted where others can read it, the BackPack guide stops on a failed hash check instead of continuing to <code>sudo bash</code>, and restore settings are capped and validated per row.</span></li>
+  <li><b data-i18n="chg.v1140h_lead">Tests + docs:</b> <span data-i18n="chg.v1140h">new regression probes for the backup backdoor, the origin repoint, expired-account credentials, OpenVPN injection and the reset budget; the API table now documents the real <code>bot</code> scope and exactly what a restore refuses. All six suites green.</span></li>
+</ul>
 
 <h2 id="v1139"><span>v1.13.9</span> <span data-i18n="chg.v1139">— Third bug hunt: restore, configs and the panel UI</span></h2>
 <ul>
@@ -260,8 +272,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=34"></script>
-<script src="assets/docs.js?v=34"></script>
-<script src="assets/support-ai.js?v=32"></script>
+<script src="assets/i18n.js?v=35"></script>
+<script src="assets/docs.js?v=35"></script>
+<script src="assets/support-ai.js?v=35"></script>
 </body>
 </html>

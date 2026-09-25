@@ -43,6 +43,9 @@ async function api(method, path, body) {
       method,
       headers: HEADERS,
       body: body ? JSON.stringify(body) : undefined,
+      // A hung panel must not leave the promise pending forever: every
+      // in-flight request holds a socket, and a shop bot sees constant traffic.
+      signal: AbortSignal.timeout(15000),
     });
     let data = {};
     try {
@@ -55,6 +58,13 @@ async function api(method, path, body) {
     return [0, { detail: `panel unreachable: ${err.message}` }];
   }
 }
+
+// Subscription links are bearer credentials. If this bot sits in a group,
+// /buy and /my would post the customer's token where every member (and every
+// forwarded message) can read it, so everything is private-chat only.
+const notPrivate = (chat) => !chat || chat.type !== "private";
+const PRIVATE_ONLY =
+  "For your privacy this shop only works in a private chat with me — open a DM with this bot and try again.";
 
 const uname = (tgId) => `tg${tgId}`;
 const panelMsg = (st) => {
@@ -71,10 +81,12 @@ const md = (s) =>
 const bot = new TelegramBot(TG_TOKEN, { polling: true });
 
 bot.onText(/^\/start$/, (msg) => {
+  if (notPrivate(msg.chat)) return bot.sendMessage(msg.chat.id, PRIVATE_ONLY);
   bot.sendMessage(msg.chat.id, "Welcome to Zefira VPN shop!\nUse /buy to get an account, /my to see yours.");
 });
 
 bot.onText(/^\/buy$/, (msg) => {
+  if (notPrivate(msg.chat)) return bot.sendMessage(msg.chat.id, PRIVATE_ONLY);
   bot.sendMessage(msg.chat.id, "Pick a plan:", {
     reply_markup: {
       inline_keyboard: PLANS.map((p, i) => [{ text: p.label, callback_data: `buy:${i}` }]),
@@ -83,6 +95,7 @@ bot.onText(/^\/buy$/, (msg) => {
 });
 
 bot.onText(/^\/my$/, async (msg) => {
+  if (notPrivate(msg.chat)) return bot.sendMessage(msg.chat.id, PRIVATE_ONLY);
   const name = uname(msg.from.id);
   const [st, data] = await api("GET", `/api/users?q=${encodeURIComponent(name)}`);
   if (st !== 200) {
@@ -111,6 +124,10 @@ bot.on("callback_query", async (q) => {
     return;
   }
   const plan = PLANS[Number(m[1])];
+  if (notPrivate(q.message && q.message.chat)) {
+    await bot.answerCallbackQuery(q.id, { text: PRIVATE_ONLY }).catch(() => {});
+    return;
+  }
   const name = uname(q.from.id);
   await bot.answerCallbackQuery(q.id);
   const [st, data] = await api("POST", "/api/users", {

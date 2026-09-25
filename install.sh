@@ -1,8 +1,23 @@
 #!/usr/bin/env bash
 # ============================================================
 #  ZEFIRA PANEL - Interactive Installer
-#  One-line:  bash <(curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh)
-#  Local:     sudo bash install.sh
+#
+#  Recommended (review before you run it as root):
+#     curl -fsSL -o /tmp/zefira-install.sh \
+#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.13.9/install.sh
+#     less /tmp/zefira-install.sh
+#     sudo bash /tmp/zefira-install.sh
+#
+#  There is deliberately NO `curl | sudo bash` one-liner: piping a moving
+#  branch straight into a root shell means whatever upstream serves at that
+#  second runs as root unreviewed. Pin a tag (v1.13.9), read the file, then
+#  run that exact copy.
+#
+#  Source selection: the installer's OWN directory is used when it sits next
+#  to main.py + requirements.txt; otherwise it clones ZEFIRA_INSTALL_REF
+#  (defaults to the `main` branch - set it to a tag or commit SHA for a
+#  reproducible install).
+#
 #  Non-interactive (pipe): uses defaults, no prompts
 #  Uninstall: sudo bash install.sh --uninstall
 # ============================================================
@@ -299,18 +314,33 @@ copy_tree() {
         --exclude='./.venv' --exclude='./instance' --exclude='./.git' \
         --exclude='./.env' --exclude='./__pycache__' . ) | ( cd "$dst" && tar -xf - )
 }
-if [[ -f "main.py" && -f "requirements.txt" ]]; then
-    SRC="$(pwd)"
+# Source discovery: anchor to the SCRIPT'S OWN directory, never to $PWD.
+# Using $(pwd) meant that any directory containing main.py + requirements.txt
+# became the root installer's input - including the service-writable
+# /opt/zefira itself. A foothold as the `zefira` user could edit that tree and
+# wait for the next `sudo bash install.sh` to run its code as root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/requirements.txt" ]]; then
+    SRC="$SCRIPT_DIR"
     # Re-running from inside the install dir: copying a tree onto itself is a
     # no-op at best and an infinite read at worst. Nothing to do.
-    if [[ "$(cd "$SRC" && pwd -P)" != "$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")" ]]; then
+    if [[ "$SRC" != "$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")" ]]; then
         copy_tree "$SRC" "$TARGET"
     else
         echo "[*] Already running from $TARGET - keeping the existing tree"
     fi
 else
+    # No source next to the installer: clone the pinned tag/commit, never a
+    # moving branch. A floating `main` means whoever controls upstream (or a
+    # MITM on the fetch) chooses code that runs as root here.
+    REF="${ZEFIRA_INSTALL_REF:-$REPO_URL}"
     rm -rf "$TARGET.tmp"
-    git clone --depth 1 "$REPO_URL" "$TARGET.tmp" || { rm -rf "$TARGET.tmp"; echo "[!] clone failed"; exit 1; }
+    git clone --depth 1 --branch "${ZEFIRA_INSTALL_REF:-main}" "$REPO_URL" "$TARGET.tmp" \
+        || { rm -rf "$TARGET.tmp"; echo "[!] clone failed (ref: ${ZEFIRA_INSTALL_REF:-main})"; exit 1; }
+    # Pin the commit that was actually checked out so a re-run is reproducible.
+    if CLONE_SHA="$(cd "$TARGET.tmp" && git rev-parse HEAD 2>/dev/null)"; then
+        echo "[*] Installing commit ${CLONE_SHA:0:12}"
+    fi
     copy_tree "$TARGET.tmp" "$TARGET"
     rm -rf "$TARGET.tmp"
 fi
@@ -319,22 +349,47 @@ cd "$TARGET"
 # ---------- Python env ----------
 echo "==> [3/6] Python environment..."
 python3 -m venv .venv
-".venv/bin/pip" install --upgrade pip -q
-".venv/bin/pip" install -r requirements.txt -q
-if [[ "$DB_CHOICE" == "2" || "$DB_CHOICE" == "3" ]]; then ".venv/bin/pip" install -q pymysql 2>/dev/null || true; fi
-if [[ "$DB_CHOICE" == "4" ]]; then ".venv/bin/pip" install -q psycopg2-binary 2>/dev/null || true; fi
+# Install from the hash-locked set, not from requirements.txt. Exact
+# top-level pins never pinned the TRANSITIVE graph: `uvicorn[standard]` alone
+# drags in a dozen version ranges, so two installs of the same file could
+# execute different code - and pip runs whatever it downloads. --require-hashes
+# aborts on any artifact that is not the exact one we hashed.
+LOCKFILE="$TARGET/requirements.lock"
+if [[ -f "$LOCKFILE" ]]; then
+    echo "[*] Installing from the hash-locked requirements.lock"
+    ".venv/bin/pip" install --require-hashes --no-deps -r "$LOCKFILE" -q
+else
+    echo "[!] requirements.lock missing - refusing an unlocked install"
+    echo "    (regenerate with: python3 tools_lock.py)"
+    exit 1
+fi
 
 # ---------- .env ----------
 echo "==> [4/6] Writing .env ..."
 ENV_FILE="$TARGET/.env"
+# $TARGET is owned by the service user (the updater needs write access), so a
+# foothold as `zefira` can plant a symlink at .env pointing at /etc/shadow (or
+# any root file) and wait for the next root install. Write through a fresh
+# temp file and rename over the path: rename(2) replaces the SYMLINK itself,
+# never its target.
+if [[ -L "$ENV_FILE" ]]; then
+    echo "[!] $ENV_FILE is a symlink - refusing to write through it"
+    echo "    (remove it first if this is expected: rm -f $ENV_FILE)"
+    exit 1
+fi
 # Re-run safety: never silently destroy the operator's env (secrets, custom
 # DATABASE_URL). The panel scrubs the admin password on first boot, so a
 # backup is the only surviving copy of any hand-set values.
 if [[ -f "$ENV_FILE" ]]; then
     cp -a "$ENV_FILE" "$ENV_FILE.bak-$(date +%Y%m%d%H%M%S)"
+    # cp -a preserves the source mode: a legacy 0644 .env would leave a
+    # world-readable copy of the admin password + DB credentials behind.
+    chmod 600 "$ENV_FILE.bak-"* 2>/dev/null || true
     echo "[*] Existing .env backed up to $ENV_FILE.bak-<timestamp>"
     if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(gen_pass); fi
 fi
+ENV_TMP="$(mktemp "$TARGET/.env.XXXXXX")"
+chmod 600 "$ENV_TMP"
 if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16); fi
 {
     echo "ZEFIRA_ADMIN_USERNAME=$(env_escape "$ADMIN_USER")"
@@ -354,8 +409,9 @@ if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base6
     [[ -n "$TG_CHAT" ]] && echo "TG_CHAT_ID=$(env_escape "$TG_CHAT")"
     echo "# NOTE: ZEFIRA_ADMIN_PASSWORD is one-time: the panel scrubs it from"
     echo "# this file on first boot (lifespan _scrub_env_password). Keep 0600."
-} > "$ENV_FILE"
-chmod 600 "$ENV_FILE"
+} > "$ENV_TMP"
+chmod 600 "$ENV_TMP"
+mv -f "$ENV_TMP" "$ENV_FILE"
 
 # ---------- unprivileged service user ----------
 # The panel never runs as root: a compromised GitHub upstream (via
@@ -369,6 +425,14 @@ chown -R zefira:zefira "$TARGET"
 # ProtectSystem=strict bind-mounts ReadWritePaths when the namespace is
 # set up — BEFORE the app (which creates instance/ itself) ever runs.
 # A missing dir = 226/NAMESPACE and a dead service, so create it here.
+# Same symlink trap for the secret directory: a service-user foothold can
+# replace instance/ with a symlink to /etc, and then `chown`/`chmod` below run
+# as root against the REFERENT. Refuse instead of escalating.
+if [[ -L "$TARGET/instance" ]]; then
+    echo "[!] $TARGET/instance is a symlink - refusing to install over it"
+    echo "    (a real instance dir is a directory owned by 'zefira', mode 700)"
+    exit 1
+fi
 mkdir -p "$TARGET/instance" || { echo "[!] cannot create $TARGET/instance"; exit 1; }
 chown zefira:zefira "$TARGET/instance"
 chmod 700 "$TARGET/instance"

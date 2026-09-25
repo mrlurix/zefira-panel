@@ -14,21 +14,53 @@ except OSError:
 def _load_or_create_secret() -> str:
     path = INSTANCE_DIR / "secret.key"
     if path.exists():
+        # FAIL CLOSED on an existing but unusable key. Regenerating silently
+        # signed every session out and made every Fernet blob (REALITY key,
+        # Telegram token, AI key) permanently undecryptable - with no message
+        # explaining why. A wrong key is an operator decision, not ours.
         try:
             existing = path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise SystemExit(
+                f"Cannot read {path}: {exc}. Refusing to start: replacing the "
+                "master key would sign out every session and make every "
+                "encrypted setting undecryptable. Restore the file from a "
+                "backup, or delete it to intentionally start a fresh instance."
+            ) from exc
+        if len(existing) < 32:
+            raise SystemExit(
+                f"{path} is too short ({len(existing)} chars) to be a valid "
+                "master key. Refusing to start: generating a new one would "
+                "sign out every session and make every encrypted setting "
+                "undecryptable. Restore the file from a backup, or delete it "
+                "to intentionally start a fresh instance."
+            )
+        try:
+            st = os.stat(path)
+            # A world/group-readable master key lets any local user forge an
+            # admin session cookie, so tighten it on every start.
+            if st.st_mode & 0o077:
+                os.chmod(path, 0o600)
         except OSError:
-            existing = ""
-        # Refuse short/empty keys: HS256/Fernet with a guessable key would let
-        # anyone forge sessions or decrypt secrets (e.g. operator created an
-        # empty file by accident). Fall through and generate a real one.
-        if len(existing) >= 32:
-            return existing
+            pass
+        return existing
     key = secrets.token_hex(48)
-    path.write_text(key, encoding="utf-8")
+    # Create exclusively with the final mode: no window where the key is
+    # world-readable, and no chance of following a planted symlink.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        fd = os.open(str(path), flags, 0o600)
+    except FileExistsError:
+        # Another worker won the race; use its key.
+        return path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise SystemExit(f"Cannot create {path}: {exc}") from exc
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(key)
+        fh.flush()
+        os.fsync(fh.fileno())
     return key
 
 

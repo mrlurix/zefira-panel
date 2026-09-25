@@ -22,15 +22,22 @@ Built with FastAPI + SQLite. No Docker required, just Python.
 ### Install on a server
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh
-less install.sh          # read it: it runs as root
-sudo bash install.sh
+# Download into a private directory, read it, then run THAT copy as root.
+umask 077 && mkdir -p /tmp/zefira-inst
+curl -fsSL -o /tmp/zefira-inst/install.sh \
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.13.9/install.sh
+less /tmp/zefira-inst/install.sh
+sudo bash /tmp/zefira-inst/install.sh
 ```
 
-> Why not `sudo bash <(curl ...)`? Because piping a remote script straight into
-> a root shell means whatever is on the `main` branch at that moment runs as
-> root with no review step. Downloading first lets you read it, and pinning a
-> release tag (`.../v1.13.6/install.sh`) makes the install reproducible.
+> **There is no `sudo bash <(curl ...)` one-liner, on purpose.** Piping a
+> remote script into a root shell means whatever upstream serves at that
+> second runs as root with no review step. Two more reasons to download
+> first: the file lands in a private directory instead of a predictable path
+> a local user could swap between your `less` and your `sudo bash`, and
+> pinning the **release tag** makes the install reproducible — the installer
+> otherwise clones whatever `main` points at. Set `ZEFIRA_INSTALL_REF` to a
+> tag or commit SHA to pin the source as well.
 
 The script installs Python deps, creates a systemd service and stores your
 first-run credentials in `instance/first-run-credentials.txt` (mode 600) -
@@ -108,12 +115,12 @@ There are six test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
-python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # 119 abuse/defense checks
+python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # 120 abuse/defense checks
 python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   #  60 end-to-end flows
-python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 177 feature-coverage checks
-python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   #  99 live attack probes
+python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 178 feature-coverage checks
+python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   # 127 live attack probes
 python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS #  46 quota/schema boundary checks
-python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS #  63 operator-path checks
+python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS #  93 operator-path checks
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
@@ -131,8 +138,27 @@ blocked sites, the Clash YAML invariants, theme/appearance, audit/stats/system,
 the BackPack tunnel lifecycle, and a full backup/restore round-trip. All six
 restore the panel to its shipped defaults afterwards, so the suites are
 order-independent and can run against a live panel (or all six in one go with
-`python run_all_tests.py admin YOURPASS`). A green run prints `119/119`,
-`60/60`, `177/177`, `99/99`, `46/46` and `63/63` - if not, open an issue.
+`python run_all_tests.py admin YOURPASS`). A green run prints `120/120`,
+`60/60`, `178/178`, `127/127`, `46/46` and `93/93` - if not, open an issue.
+
+### Dependencies
+
+`requirements.txt` holds the human-maintained **direct** pins (what to upgrade
+on purpose). `requirements.lock` is the fully resolved, **hash-locked** set that
+`install.sh` and the in-panel updater actually install:
+
+```bash
+pip install --require-hashes --no-deps -r requirements.lock
+```
+
+Exact top-level pins never pinned the transitive graph - `uvicorn[standard]`
+alone drags in a dozen version ranges - so two installs of the same
+`requirements.txt` could execute different code. Regenerate the lock after
+editing `requirements.txt`:
+
+```bash
+python tools_lock.py
+```
 
 ### API
 

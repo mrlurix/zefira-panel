@@ -62,6 +62,10 @@ RESET_SQL = (
     "[c.execute('delete from '+t) for t in "
     "('vpn_users','inbounds','server_nodes','tunnel_nodes','user_templates',"
     "'api_tokens','blocked_sites')];"
+    # block_direct_ip must NEVER survive into a suite: with it on, the panel
+    # (correctly) refuses every request that arrives on 127.0.0.1, and the
+    # whole suite talks to 127.0.0.1.
+    "c.execute(\"update settings set value='0' where key='block_direct_ip'\");"
     "c.execute(\"update settings set value='' where key in "
     "('tg_bot_token','tg_chat_id','ai_api_key_enc')\");"
     "c.execute(\"update settings set value='0' where key='ai_enabled'\");"

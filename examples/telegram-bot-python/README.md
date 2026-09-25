@@ -12,6 +12,10 @@ python bot.py
 
 Commands: `/start` `/buy` (plan keyboard) `/my` (your link).
 
+**Private chat only.** Subscription links are bearer credentials, so the bot
+refuses to answer in groups or channels — otherwise a customer's link would be
+posted where every member (and any forwarded message) can read it.
+
 Edit `PLANS` / `PROTOS` at the top of `bot.py` to change what you sell.
 No payment step included — add yours where the user object is created
 (`on_buy`), e.g. check a database/Stars payment before calling the panel.

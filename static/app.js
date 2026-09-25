@@ -1676,6 +1676,10 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
 
 // ---- Panel update ----
 let updatePoll = null;
+// The exact upstream commit the operator is looking at. /api/update/apply
+// requires it, so a release pushed between the status page and the click is
+// refused instead of silently installed.
+let approvedUpdateSha = "";
 function renderChangelog(items, prefix) {
   const ul = $("#update-changelog");
   ul.textContent = "";
@@ -1760,6 +1764,9 @@ async function loadUpdate(announce, fresh) {
         sw.textContent = "";
       }
     }
+    // The server sends the full 40-char SHA as `latest_full` so the apply
+    // call can bind to exactly this commit.
+    if (st.latest_full) approvedUpdateSha = st.latest_full;
     if (announce) toast(t("msg.updateChecked"));
     return st;
   } catch (err) {
@@ -1774,7 +1781,17 @@ $("#update-now-btn").addEventListener("click", async () => {
   if (!pw) return;
   try {
     const before = await api("/api/update/status?fresh=1");
-    await api("/api/update/apply", { method: "POST", body: { password_confirm: pw } });
+    // Bind to the commit that was just reviewed: if upstream moved in between,
+    // the server refuses rather than installing something nobody saw.
+    const sha = before.latest_full || approvedUpdateSha || "";
+    if (!/^[0-9a-f]{40}$/.test(sha)) {
+      toast(t("msg.updateNoSha"), false);
+      return;
+    }
+    await api("/api/update/apply", {
+      method: "POST",
+      body: { password_confirm: pw, expected_sha: sha },
+    });
     toast(t("msg.updateStarted"));
     loadUpdate(false, true);
     let n = 0, inFlight = false, sawUpdating = false;
@@ -2145,6 +2162,14 @@ const restoreFile = $("#restore-file");
 restoreFile.addEventListener("change", () => {
   $("#restore-btn").disabled = !restoreFile.files.length;
 });
+function restoreNote(r) {
+  // The server reports what it deliberately did NOT import (admin passwords,
+  // API tokens, the public origin). Silently dropping that left operators
+  // wondering where their reseller tokens went after a migration.
+  if (r && r.credentials_note) toast(r.credentials_note, false);
+  if (r && r.tunnel_note) toast(r.tunnel_note);
+}
+
 $("#restore-btn").addEventListener("click", async () => {
   const file = restoreFile.files[0];
   if (!file) return;
@@ -2175,6 +2200,7 @@ $("#restore-btn").addEventListener("click", async () => {
         body: { password_confirm: pw, salt: parsed.salt, payload: parsed.payload, backup_password: pw }
       });
       toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
+      restoreNote(r);
       restoreFile.value = "";
       $("#restore-btn").disabled = true;
       reloadAfterRestore();
@@ -2189,6 +2215,7 @@ $("#restore-btn").addEventListener("click", async () => {
   try {
     const r = await api("/api/restore", { method: "POST", body: parsed });
     toast(t("msg.restored", {added: r.added_users, skipped: r.skipped}));
+    restoreNote(r);
     restoreFile.value = "";
     $("#restore-btn").disabled = true;
     reloadAfterRestore();

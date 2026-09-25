@@ -4,6 +4,7 @@ import io
 import json
 import re
 import secrets as pysecrets
+import threading
 import uuid as uuidlib
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -79,6 +80,29 @@ def _safe_filename(username: str) -> str:
     """Filenames reach Content-Disposition headers and zip entries: strip
     everything outside [A-Za-z0-9_-] (same idiom as _issue_client_cert)."""
     return re.sub(r"[^A-Za-z0-9_-]", "_", username or "")[:32] or "client"
+
+
+_PEM_BLOCK_RE = re.compile(
+    r"\A-----BEGIN (?P<label>[A-Z0-9 ]+)-----"
+    r"(?P<body>[A-Za-z0-9+/=\r\n]+?)"
+    r"-----END (?P=label)-----\Z"
+)
+
+
+def pem_block_is_exact(pem: str, label: str) -> bool:
+    """True only for a single, complete PEM block of exactly `label`.
+
+    The cryptography loaders are deliberately lenient: they parse the first
+    PEM object and ignore everything after it. That is fine for a file on
+    disk, wrong for a value that a backup file controls, because the ignored
+    tail is emitted verbatim into the generated config. Requiring the block to
+    BE the whole string closes that (and also rejects a second <ca>, a rogue
+    `remote`, or an `up` script).
+    """
+    if not isinstance(pem, str) or not pem or len(pem) > 8000:
+        return False
+    m = _PEM_BLOCK_RE.fullmatch(pem.strip())
+    return bool(m) and m.group("label") == label
 
 
 def _effective_host(secret: str, srv: dict) -> str:
@@ -253,7 +277,10 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     sni = _q(cdn or host, safe="")
     # Remark is exactly the username (plus inbound label when present) so
     # client apps show a clean, familiar name instead of a generated one.
-    name = username
+    # Percent-encoded: USERNAME_RE already forbids #/?/&, so this is a no-op
+    # today, but the fragment is the one unencoded interpolation left in the
+    # link and a legacy row must not be able to inject a second line.
+    name = _q(username, safe="")
     if protocol == "vless":
         return (
             f"vless://{secret}@{host}:{srv['sub_port']}?encryption=none&security=tls"
@@ -347,6 +374,12 @@ def _parse_l2tp_secret(blob: str) -> tuple:
 
 def _l2tp_config(u: dict, srv: dict, blob: str) -> str:
     password, psk = _parse_l2tp_secret(blob)
+    # Re-check the charset on the render path: these values are written into a
+    # line-oriented instructions file, so a secret carrying a newline (only
+    # reachable through a hand-edited row today) would append fake lines.
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", password or "") or \
+            not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", psk or ""):
+        raise ValueError("invalid l2tp secret charset")
     host = _effective_host(psk, srv)
     try:
         port = int(srv.get("l2tp_port", 1701))
@@ -373,7 +406,7 @@ def _l2tp_config(u: dict, srv: dict, blob: str) -> str:
 
 
 def _cisco_config(u: dict, srv: dict, password: str) -> str:
-    if not password or len(password) > 200:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,200}", password or ""):
         raise ValueError("invalid cisco secret")
     host = _effective_host(password, srv)
     try:
@@ -504,8 +537,12 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
         host_eff = _effective_host(sec, srv)
         n = f"Zefira-{u['username']}-SOCKS5"
         names.append(n)
+        try:
+            s5_port = int(srv.get("socks5_port", 1080))
+        except (TypeError, ValueError):
+            s5_port = 1080
         proxies.append({
-            "name": n, "type": "socks5", "server": host_eff, "port": int(srv.get("socks5_port", 1080)),
+            "name": n, "type": "socks5", "server": host_eff, "port": s5_port,
             "username": u["username"], "password": sec, "udp": True,
         })
 
@@ -611,40 +648,79 @@ def _wg_config(u: dict, srv: dict, secret: str) -> str:
     return "\n".join(lines)
 
 
-def _ensure_ca():
-    key = None
-    if CA_KEY_PATH.exists() and CA_CERT_PATH.exists():
-        key = serialization.load_pem_private_key(CA_KEY_PATH.read_bytes(), password=None)
-        cert = x509.load_pem_x509_certificate(CA_CERT_PATH.read_bytes())
-        return cert, key
-    key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Zefira-CA")])
-    now = datetime.now(timezone.utc)
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - timedelta(minutes=5))
-        .not_valid_after(now + timedelta(days=3650))
-        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
-        .sign(key, hashes.SHA256())
-    )
-    CA_KEY_PATH.write_bytes(key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    ))
-    CA_CERT_PATH.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-    try:
-        import os
+_CA_LOCK = threading.Lock()
 
-        os.chmod(CA_KEY_PATH, 0o600)
-        os.chmod(CA_CERT_PATH, 0o644)
+
+def _atomic_write(path, data: bytes, mode: int) -> None:
+    """Write bytes with the final mode from the start, atomically.
+
+    The CA private key used to be written with write_bytes() and chmod'ed
+    afterwards: under umask 022 there was a window where the unencrypted
+    CA key was world-readable, and a crash between the key and the cert write
+    left a half-CA that the next call silently REGENERATED - permanently
+    invalidating every .ovpn already handed out.
+    """
+    import os
+
+    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(str(tmp), str(path))
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    try:
+        os.chmod(path, mode)
     except OSError:
         pass
-    return cert, key
+
+
+def _ensure_ca():
+    with _CA_LOCK:
+        if CA_KEY_PATH.exists() and CA_CERT_PATH.exists():
+            key = serialization.load_pem_private_key(CA_KEY_PATH.read_bytes(), password=None)
+            cert = x509.load_pem_x509_certificate(CA_CERT_PATH.read_bytes())
+            return cert, key
+        if CA_KEY_PATH.exists() != CA_CERT_PATH.exists():
+            # Half a CA on disk. Regenerating would silently invalidate every
+            # certificate already issued with it, so refuse instead and make
+            # the operator look.
+            missing = CA_CERT_PATH if CA_KEY_PATH.exists() else CA_KEY_PATH
+            raise RuntimeError(
+                f"OpenVPN CA is incomplete ({missing.name} missing). "
+                "Restore both files or remove them together to mint a new CA."
+            )
+        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+        subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Zefira-CA")])
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=3650))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+        # Key first (0600 from creation), then the public cert: a reader can
+        # never observe a readable private key, and a crash between the two
+        # is now detected above instead of silently rotating the CA.
+        _atomic_write(CA_KEY_PATH, key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        ), 0o600)
+        _atomic_write(CA_CERT_PATH, cert.public_bytes(serialization.Encoding.PEM), 0o644)
+        return cert, key
 
 
 def _issue_client_cert(username: str):
@@ -680,8 +756,22 @@ def _ovpn_config(u: dict, srv: dict, blob: str) -> str:
         key_pem = blob.split(marker_k)[1].strip()
     except (IndexError, AttributeError):
         raise ValueError("invalid openvpn secret")
-    if "-----BEGIN CERTIFICATE-----" not in cert_pem or "-----BEGIN PRIVATE KEY-----" not in key_pem:
-        raise ValueError("invalid openvpn secret")
+    # Second gate, on the render path: the blob is interpolated into a config
+    # file, so anything other than exactly one PEM block per field is refused.
+    # Without this, a blob carrying `up <script>` / a second <ca> / a rogue
+    # `remote` after the key would be handed to the customer's client as
+    # directives - and OpenVPN 2.x runs `up` scripts as root.
+    if not pem_block_is_exact(cert_pem, "CERTIFICATE"):
+        raise ValueError("invalid openvpn certificate block")
+    if not pem_block_is_exact(key_pem, "PRIVATE KEY"):
+        raise ValueError("invalid openvpn key block")
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import serialization as _ser
+        x509.load_pem_x509_certificate(cert_pem.encode())
+        _ser.load_pem_private_key(key_pem.encode(), password=None)
+    except Exception as exc:
+        raise ValueError("invalid openvpn credential") from exc
     host = _effective_host(blob, srv)
     proto = srv.get("ovpn_proto", "udp")
     if proto not in ("udp", "tcp"):
@@ -1002,10 +1092,21 @@ def backpack_guide(node: dict, token: str) -> str:
 
 STEP 0 - Install BackPack {BACKPACK_VERSION} on BOTH servers (Iran + Kharej).
 NEVER pipe an unpinned URL to bash (upstream compromise = RCE as root).
-Download the pinned copy, verify its hash, then run it:
-    curl -fsSL -o /tmp/bp-install.sh https://raw.githubusercontent.com/AminMGMT/BackPack/{BACKPACK_PIN_COMMIT}/install.sh
-    echo "{BACKPACK_PIN_SHA256}  /tmp/bp-install.sh" | sha256sum -c -
-    sudo bash /tmp/bp-install.sh
+The block below is FAIL-CLOSED on purpose: if the download or the hash check
+fails, it stops instead of continuing to `sudo bash`. Copy it as ONE block
+into an interactive shell (not with `sh -c` on a single line, where a failure
+in the middle can be ignored), and run it exactly like this:
+
+    set -e
+    d="$(mktemp -d)"
+    curl -fsSL -o "$d/bp-install.sh" \\
+      https://raw.githubusercontent.com/AminMGMT/BackPack/{BACKPACK_PIN_COMMIT}/install.sh
+    echo "{BACKPACK_PIN_SHA256}  $d/bp-install.sh" | sha256sum -c -
+    sudo bash "$d/bp-install.sh"
+    rm -rf "$d"
+
+If sha256sum reports FAILED, stop: that file is not the one this panel was
+tested against.
 
 ----------------------------------------------------------------
 STEP 1 - IRAN SERVER (entry point):  {node['iran_ip']}
