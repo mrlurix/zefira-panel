@@ -22,10 +22,17 @@ if (navToggle) {
 // Sidebar search filter
 var navSearch = document.getElementById("nav-search");
 if (navSearch) {
+  // Keep the ORIGINAL (English) label: applyI18n rewrites textContent, so a
+  // Persian or Chinese UI hid every entry when the visitor typed an English
+  // term - and the sidebar just went blank with no explanation.
+  document.querySelectorAll(".sidebar a").forEach(function (a) {
+    if (!a.dataset.labelEn) a.dataset.labelEn = a.textContent;
+  });
   navSearch.addEventListener("input", function (e) {
     var q = e.target.value.toLowerCase();
     document.querySelectorAll(".sidebar a").forEach(function (a) {
-      a.style.display = a.textContent.toLowerCase().includes(q) ? "" : "none";
+      var hay = (a.textContent + " " + (a.dataset.labelEn || "")).toLowerCase();
+      a.style.display = hay.includes(q) ? "" : "none";
     });
     document.querySelectorAll(".sidebar .nav-group").forEach(function (g) {
       var next = g.nextElementSibling, visible = false;
@@ -39,15 +46,57 @@ if (navSearch) {
 }
 
 // Copy buttons for code blocks
+function legacyCopy(text) {
+  // Same fallback the customer dashboard uses: the Clipboard API needs a
+  // secure context and a permission, and a docs visitor can deny either.
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 document.querySelectorAll("pre").forEach(function (pre) {
   var btn = document.createElement("button");
   btn.className = "copy-btn";
   btn.textContent = t("docs.copy");
+  // Snapshot the code BEFORE the button is appended. The button is the last
+  // child of <pre>, and `position:absolute` does not remove it from
+  // innerText, so reading innerText at click time yielded the code PLUS the
+  // button label: pasting the one-line installer into a shell then ran
+  // `Copy: command not found`, and a second copy of the same block corrupted
+  // it differently ("Copied ✓").
+  var code = pre.innerText;
   btn.addEventListener("click", function () {
-    navigator.clipboard.writeText(pre.innerText.replace(new RegExp("^" + t("docs.copy") + "\n"), "")).then(function () {
+    var done = function () {
       btn.textContent = t("docs.copied");
       setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
-    });
+    };
+    var fail = function () {
+      btn.textContent = t("docs.copyFailed");
+      setTimeout(function () { btn.textContent = t("docs.copy"); }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done, function () {
+        // Permission denied / insecure context: try the legacy path before
+        // giving up, and never leave an unhandled rejection behind.
+        if (!legacyCopy(code)) fail();
+        else done();
+      });
+    } else if (!legacyCopy(code)) {
+      fail();
+    } else {
+      done();
+    }
   });
   pre.appendChild(btn);
 });
@@ -109,15 +158,36 @@ document.querySelectorAll("pre").forEach(function (pre) {
   var input = overlay.querySelector("#sp-input");
   var resultsBox = overlay.querySelector("#sp-results");
 
+  // null = still loading, false = the fetch FAILED, [] = loaded but empty.
+  // The three used to collapse into one, so a failed load looked like a
+  // genuinely empty index ("0 doc sections", "no results") forever, and a
+  // slow load left "Loading index…" on screen even after the index arrived
+  // (render() was only ever called from search()).
   var index = null, items = [], sel = 0, lastQ = "";
-  fetch("assets/search-index.json?v=29").then(function (r) { return r.json(); }).then(function (j) { index = j; }).catch(function () { index = []; });
+  function isOpen() { return overlay && !overlay.hidden; }
+  fetch("assets/search-index.json?v=6").then(function (r) {
+    if (!r.ok) throw new Error("index http " + r.status);
+    return r.json();
+  }).then(function (j) {
+    index = j;
+    if (isOpen()) render();
+  }).catch(function () {
+    index = false;
+    if (isOpen()) render();
+  });
 
   function render() {
     resultsBox.innerHTML = "";
     if (!items.length) {
       var empty = document.createElement("div");
       empty.className = "sp-empty";
-      empty.textContent = index === null ? t("docs.palLoading") : (lastQ ? t("docs.palNoRes", {q: lastQ}) : t("docs.palType", {n: index ? index.length : 69}));
+      if (index === null) {
+        empty.textContent = t("docs.palLoading");
+      } else if (index === false) {
+        empty.textContent = t("docs.palFail");
+      } else {
+        empty.textContent = lastQ ? t("docs.palNoRes", {q: lastQ}) : t("docs.palType", {n: index.length});
+      }
       resultsBox.appendChild(empty);
       return;
     }

@@ -2,11 +2,12 @@
 
 Zefira takes security seriously: scrypt password hashing, HttpOnly
 SameSite cookies, rate-limited login, CSRF + CSP headers, audit logging, and
-six test suites that run against a live panel: `security_test.py` (120
+seven test suites that run against a live panel: `security_test.py` (120
 penetration/abuse checks), `feature_test.py` (178 feature checks),
-`functional_test.py` (60 end-to-end checks), `attack_test.py` (live
-adversarial probes), `attack_quota_test.py` (46 quota/schema boundaries) and
-`attack_paths_test.py` (93 operator-path checks).
+`functional_test.py` (60 end-to-end checks), `attack_test.py` (129 live
+adversarial probes), `attack_quota_test.py` (46 quota/schema boundaries),
+`attack_paths_test.py` (111 operator-path checks) and `frontend_bugs_test.py`
+(35 front-end regressions).
 
 ## What is encrypted, and what is not
 

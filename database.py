@@ -130,11 +130,17 @@ class VpnUser(Base):
         return data
 
     def to_backup_dict(self) -> dict:
-        # None-tolerant: a hand-edited NULL must degrade the backup (with a
-        # restorable fallback), never 500 it. Last-seen metadata rides along so
-        # a restore does not wipe the customer's history.
+        # None-tolerant: a hand-edited NULL must degrade the backup, never 500
+        # it. Last-seen metadata rides along so a restore does not wipe the
+        # customer's history.
+        #
+        # expires_at is written as-is, INCLUDING null. The old code substituted
+        # utcnow() for a NULL, which wrote a lie into the operator's
+        # disaster-recovery file: restoring it later gave that customer an
+        # expiry of "the moment you restored", so they were instantly expired
+        # and their subscription 404'd. The restore re-derives a sane expiry
+        # from duration_days instead.
         created = self.created_at or utcnow()
-        expires = self.expires_at or utcnow()
         return {
             "username": safe_text(self.username),
             "protocol": safe_text(self.protocol),
@@ -153,7 +159,9 @@ class VpnUser(Base):
             ),
             "last_fetch_ip": safe_text(self.last_fetch_ip) or None,
             "created_at": created.isoformat(timespec="seconds"),
-            "expires_at": expires.isoformat(timespec="seconds"),
+            "expires_at": (
+                self.expires_at.isoformat(timespec="seconds") + "Z" if self.expires_at else None
+            ),
         }
 
 

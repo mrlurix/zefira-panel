@@ -117,16 +117,17 @@ decrypt round-trip. Treat the database and unencrypted backups as customer
 credentials: keep `instance/` at `700`, use encrypted backups or full-disk
 encryption, and see [SECURITY.md](SECURITY.md).
 
-There are six test suites that hit the running panel from the outside. Start
+There are seven test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
 python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # 120 abuse/defense checks
 python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   #  60 end-to-end flows
 python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 178 feature-coverage checks
-python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   # 127 live attack probes
+python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   # 129 live attack probes
 python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS #  46 quota/schema boundary checks
-python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS #  93 operator-path checks
+python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS # 111 operator-path checks
+python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS #  35 front-end regressions
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
@@ -141,11 +142,16 @@ start-on-first-use, device limits, and every Pydantic boundary on create and
 patch. `attack_paths_test.py` walks the operator paths the other suites skip:
 templates (create-from-template, upsert), inbounds + node pinning, CSV export,
 blocked sites, the Clash YAML invariants, theme/appearance, audit/stats/system,
-the BackPack tunnel lifecycle, and a full backup/restore round-trip. All six
-restore the panel to its shipped defaults afterwards, so the suites are
-order-independent and can run against a live panel (or all six in one go with
+the BackPack tunnel lifecycle, and a full backup/restore round-trip.
+`frontend_bugs_test.py` covers what HTTP tests structurally cannot see — the
+panel and docs front-end logic (a warning that can never be shown, a copy
+button that copies its own label, a list re-rendered from a stale response, a
+stale asset version in a `fetch()` URL). All seven restore the panel to its
+shipped defaults afterwards, so the suites are
+order-independent and can run against a live panel (or all seven in one go with
 `python run_all_tests.py admin YOURPASS`). A green run prints `120/120`,
-`60/60`, `178/178`, `127/127`, `46/46` and `93/93` - if not, open an issue.
+`60/60`, `178/178`, `129/129`, `46/46`, `111/111` and `35/35` - if not, open
+an issue.
 
 ### Dependencies
 

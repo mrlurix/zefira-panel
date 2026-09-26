@@ -495,7 +495,12 @@ class RestoreUserIn(BaseModel):
     start_on_first_use: bool = False
     duration_days: Optional[StrictInt] = Field(default=None, ge=1, le=3650)
     created_at: Optional[str] = None
-    expires_at: str
+    # Optional on purpose: a backup written by another tool (or a row that
+    # never had a plan) carries null. It used to be a REQUIRED str, so such a
+    # row failed validation and the restore counted it as "skipped" - the
+    # customer silently vanished from the panel. The restore now re-derives a
+    # sane expiry from duration_days instead of dropping the row.
+    expires_at: Optional[str] = None
     last_fetch_at: Optional[str] = None
     last_fetch_ip: Optional[str] = Field(default=None, max_length=64)
 

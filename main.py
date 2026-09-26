@@ -4148,9 +4148,19 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         except ValueError:
             skipped += 1
             continue
+        # A row with NO expiry used to be skipped outright, so a customer
+        # could vanish from a restore; and the backup used to paper over the
+        # gap by writing expires_at = restore time, which made them instantly
+        # expired instead. Re-derive a sane expiry from the plan length: the
+        # customer keeps their duration and nothing is silently dropped.
         if expires is None:
-            skipped += 1
-            continue
+            _dur = ru.duration_days if (ru.duration_days and 1 <= ru.duration_days <= 3650) else 30
+            if ru.start_on_first_use:
+                # A pending plan has no real expiry yet - the sentinel is what
+                # "starts on first fetch" looks like on disk.
+                expires = datetime(PENDING_YEAR, 1, 1)
+            else:
+                expires = now + timedelta(days=_dur)
         # A far-future sentinel expiry without the pending flag is
         # meaningless (pending activation is what the sentinel means):
         # re-arm it as pending with a sane duration instead of importing
@@ -5630,9 +5640,13 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
     if udict.get("pending_start"):
         status_label, status_cls, days_label = W("pending"), "pending", W("first_use")
         expires_label = W("no_expiry")
-    elif exp is not None and exp <= now:
+    elif exp is None or exp <= now:
+        # A row with NO expiry is not a lifetime plan: the machine formats
+        # hard-404 it (an expiry is required to serve), so the dashboard used
+        # to contradict them by showing "active - no expiry" for a customer
+        # whose apps were already dead. Both paths now say "expired".
         status_label, status_cls, days_label = W("expired"), "expired", W("expired")
-        expires_label = _sub_expires(lang, exp)
+        expires_label = _sub_expires(lang, exp) if exp is not None else W("no_expiry")
     elif used >= vol:
         left = max(0, math.ceil((exp - now).total_seconds() / 86400)) if exp else 0
         status_label, status_cls = W("limited"), "limited"

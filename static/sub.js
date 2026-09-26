@@ -13,7 +13,11 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
     // Capture the CURRENT label (not a stale one from page load: the
     // language switcher may have retranslated the button since).
     const label = btn.textContent;
-    if (!text) { btn.textContent = t("sub.copyFailed"); setTimeout(() => { btn.textContent = label; }, 1500); return; }
+    // i18n.js is a separate file: if it 404s during a deploy, `t` is not
+    // defined and every copy button threw a ReferenceError - the clipboard
+    // write succeeded and the customer got NO feedback at all.
+    const T = (k) => (typeof t === "function" ? t(k) : (k === "sub.copied" ? "Copied ✓" : "Copy failed"));
+    if (!text) { btn.textContent = T("sub.copyFailed"); setTimeout(() => { btn.textContent = label; }, 1500); return; }
     let done = false;
     try {
       await navigator.clipboard.writeText(text);
@@ -39,7 +43,7 @@ document.querySelectorAll("[data-copy], [data-copy-target]").forEach((btn) => {
         }
       } catch (_) {}
     }
-    btn.textContent = done ? t("sub.copied") : t("sub.copyFailed");
+    btn.textContent = done ? T("sub.copied") : T("sub.copyFailed");
     // Re-read the i18n key on restore instead of the captured text: a
     // language switch inside the 1.5s window must not be clobbered.
     const restoreKey = btn.getAttribute("data-i18n");
@@ -59,10 +63,35 @@ document.querySelectorAll(".fill[data-w]").forEach((el) => {
 // load time while the customer kept consuming quota. Reload when the tab
 // comes back to the foreground (no polling, no background traffic) so a
 // dashboard left open on a phone is not an hour stale.
+//
+// The threshold is the length of the HIDDEN period, not the age of the page:
+// measuring the page age reloaded on every return to the tab, so copying a
+// WireGuard config, switching to the VPN app and coming back three seconds
+// later threw the customer to the top of the page and wiped the scroll.
+let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") return;
-  const age = Date.now() - (window.__zefiraRenderedAt || 0);
-  if (age > 120000) location.reload();
+  if (document.visibilityState !== "visible") { hiddenAt = Date.now(); return; }
+  if (!hiddenAt) return;
+  const away = Date.now() - hiddenAt;
+  hiddenAt = 0;
+  if (away > 120000) location.reload();
 });
 
 try { mountLangSwitcher("#lang-mount-sub"); } catch (_) {}
+
+// The page language is rendered by the SERVER from the zefira_lang cookie
+// (missing cookie = English), while the switcher is initialised from
+// localStorage / navigator.language. A customer whose browser is fa-IR with
+// no cookie therefore got an English page with "فارسی" shown as selected.
+// Persist the detected language once so the server and the switcher agree on
+// the next load; one-shot so a disagreement can never loop.
+try {
+  if (typeof Z_LANG === "string" && Z_LANG) {
+    const rendered = (document.documentElement.getAttribute("lang") || "").slice(0, 2);
+    if (rendered && rendered !== Z_LANG && !sessionStorage.getItem("zefira_lang_synced")) {
+      sessionStorage.setItem("zefira_lang_synced", "1");
+      document.cookie = "zefira_lang=" + Z_LANG + ";path=/;max-age=31536000;samesite=lax";
+      location.reload();
+    }
+  }
+} catch (_) {}

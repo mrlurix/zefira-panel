@@ -348,7 +348,12 @@ function applySort(items) {
   if (SORT_MODE === "expiry") {
     arr.sort((a, b) => new Date(a.expires_at || "2099-01-01") - new Date(b.expires_at || "2099-01-01"));
   } else if (SORT_MODE === "usage") {
-    arr.sort((a, b) => b.used_gb / Math.max(b.volume_gb, 1) - a.used_gb / Math.max(a.volume_gb, 1));
+    // Math.max(volume, 1) was a divide-by-zero guard that CLAMPED UP, so every
+    // plan under 1 GB was scored as if it were 1 GB: a 0.5/0.4 GB user (80 %
+    // used) sorted below a 2/1 GB user (50 %), while the usage bar right next
+    // to it showed the opposite.
+    const ratio = (u) => u.used_gb / (Number(u.volume_gb) || 1);
+    arr.sort((a, b) => ratio(b) - ratio(a));
   } else if (SORT_MODE === "name") {
     arr.sort((a, b) => a.username.localeCompare(b.username));
   } else {
@@ -470,7 +475,14 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
       clearInterval(updatePoll);
       updatePoll = null;
     }
-    if (btn.dataset.section === "dashboard") { loadStats(); loadSystem(); loadUsers(); }
+    if (btn.dataset.section === "dashboard") {
+      loadStats();
+      loadSystem();
+      // Keep the visible query: reloading unfiltered left the search box
+      // showing the old text while the table (and the CSV export built from
+      // the same cache, and the Dashboard "latest users" card) held every row.
+      loadUsers($("#search") ? $("#search").value.trim() : "");
+    }
     // Anti-Censorship saves through the same #srv-form payload, so its fields
     // must be loaded even when Settings was never opened (blank ports parsed
     // to NaN and the save was rejected).
@@ -753,17 +765,29 @@ $("#users-table").addEventListener("click", async (e) => {
       // confirm() only blocks the dialog; a second click during the request
       // rotated the token twice (the first link was already dead).
       if (!guardBtn(btn)) return;
-      await api("/api/users/" + id + "/reset-token", { method: "POST" });
-      toast(t("msg.tokenRegen"));
+      // Always hand the button back: without this a failed request (409/500,
+      // or the network dropping) left that row's icon greyed out for good and
+      // the list unrefreshed, so the action was dead until you navigated away.
+      try {
+        await api("/api/users/" + id + "/reset-token", { method: "POST" });
+        toast(t("msg.tokenRegen"));
+      } finally {
+        btn.disabled = false;
+      }
     } else if (btn.dataset.act === "del") {
       if (!confirm(t("cfm.userDelete", {name: btn.dataset.name}))) return;
       if (!guardBtn(btn)) return;
-      await api("/api/users/" + id, { method: "DELETE" });
-      toast(t("msg.userDeleted"));
+      try {
+        await api("/api/users/" + id, { method: "DELETE" });
+        toast(t("msg.userDeleted"));
+      } finally {
+        btn.disabled = false;
+      }
     }
     loadUsers($("#search").value.trim());
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
+    loadUsers($("#search").value.trim());
   }
 });
 
@@ -1070,7 +1094,23 @@ async function loadSrvSettings() {
     // The public key is not a secret: "Copy Both Keys" used to copy an EMPTY
     // public_key after a reload because only Generate ever filled it.
     const rpub = document.querySelector('[name="reality_pub"]') || $("#reality-pub");
-    if (rpub && srv.reality_pub) rpub.value = srv.reality_pub;
+    if (rpub && srv.reality_pub) {
+      rpub.value = srv.reality_pub;
+      // ...and the panel holding it must be VISIBLE, otherwise the freshly
+      // loaded key sat in a hidden textarea and the only way to reach it was
+      // Generate - which ROTATES the server keypair and kills every existing
+      // REALITY link.
+      $("#reality-out")?.classList.remove("hidden");
+    }
+    // Keep the preset dropdown in step with the stored SNI: it was only ever
+    // written by the user, so after a reload it still read "Akamai" while the
+    // field and the server held something else - and Save then persisted the
+    // other value.
+    const preset = document.getElementById("cdn-preset");
+    if (preset) {
+      const cur = String(srv.cdn_sni || "");
+      preset.value = Array.from(preset.options).some((o) => o.value && o.value === cur) ? cur : "";
+    }
   } catch (_) {}
 }
 document.getElementById("cdn-preset")?.addEventListener("change", (e) => {
@@ -1201,7 +1241,7 @@ function renderNodes(nodes) {
     const main = document.createElement("span");
     main.textContent = `${n.name} [${n.transport}] ${n.iran_ip} \u21c4 ${n.kharej_ip}:${n.tunnel_port}`;
     const st = document.createElement("small");
-    st.textContent = n.status ? nodeStatusText(n.status) : n.status;
+    st.textContent = n.status ? nodeStatusText(n.status) : "";
     st.style.color = n.status === "online" ? "var(--green)" : n.status === "offline" ? "var(--red)" : "var(--muted)";
     li.appendChild(main);
     li.appendChild(st);
@@ -1249,7 +1289,15 @@ $("#node-create-btn").addEventListener("click", async (e) => {
         transport: $("#node-transport").value,
         iran_ip: iran,
         kharej_ip: kharej,
-        tunnel_port: numInput($("#node-tport").value),
+        // Validated here too: a NaN serialises to null and the schema field
+        // is a plain int, so the operator saw a raw pydantic message.
+        tunnel_port: (() => {
+          const tp = numInput($("#node-tport").value);
+          if (!Number.isFinite(tp) || tp < 1 || tp > 65535) {
+            throw new Error(t("msg.badNumbers"));
+          }
+          return tp;
+        })(),
         forwarded_ports: $("#node-fports").value.trim(),
         udp_forward: $("#node-udp").checked
       }
@@ -1385,9 +1433,16 @@ function inboundRow(ib) {
 }
 
 async function loadInbounds() {
+  // Generation guard like every other list loader: this one is triggered from
+  // four unsynchronised places (nav, add, row toggle/delete, the per-row node
+  // select) and each call is two sequential round-trips, so a slower earlier
+  // response could clear the table and re-render an older snapshot - the
+  // Enabled badge silently reverting while the server held the new value.
+  const token = nextSeq("inbounds");
   try {
     await loadSrvNodes();
     const items = await api("/api/inbounds");
+    if (!isCurrent("inbounds", token)) return;
     const tbody = $("#inbounds-tbody");
     tbody.textContent = "";
     // Null/garbage body used to throw for...of AFTER the tbody was cleared,
@@ -1403,6 +1458,12 @@ $("#ib-add-btn").addEventListener("click", async (e) => {
   const name = $("#ib-name").value.trim();
   const port = numInput($("#ib-port").value);
   if (!name || !port) { toast(t("msg.ibNamePort"), false); return; }
+  // `!port` let 70000 through (truthy) and NaN serialises to null, so both
+  // produced a raw schema error instead of the field-level message.
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    toast(t("msg.badNumbers"), false);
+    return;
+  }
   if (!guardBtn(btn)) return;
   try {
     await api("/api/inbounds", {
@@ -1531,6 +1592,10 @@ $("#snode-create-btn").addEventListener("click", async (e) => {
   const portRaw = numInput($("#snode-port").value);
   const port = Number.isFinite(portRaw) && portRaw >= 1 && portRaw <= 65535 ? portRaw : NaN;
   if (!name || !address) { toast(t("msg.snodeNameAddr"), false); return; }
+  // A NaN that reaches JSON.stringify becomes `null`, and the schema field is
+  // a non-optional int: the operator got a raw "Input should be a valid
+  // integer" toast instead of the field-level message below.
+  if (!Number.isFinite(port)) { toast(t("msg.badNumbers"), false); return; }
   if (!guardBtn(btn)) return;
   try {
     await api("/api/server-nodes", {
@@ -1701,7 +1766,7 @@ function renderChangelog(items, prefix) {
     ul.appendChild(li);
   }
 }
-async function loadUpdate(announce, fresh) {
+async function loadUpdate(announce, fresh, quietNetErr) {
   try {
     // ?fresh=1 bypasses the server-side status cache. The poller used to read
     // the CACHED pre-update answer ("updating: false") right after applying
@@ -1770,7 +1835,15 @@ async function loadUpdate(announce, fresh) {
     if (announce) toast(t("msg.updateChecked"));
     return st;
   } catch (err) {
-    if (err.message !== "auth") toast(err.message, false);
+    // While the panel is restarting, every poll tick's fetch REJECTS (a
+    // transport failure, not an HTTP error) and used to be toasted as a red
+    // "Failed to fetch" - a stack of them during a perfectly normal,
+    // successful update. The poller passes quietNetErr so a transport
+    // failure inside the restart window is silent.
+    const isNetErr = err instanceof TypeError;
+    if (!isNetErr || !quietNetErr) {
+      if (err.message !== "auth") toast(err.message, false);
+    }
     return null;
   }
 }
@@ -1802,7 +1875,7 @@ $("#update-now-btn").addEventListener("click", async () => {
       inFlight = true;
       try {
         n += 1;
-        const st = await loadUpdate(false, true);
+        const st = await loadUpdate(false, true, true);
         if (st && st.updating) sawUpdating = true;
         // Stop only after the server was actually seen mid-update (or after
         // the tick budget). A cached/stale "not updating" first answer must
@@ -1979,7 +2052,17 @@ async function renderApiTokens(items) {
     main.textContent = tk.name;
     const meta = document.createElement("small");
     const bits = [`${tk.prefix}…`];
-    bits.push(tk.last_used_at ? t("tokens.lastUsed", {dt: tk.last_used_at}) : t("tokens.neverUsed"));
+    // Format the timestamp like every other date in the panel: the raw
+    // "2026-09-20T10:00:00Z" string was rendered verbatim, so the token list
+    // was the one place showing UTC ISO next to local-time columns.
+    if (tk.last_used_at) {
+      const _d = new Date(tk.last_used_at);
+      bits.push(t("tokens.lastUsed", {
+        dt: isNaN(_d.getTime()) ? String(tk.last_used_at) : dateTimeFmt.format(_d)
+      }));
+    } else {
+      bits.push(t("tokens.neverUsed"));
+    }
     meta.textContent = bits.join(" · ");
     li.appendChild(main);
     li.appendChild(meta);
@@ -2021,11 +2104,17 @@ $("#apitoken-list").addEventListener("click", async (e) => {
     if (btn.dataset.act === "del-token") {
       if (!confirm(t("cfm.tokenRevoke", {name: btn.dataset.name}))) return;
       if (!guardBtn(btn)) return;
-      await api("/api/api-tokens/" + btn.dataset.id, { method: "DELETE" });
-      toast(t("msg.tokenRevoked"));
-      loadApiTokens();
+      // Same as the user row: a failed revoke used to leave the button dead
+      // and the list stale.
+      try {
+        await api("/api/api-tokens/" + btn.dataset.id, { method: "DELETE" });
+        toast(t("msg.tokenRevoked"));
+      } finally {
+        btn.disabled = false;
+        loadApiTokens();
+      }
     }
-  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); loadApiTokens(); }
 });
 
 // ---- Telegram ----
@@ -2260,10 +2349,16 @@ $("#audit-refresh").addEventListener("click", loadAudit);
     mountLangSwitcher("#lang-mount");
     const me = await api("/api/me");
     $("#admin-name").textContent = me.username;
-  } catch (_) { return; }
+  } catch (err) {
+    // A failed /api/me used to abort the whole init silently: an empty
+    // dashboard, "…" as the admin name and no clue why. api() already routes
+    // a 401 to the login page, so anything here is a real failure.
+    if (err && err.message !== "auth") toast(err.message, false);
+    return;
+  }
   loadAppearance();
   loadStats();
   loadSystem();
-  loadUsers();
+  loadUsers($("#search") ? $("#search").value.trim() : "");
   loadTemplates();
 })();

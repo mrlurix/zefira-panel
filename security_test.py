@@ -463,10 +463,21 @@ if strs == 200:
     rj = json.loads(rb2)
     _stl, _hh, _lb2 = req("GET", "/api/users?q=atomic", headers=AUTH2)
     lst = json.loads(_lb2)
-    ok_atomic = rj["skipped"] == 1 and any(u["username"] == "atomic_ok" for u in lst["items"])
+    # A row with an UNREADABLE expiry is no longer dropped: it used to be
+    # counted as "skipped", which silently deleted a paying customer from the
+    # panel. The restore now re-derives a sane expiry from duration_days, so
+    # BOTH rows come back and nothing is skipped here.
+    _names = {u["username"] for u in lst["items"]}
+    _bad_row = next((u for u in lst["items"] if u["username"] == "atomic_bad_date"), None)
+    ok_atomic = (
+        "atomic_ok" in _names
+        and "atomic_bad_date" in _names
+        and rj["skipped"] == 0
+        and bool(_bad_row and _bad_row.get("expires_at"))
+    )
     for u in lst["items"]:
         req("DELETE", f"/api/users/{u['id']}", headers=AUTH2)
-check("restore atomic: bad row skipped, good row kept", ok_atomic)
+check("restore keeps every row, re-deriving an unreadable expiry", ok_atomic)
 
 # ---- 25b. Restore must NOT import credentials (a backup is unsigned) ----
 # Importing `api_tokens` from a backup file meant a crafted file could ship

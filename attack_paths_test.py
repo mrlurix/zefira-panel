@@ -14,6 +14,7 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+from datetime import datetime
 import zipfile
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
@@ -636,6 +637,85 @@ if bk:
     st, gl = js("GET", "/api/users", headers=AUTH)
     check("the good row from the mixed restore is servable",
           any(x["username"].startswith("good") for x in gl.get("items", [])), f"{st}")
+
+    # A row with NO usable expiry must not be silently dropped. A backup
+    # written by another tool (or hand-edited) carries null/""/garbage there;
+    # `expires_at` used to be a REQUIRED str, so a null row failed validation
+    # and was counted as "skipped" - the customer vanished from the panel.
+    # The plan length is re-derived instead. All shapes go in ONE restore call:
+    # the endpoint is rate limited (10 / 10 min) and this suite is already
+    # close to that budget.
+    _shapes = (("null", None), ("empty", ""), ("garbage", "not-a-date"))
+    _rows = []
+    for _lbl, _bad in _shapes:
+        _rows.append({"username": "nx" + _lbl[:2] + uuid.uuid4().hex[:5],
+                      "protocol": "vless", "protocols": "vless", "note": "",
+                      "volume_gb": 4, "used_gb": 0, "token": uuid.uuid4().hex,
+                      "secret_data": "{}", "is_active": True, "device_limit": None,
+                      "start_on_first_use": False, "duration_days": 21,
+                      "expires_at": _bad})
+    _pname = "np" + uuid.uuid4().hex[:8]
+    _rows.append({"username": _pname, "protocol": "vless", "protocols": "vless",
+                  "note": "", "volume_gb": 4, "used_gb": 0, "token": uuid.uuid4().hex,
+                  "secret_data": "{}", "is_active": True, "device_limit": None,
+                  "start_on_first_use": True, "duration_days": 9, "expires_at": None})
+    st, nrx = js("POST", "/api/restore", {
+        "zefira_backup": True, "password_confirm": PASSWORD, "users": _rows,
+        "admins": [], "settings": {}, "blocked_sites": [],
+    }, AUTH, timeout=60)
+    check("the expiry-less file is accepted whole", st == 200 and nrx.get("skipped") == 0,
+          f"{st} skipped={nrx.get('skipped') if isinstance(nrx, dict) else nrx}")
+    st, nxl = js("GET", "/api/users?q=nx", headers=AUTH)
+    for _lbl, _bad in _shapes:
+        _row = next((x for x in nxl.get("items", [])
+                     if x["username"].startswith("nx" + _lbl[:2])), None)
+        check(f"a row with a {_lbl} expiry is restored, not skipped",
+              _row is not None, f"skipped={nrx.get('skipped')}")
+        if _row:
+            _exp = str(_row.get("expires_at") or "")
+            _sane = False
+            if _exp:
+                try:
+                    _d = datetime.fromisoformat(_exp.replace("Z", "+00:00")).replace(tzinfo=None)
+                    _sane = 20 <= (_d - datetime.utcnow()).days <= 22
+                except ValueError:
+                    _sane = False
+            check(f"a ~21-day expiry is derived from duration_days ({_lbl})", _sane, _exp)
+            check(f"the quota survives ({_lbl})",
+                  abs(float(_row.get("volume_gb")) - 4) < 0.01, str(_row.get("volume_gb")))
+            st, _h, _b = req("GET", f"/sub/{_row['token']}",
+                             headers={"User-Agent": "v2rayNG/1.8.5"})
+            check(f"the restored customer serves ({_lbl})", st == 200, f"{st}")
+            js("DELETE", f"/api/users/{_row['id']}", headers=AUTH)
+    # ...and a pending row with no expiry comes back PENDING, not active.
+    st, prl = js("GET", f"/api/users?q={_pname}", headers=AUTH)
+    _prow = next((x for x in prl.get("items", []) if x["username"] == _pname), None)
+    check("a pending row with no expiry is restored", _prow is not None, "row vanished")
+    if _prow:
+        check("it comes back pending, not active or expired",
+              _prow.get("pending_start") is True, str(_prow)[:140])
+        st, _h, _b = req("GET", f"/sub/{_prow['token']}",
+                         headers={"User-Agent": "v2rayNG/1.8.5"})
+        check("its first fetch activates the plan", st == 200, f"{st}")
+        js("DELETE", f"/api/users/{_prow['id']}", headers=AUTH)
+
+    # The backup must carry the plan faithfully and never invent an expiry.
+    st, cl = js("POST", "/api/users", {"username": "bk" + uuid.uuid4().hex[:6],
+                                       "protocols": ["vless"],
+                                       "volume_gb": 5, "days": 5}, AUTH)
+    if cl.get("id"):
+        st, bk2 = js("POST", "/api/backup", {"password_confirm": PASSWORD},
+                     AUTH, timeout=60)
+        _br = next((x for x in (bk2 or {}).get("users", [])
+                    if x.get("username") == cl["username"]), None)
+        check("a normal backup row carries its real expiry",
+              _br is not None and isinstance(_br.get("expires_at"), str)
+              and _br["expires_at"].startswith("20"),
+              str((_br or {}).get("expires_at")))
+        check("a normal backup row keeps the quota and note",
+              _br is not None and abs(float(_br["volume_gb"]) - 5) < 0.01,
+              str((_br or {}).get("volume_gb")))
+        js("DELETE", f"/api/users/{cl['id']}", headers=AUTH)
 
     # Timezone-bearing expiry must be converted, not dropped.
     st, tz = js("POST", "/api/restore", {

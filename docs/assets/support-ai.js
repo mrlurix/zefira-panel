@@ -9,13 +9,28 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  var KB_FAILED = false;
+
   function loadKB(cb) {
+    // A failed load used to leave kbLoading=true forever, so every later
+    // question re-entered the 200 ms retry branch, never called its callback
+    // and the chat looked hung - while a timer kept firing for the life of the
+    // page. One attempt, one honest answer, then the real failure state.
     if (KB) { cb(KB); return; }
+    if (KB_FAILED) { cb(null); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=29").then(function (r) { return r.json(); }).then(function (j) {
+    fetch("assets/site-knowledge.json?v=6").then(function (r) {
+      if (!r.ok) throw new Error("kb http " + r.status);
+      return r.json();
+    }).then(function (j) {
+      kbLoading = false;
       KB = j; cb(KB);
-    }).catch(function () { cb(null); });
+    }).catch(function () {
+      kbLoading = false;
+      KB_FAILED = true;
+      cb(null);
+    });
   }
 
   var STOP = { what: 1, how: 1, the: 1, and: 1, for: 1, with: 1, are: 1, you: 1, can: 1, does: 1, please: 1 };
@@ -125,8 +140,17 @@
     // missing leads simply show the English body.
     var lead = (lang !== "en" && entry[lang] && entry[lang] !== entry.text) ? entry[lang] : null;
     var body = lead ? (lead + "\n\n" + entry.text) : entry.text;
-    body.split(/\n\n+/).forEach(function (para) {
-      box.appendChild(el("p", null, para));
+    // Split on EVERY newline, not just blank lines: the changelog entry is a
+    // per-version list separated by single \n, and a <p> with no white-space
+    // styling collapsed those into one run-on paragraph.
+    body.split(/\n+/).forEach(function (para) {
+      if (!para.trim()) return;
+      var p = el("p", null, null);
+      para.split("\n").forEach(function (line, i) {
+        if (i) p.appendChild(document.createElement("br"));
+        p.appendChild(document.createTextNode(line));
+      });
+      box.appendChild(p);
     });
     (entry.wallets || []).forEach(function (w) { addWallet(box, w.label, w.addr); });
     (entry.links || []).forEach(function (l) { addLinkBtn(box, l.label, l.href); });
@@ -146,12 +170,19 @@
   function addMsg(cls) {
     var m = el("div", "ai-msg " + cls);
     msgsBox.appendChild(m);
+    // The chat was only ever cleared by closing the page: a long session grew
+    // the DOM without bound (one user + one bot node per question, plus the
+    // per-entry paragraphs). Keep the tail.
+    while (msgsBox.children.length > 40) msgsBox.removeChild(msgsBox.firstChild);
     msgsBox.scrollTop = msgsBox.scrollHeight;
     return m;
   }
 
   function answerInner(q, lang, box, kb) {
-    if (/^(hi|hello|hey|salam|سلام|درود|yo)\b/i.test(q.trim())) {
+    // No \b here: it is defined against [A-Za-z0-9_], and Persian/Arabic
+    // letters are not word characters, so "سلام" (and "درود") never matched
+    // and fell through to the off-topic refusal.
+    if (/^(hi|hello|hey|salam|سلام|درود|yo)($|[^\p{L}\p{N}])/iu.test(q.trim())) {
       var w = el("div", "ai-entry");
       w.appendChild(el("strong", null, t("ai.greetTitle")));
       w.appendChild(el("p", null, t("ai.greetText")));

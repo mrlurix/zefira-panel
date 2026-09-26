@@ -28,6 +28,7 @@ SUITES = [
     ("attack_test.py", "live attack probes"),
     ("attack_quota_test.py", "quota / schema boundaries"),
     ("attack_paths_test.py", "operator paths / restore"),
+    ("frontend_bugs_test.py", "front-end regressions"),
 ]
 
 

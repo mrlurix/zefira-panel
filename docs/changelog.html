@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=35">
+<link rel="stylesheet" href="assets/style.css?v=6">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,17 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1141"><span>v1.14.1</span> <span data-i18n="chg.v1141">&#8212; Bug hunt: a customer could vanish on restore, and half the update card was invisible</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1141a_lead">Nobody disappears on restore:</b> <span data-i18n="chg.v1141a">a backup row with a missing or unreadable expiry (<code>null</code>, empty, another tool&#8217;s export) failed validation and was counted as &#8220;skipped&#8221; &#8212; the customer was silently dropped from the panel. The plan length is now re-derived from <code>duration_days</code>, a pending row comes back pending, and the backup no longer writes a made-up expiry that made restored customers instantly expired.</span></li>
+  <li><b data-i18n="chg.v1141b_lead">The update card talks again:</b> <span data-i18n="chg.v1141b">the &#8220;commit is NOT signed&#8221; and stale-systemd warnings used a <code>hidden</code> attribute while the script toggled a class, so they could never appear &#8212; and since signed commits are required by default, a refused update failed silently after a cheerful &#8220;Update started&#8221;. The dashboard and the client apps also agree now on what a plan with no expiry means.</span></li>
+  <li><b data-i18n="chg.v1141c_lead">Copy actually copies:</b> <span data-i18n="chg.v1141c">the docs copy button appended its own label to the text, so pasting the one-line installer into a shell ran <code>Copy: command not found</code>. The Ask-AI assistant also stopped answering for good after one failed knowledge-base load (and left a 200 ms retry loop running), and the search index and knowledge base were fetched with a stale <code>?v=</code> that pinned them in the browser cache forever.</span></li>
+  <li><b data-i14n="chg.v1141d_lead">Panel buttons and lists recover:</b> <span data-i18n="chg.v1141d">a failed delete, token reset or revoke left that row&#8217;s button greyed out for good; the inbound list could be re-rendered from a slower earlier response and silently revert a toggle; visiting the Dashboard dropped your search text while the table (and the CSV export) showed every row; out-of-range ports produced a raw validation error instead of a field message; &#8220;most used&#8221; mis-ranked every plan under 1 GB; the loaded REALITY public key sat in a hidden panel, leaving &#8220;Generate&#8221; (which rotates the server keypair) as the only way to see it; the CDN preset could display one value while saving another.</span></li>
+  <li><b data-i14n="chg.v1141e_lead">Customer dashboard:</b> <span data-i18n="chg.v1141e">switching tabs and coming straight back reloaded the page and threw away your scroll position (it measured the page age, not the time you were away); the language switcher could show a language the server never rendered; and if <code>i18n.js</code> ever failed to load, every copy button threw and gave no feedback at all.</span></li>
+  <li><b data-i14n="chg.v1141f_lead">Docs polish + tooling:</b> <span data-i14n="chg.v1141f">the sidebar search only matched the currently displayed language (typing an English term in Persian left the sidebar blank), a Persian &#8220;سلام&#8221; was answered with the off-topic refusal, a slow search index stayed on &#8220;Loading index&#8230;&#8221; forever, a failed index load looked like an empty one, and <code>docs/bump_assets.py</code> no longer resets every asset URL to <code>?v=4</code> when called without a version.</span></li>
+  <li><b data-i14n="chg.v1141g_lead">Tests:</b> <span data-i18n="chg.v1141g">new <code>frontend_bugs_test.py</code> (35 checks) pins the front-end fixes the HTTP suites cannot see, and the operator-path suite grew 15 restore checks. Seven suites, 678 checks, all green.</span></li>
+</ul>
 
 <h2 id="v1140"><span>v1.14.0</span> <span data-i18n="chg.v1140">— Security audit: what an attacker can reach with a backup, a browser or a bad update</span></h2>
 <ul>
@@ -272,8 +283,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=35"></script>
-<script src="assets/docs.js?v=35"></script>
-<script src="assets/support-ai.js?v=35"></script>
+<script src="assets/i18n.js?v=6"></script>
+<script src="assets/docs.js?v=6"></script>
+<script src="assets/support-ai.js?v=6"></script>
 </body>
 </html>
