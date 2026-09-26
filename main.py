@@ -1000,6 +1000,11 @@ def load_inbounds() -> list:
         ib["node_name"] = n.name if n else None
         ib["node_status"] = n.status if n else None
         ib["node_enabled"] = bool(n.enabled) if n else True
+        # The node's own address: a node-pinned inbound with no `host` of its
+        # own used to fall back to the panel's global domain (and to the
+        # obfuscated front), so its links pointed at a machine that does not
+        # run the endpoint. The link builder needs the address to fix that.
+        ib["node_address"] = n.address if n else None
     return out
 
 
@@ -3149,10 +3154,21 @@ def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require
 UPDATE_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SERVICE_RE = re.compile(r"\A[A-Za-z0-9_@.:-]{1,64}\Z")
 _update_lock = threading.Lock()
+# Name of the systemd unit that still needs a manual restart after an update
+# whose code was applied but whose process could not be restarted. Empty =
+# nothing pending. Reported to the Update card so it never claims success over
+# an update that is not actually running.
+_update_restart_pending = ""
 # Single-flight + budget for /api/update/status?fresh=1 (git subprocesses and
 # GitHub API calls, on a 60/hour anonymous quota).
 _update_status_lock = threading.Lock()
-update_status_limiter = SlidingWindowLimiter(max_events=20, window_seconds=300)
+# 20 was smaller than ONE legitimate update cycle: the apply flow itself
+# spends 3 fresh checks and the 5s poller then spends up to 20 more, so the
+# tail of a normal, successful update ran into the ceiling, got a 429, and the
+# panel toasted a red "throttled" at the operator mid-update. 60 still bounds
+# a held button far below GitHub's anonymous 60/hour per-IP quota being burned
+# twice per check.
+update_status_limiter = SlidingWindowLimiter(max_events=60, window_seconds=300)
 
 
 def _snapshot_runtime_state() -> str | None:
@@ -3375,6 +3391,7 @@ def _update_status() -> dict:
         "incoming": incoming,
         "error": error,
         "unit_warning": unit_warning,
+        "restart_pending": _update_restart_pending,
         "signature": ver_state,
         "signature_detail": ver_detail,
     }
@@ -3397,8 +3414,19 @@ def api_update_status(request: Request, admin: Admin = Depends(require_admin)):
     # calls (60/hour anonymous quota) by holding the button. One refresh at a
     # time, a floor between refreshes, and a per-admin budget.
     if not _update_status_lock.acquire(blocking=False):
-        # Single-flight: a concurrent caller gets whatever the in-flight
-        # refresh produces instead of starting a second one.
+        # Single-flight, for real. The old code answered `ent[0] if ent else
+        # _update_status()`, so on a COLD cache every concurrent caller ran its
+        # own full refresh - N times 2 git subprocesses and 2 anonymous GitHub
+        # calls, none of them charged to the limiter. Wait for the refresh in
+        # flight and read what it produced.
+        if not _update_status_lock.acquire(timeout=8.0):
+            return ent[0] if ent else _update_status()
+        try:
+            done = _settings_cache.get("__update_status__")
+        finally:
+            _update_status_lock.release()
+        if done:
+            return done[0]
         return ent[0] if ent else _update_status()
     try:
         if fresh:
@@ -3454,20 +3482,26 @@ def _signed_update_required() -> bool:
 
 def _do_update(admin_name: str, ip: str, expected_sha: str = "") -> None:
     repo, branch, service = _update_conf()
-    # Refuse to update through a unit that would turn a compromised upstream
-    # (or a service-user foothold) into root: a root unit, or a privileged
-    # `ExecStartPre=+` helper that loads code from the service-writable tree.
-    # The check used to be display-only, so the dangerous case was exactly the
-    # one that never blocked anything.
-    unit_gap = _unit_stale_warning()
-    if unit_gap:
-        raise RuntimeError(
-            "refusing to update: " + unit_gap
-        )
-    # Pull from the SAME source the status page compared against, never from
-    # whatever a local `origin` remote happens to point at.
     fetch_url = f"https://github.com/{repo}.git"
+    global _update_restart_pending
+    _update_restart_pending = ""
     try:
+        # Refuse to update through a unit that would turn a compromised upstream
+        # (or a service-user foothold) into root: a root unit, or a privileged
+        # `ExecStartPre=+` helper that loads code from the service-writable tree.
+        # The check used to be display-only, so the dangerous case was exactly
+        # the one that never blocked anything.
+        #
+        # It MUST stay inside this try: the caller already took _update_lock and
+        # already answered {"ok": true}. Raising before the try escaped both the
+        # UPDATE_FAIL audit and the finally that releases the lock, so one click
+        # on an outdated unit pinned "updating" forever and every later apply
+        # answered 409 until the service was restarted by hand.
+        unit_gap = _unit_stale_warning()
+        if unit_gap:
+            raise RuntimeError("refusing to update: " + unit_gap)
+        # Pull from the SAME source the status page compared against, never from
+        # whatever a local `origin` remote happens to point at.
         with db.s() as s:
             audit(s, "UPDATE_START", f"{repo}@{branch} by {admin_name}", ip)
             s.commit()
@@ -3611,6 +3645,12 @@ def _do_update(admin_name: str, ip: str, expected_sha: str = "") -> None:
             except (OSError, subprocess.SubprocessError):
                 restarted = False
         if not restarted:
+            # Do not leave this in the log only: the card compares
+            # current-before vs current-after, and a failed restart leaves
+            # `git` reporting the NEW commit while the process still runs the
+            # old code - so the panel would say "Update finished" over an
+            # unapplied update. Surface it in the status instead.
+            _update_restart_pending = service
             log.warning("Update applied but service restart needs operator action (systemctl restart %s)", service)
         else:
             log.warning("Service %s restarted after update", service)
@@ -3718,13 +3758,17 @@ def api_nodes_create(data: TunnelNodeIn, request: Request, admin: Admin = Depend
             token_enc=encrypt_text(token_plain),
         )
         s.add(node)
-        s.flush()
-        # Audit before the single commit (same pattern as API tokens): the
-        # one-time token must never be lost to a 500 after it exists.
-        out = node.to_dict()
-        out["token_once"] = token_plain
-        audit(s, "NODE_CREATE", f"{data.name} {data.transport} by {admin.username}", client_ip(request))
+        # Inside the handler: two concurrent creates with the same name both
+        # pass the SELECT above, and the loser's UNIQUE violation surfaces at
+        # this flush. Outside the try it was a raw 500 instead of the 409 the
+        # operator (and every sibling handler) expects.
         try:
+            s.flush()
+            # Audit before the single commit (same pattern as API tokens): the
+            # one-time token must never be lost to a 500 after it exists.
+            out = node.to_dict()
+            out["token_once"] = token_plain
+            audit(s, "NODE_CREATE", f"{data.name} {data.transport} by {admin.username}", client_ip(request))
             _commit(s)
         except IntegrityError:
             s.rollback()
@@ -3765,7 +3809,11 @@ def api_node_regen_token(node_id: int, request: Request, admin: Admin = Depends(
     with db.s() as s:
         node = _get_node_or_404(s, node_id)
         node.token_enc = encrypt_text(token_plain)
+        # The server on the far end is being reconfigured, so the old probe
+        # result describes nothing. Resetting only `status` left the row
+        # reading "unknown" next to a last_check from hours ago.
         node.status = "unknown"
+        node.last_check = None
         audit(s, "NODE_TOKEN_REGEN", f"{node.name} by {admin.username}", client_ip(request))
         _commit(s)
         name = node.name
@@ -3824,6 +3872,13 @@ def api_node_check(node_id: int, request: Request, admin: Admin = Depends(requir
         if not node:
             # Deleted while probing: report 404, not a 500 on None.
             raise HTTPException(status_code=404, detail="Tunnel not found")
+        if node.iran_ip != host or node.tunnel_port != port:
+            # The row was edited (or deleted and re-created - SQLite recycles
+            # rowids) during the 3s probe, so this answer describes a config
+            # the tunnel no longer has. Writing it anyway stamped the new
+            # tunnel with the old one's status; the server-node path already
+            # pins the probed address for exactly this reason.
+            raise HTTPException(status_code=409, detail="Tunnel changed while checking - run the check again")
         node.status = "online" if online else "offline"
         node.last_check = utcnow()
         out = node.to_dict()
@@ -3918,8 +3973,15 @@ def api_srvnodes_patch(node_id: int, data: ServerNodePatchIn, request: Request, 
         if data.note is not None:
             node.note = data.note
         if data.address is not None or data.check_port is not None:
+            # The probe target changed: the recorded uptime describes the old
+            # address, so it goes with it. Leaving last_check (and the
+            # success/fail counters behind uptime_pct) showed "unknown" beside
+            # a stale reading from a different host.
             node.status = "unknown"
             node.latency_ms = None
+            node.last_check = None
+            node.success_count = 0
+            node.fail_count = 0
         audit(s, "SRVNODE_PATCH", f"{node.name} by {admin.username}", client_ip(request))
         _commit(s, missing="Server node not found")
         out = node.to_dict()
@@ -3931,7 +3993,26 @@ def api_srvnodes_delete(node_id: int, request: Request, admin: Admin = Depends(r
     with db.s() as s:
         node = _get_srvnode_or_404(s, node_id)
         name = node.name
-        for ib in s.scalars(select(Inbound).where(Inbound.node_id == node_id)).all():
+        orphans = s.scalars(select(Inbound).where(Inbound.node_id == node_id)).all()
+        # Un-pinning moves each inbound into THIS panel's scope, where the
+        # port rules apply (no second listener on a port, no shadowing the
+        # global server port). Create and patch run that check; the delete did
+        # not, so it could commit a configuration the panel itself rejects -
+        # and the operator gets it with a 200 and no warning.
+        blocked = []
+        for ib in orphans:
+            why = _inbound_port_conflict(s, ib.protocol, ib.port, None, ignore_id=ib.id)
+            if why:
+                blocked.append(f"{ib.name} ({ib.protocol}:{ib.port})")
+        if blocked:
+            raise HTTPException(
+                status_code=409,
+                detail=("Deleting this node would move these inbounds onto this "
+                        "server, where their ports are taken: "
+                        + ", ".join(blocked)
+                        + ". Re-pin them, change their port, or delete them first."),
+            )
+        for ib in orphans:
             ib.node_id = None
         s.delete(node)
         audit(s, "SRVNODE_DELETE", f"{name} by {admin.username}", client_ip(request))
@@ -4754,23 +4835,28 @@ def api_inbounds_list(admin: Admin = Depends(require_admin)):
 
 def _inbound_port_conflict(s, protocol: str, port: int, node_id, ignore_id=None,
                            sub_port_override=None) -> str | None:
-    """Reject duplicate (protocol, port) endpoints on the same node scope.
+    """Reject a second endpoint on a port already used on the same node scope.
 
-    Two listeners cannot share a port on one server; duplicates would only
-    produce dead/duplicate links. Inbounds on different nodes may reuse
-    ports (different machines). Also rejects shadowing the global server
-    port for local (unpinned) inbounds. sub_port_override lets the restore
-    transaction check against the port it is about to commit.
+    Two listeners cannot share a port on one server, whatever their protocol:
+    the query used to compare protocol AND port, so a `vless` inbound on 8000
+    and a `vmess` inbound on 8000 both passed and the operator got a config
+    that cannot start. Inbounds on different nodes may reuse ports (different
+    machines). Also rejects shadowing the global server port for local
+    (unpinned) inbounds. sub_port_override lets the restore transaction check
+    against the port it is about to commit.
     """
-    q = select(Inbound.id).where(
-        Inbound.protocol == protocol,
+    q = select(Inbound.protocol).where(
         Inbound.port == port,
         Inbound.node_id.is_(None) if node_id is None else Inbound.node_id == node_id,
     )
     if ignore_id is not None:
         q = q.where(Inbound.id != ignore_id)
-    if s.scalar(q.limit(1)):
-        return f"Another {protocol} inbound already uses port {port} here"
+    other = s.scalar(q.limit(1))
+    if other:
+        if other == protocol:
+            return f"Another {protocol} inbound already uses port {port} here"
+        return (f"Port {port} is already used by a {other} inbound on this server - "
+                "two protocols cannot listen on one port")
     if node_id is None:
         srv = load_srv()
         global_port = {
@@ -4834,6 +4920,11 @@ def api_inbounds_patch(
             ib.port = data.port
         if data.host is not None:
             ib.host = data.host
+        elif "host" in data.model_fields_set:
+            # Explicit null clears the host, exactly like node_id below. It
+            # used to be accepted and silently ignored, so a client that
+            # cleared the field kept serving links to the old address.
+            ib.host = ""
         if "node_id" in data.model_fields_set:
             # Explicit null unassigns the inbound back to this panel.
             if data.node_id and not s.get(ServerNode, _oid(data.node_id)):

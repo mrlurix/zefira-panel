@@ -789,6 +789,41 @@ st, final = js("GET", "/api/users", headers=AUTH)
 left = final.get("total", -1) if isinstance(final, dict) else -1
 check("path hunt cleaned up", left == 0, f"leftover users={left}")
 
+# ---- the one update bug no HTTP test can reach ----------------------------
+# _do_update runs in a thread: the stale-unit refusal used to `raise` BEFORE
+# the try/finally that releases _update_lock, so one click on an outdated unit
+# left the lock held forever - "updating" pinned in the status, every later
+# apply answered 409, and only a manual service restart recovered. Assert it
+# structurally: the raise must live inside a Try node.
+import ast
+import pathlib
+
+_main = pathlib.Path(__file__).resolve().parent / "main.py"
+_tree = ast.parse(_main.read_text(encoding="utf-8-sig"))
+_dou = next((n for n in _tree.body
+             if isinstance(n, ast.FunctionDef) and n.name == "_do_update"), None)
+check("_do_update exists", _dou is not None)
+if _dou is not None:
+    _tries = [n for n in ast.walk(_dou) if isinstance(n, ast.Try)]
+    _raises = [n for n in ast.walk(_dou) if isinstance(n, ast.Raise)]
+    _guarded = all(any(r in ast.walk(t) for t in _tries) for r in _raises)
+    check("EVERY raise in _do_update sits inside the try that releases the lock",
+          bool(_tries) and bool(_raises) and _guarded,
+          f"{len(_raises)} raise(s), {len(_tries)} try block(s), all-guarded={_guarded}")
+    _finals = [t.finalbody for t in _tries if t.finalbody]
+    check("_do_update has a finally that releases _update_lock",
+          any("_update_lock" in ast.unparse(fb) for fb in _finals),
+          "no finally releasing the lock")
+    # nothing may fail between the signature and that try
+    _early = []
+    for stmt in _dou.body:
+        if isinstance(stmt, ast.Try):
+            break
+        if any(isinstance(n, ast.Raise) for n in ast.walk(stmt)):
+            _early.append(ast.unparse(stmt)[:60])
+    check("nothing in _do_update can fail before the lock's try/finally",
+          not _early, "; ".join(_early)[:120])
+
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} checks passed ===")
 for n, ok, d in results:

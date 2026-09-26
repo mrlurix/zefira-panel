@@ -323,6 +323,28 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     return None
 
 
+# The panel's documented default REALITY SNI list. Used when the stored value
+# is empty (a legacy row, or a backup written before the field was validated):
+# an empty list used to fall back to the CONNECT ADDRESS as the SNI, which no
+# REALITY deployment can verify - every customer's link was dead while the
+# panel reported a healthy save.
+DEFAULT_REALITY_SNI = "www.yahoo.com,www.samsung.com,www.microsoft.com"
+
+
+def _reality_sni(srv: dict, index: int = 1) -> str:
+    """The SNI for REALITY link `index`, rotating through the stored list.
+
+    Both the share links and the Clash config call this, so the two can never
+    disagree about which servername a given link uses (the Clash builder used
+    to hard-pin the first entry).
+    """
+    raw = (srv.get("reality_sni") or "").strip() or DEFAULT_REALITY_SNI
+    sni_list = [s.strip() for s in raw.split(",") if s.strip()]
+    if not sni_list:
+        sni_list = [s.strip() for s in DEFAULT_REALITY_SNI.split(",") if s.strip()]
+    return sni_list[(max(1, int(index or 1)) - 1) % len(sni_list)]
+
+
 def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | None:
     from urllib.parse import quote as _q
 
@@ -333,8 +355,7 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
     # rather than ship a guaranteed-dead link to the customer.
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", pub or ""):
         return None
-    sni_list = [s.strip() for s in (srv.get("reality_sni") or "").split(",") if s.strip()]
-    sni = sni_list[(index - 1) % len(sni_list)] if sni_list else host
+    sni = _reality_sni(srv, index)
     sni = _q(sni, safe="")
     sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
     name = username
@@ -483,11 +504,16 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             })
     if "reality" in protos and secrets_map.get("reality"):
         sec = secrets_map["reality"]
+        r_idx = 0
         for vsrv, ilabel in _each("reality"):
+            r_idx += 1
             host_eff = _effective_host(sec, vsrv)
-            sni_list = [s.strip() for s in (vsrv.get("reality_sni") or "").split(",") if s.strip()]
-            sni = sni_list[0] if sni_list else host_eff
-            sid = hashlib.sha1(f"{sec}:1".encode()).hexdigest()[:8]
+            # Same helper as the share links, with the same running index: the
+            # Clash entry used to hard-pin the first SNI while the vless://
+            # link for the same user rotated, so one customer got two
+            # different REALITY servernames.
+            sni = _reality_sni(vsrv, r_idx)
+            sid = hashlib.sha1(f"{sec}:{r_idx}".encode()).hexdigest()[:8]
             # Same 43-char allowlist as the link builder: skip misconfigured
             # REALITY here too instead of shipping a dead proxy.
             rpub = vsrv.get("reality_pub") or ""
@@ -820,9 +846,16 @@ def _variant_srv(srv: dict, inbound: dict) -> dict:
     v["sub_port"] = port
     v["reality_port"] = port
     v["hy2_port"] = port
-    if inbound.get("host"):
-        v["domain"] = inbound["host"]
+    host = (inbound.get("host") or "").strip() or (inbound.get("node_address") or "").strip()
+    if host:
+        v["domain"] = host
         v["_is_inbound_variant"] = True
+    elif inbound.get("node_id"):
+        # Pinned to a node that has since been deleted from the panel: the
+        # address is gone, so this endpoint has no reachable host at all.
+        # Shipping the panel's own front here would hand the customer a link
+        # to the wrong machine that still LOOKS valid.
+        raise ValueError("pinned inbound has no address to connect to")
     return v
 
 

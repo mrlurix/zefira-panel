@@ -311,7 +311,12 @@ class SettingsIn(BaseModel):
         # link. Validate each comma-separated entry.
         cleaned = v.strip()
         if not cleaned:
-            return cleaned
+            # Empty was accepted here, and an empty list made the link builder
+            # substitute the CONNECT ADDRESS as the REALITY SNI - a servername
+            # no REALITY deployment can verify, so every customer's link was
+            # dead while the panel reported a healthy save. The field is not
+            # optional in practice: the form always posts a list.
+            raise ValueError("reality_sni must contain at least one hostname")
         seen = 0
         for part in cleaned.split(","):
             part = part.strip()

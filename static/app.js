@@ -1186,8 +1186,24 @@ $("#reality-reveal-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 $("#reality-copy-btn").addEventListener("click", async () => {
+  // The private box is only filled by Generate/Reveal, so after any reload
+  // "Copy Both Keys" copied `private_key: ` + an empty line and reported
+  // success - the operator then pasted an empty privateKey into Xray and
+  // killed REALITY for every user. Fetch it on demand instead.
+  let priv = $("#reality-priv").value;
+  if (!priv) {
+    try {
+      const d = await api("/api/reality/private");
+      priv = d.private_key || "";
+      $("#reality-priv").value = priv;
+    } catch (err) {
+      if (err.message !== "auth") toast(err.message, false);
+      return;
+    }
+  }
+  if (!priv) { toast(t("msg.realityNoPriv"), false); return; }
   const both =
-    `private_key: ${$("#reality-priv").value}\npublic_key: ${$("#reality-pub").value}`;
+    `private_key: ${priv}\npublic_key: ${$("#reality-pub").value}`;
   if (await copyText(both)) toast(t("msg.keysCopied"));
   else toast(t("msg.copyFailed"), false);
 });
@@ -1274,6 +1290,15 @@ async function loadNodes() {
   } catch (_) {}
 }
 
+// The setup guide is fetched with window.open (a plain navigation, so the
+// session cookie decides - not the api() 401 handling). A window.open issued
+// from a setTimeout is outside the click's user-gesture task, so the popup
+// blocker eats it silently: the button said "create + get guide" and the
+// operator got neither the file nor an error. Say so.
+function openGuide(url) {
+  if (!openDownload(url)) toast(t("msg.popupBlocked"), false);
+}
+
 $("#node-create-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#node-name").value.trim();
@@ -1306,7 +1331,7 @@ $("#node-create-btn").addEventListener("click", async (e) => {
     toast(t("msg.tunnelCreated"));
     $("#node-name").value = ""; $("#node-iran").value = ""; $("#node-kharej").value = "";
     loadNodes();
-    setTimeout(() => openDownload(`/api/nodes/${node.id}/guide`), 500);
+    setTimeout(() => openGuide(`/api/nodes/${node.id}/guide`), 500);
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
@@ -1340,15 +1365,22 @@ $("#nodes-list").addEventListener("click", async (e) => {
     } else if (btn.dataset.act === "refresh") {
       if (!confirm(t("cfm.nodeRegen"))) return;
       if (!guardBtn(btn)) return;
-      // Same once-flow as create: the old token dies immediately, so copy
-      // the new one and re-open the guide instead of stranding the operator.
-      const r = await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
-      if (r && r.token) {
-        if (!await copyText(r.token)) prompt(t("prm.tokenOnce"), r.token);
+      try {
+        // Same once-flow as create: the old token dies immediately, so copy
+        // the new one and re-open the guide instead of stranding the operator.
+        const r = await api(`/api/nodes/${id}/regen-token`, { method: "POST" });
+        if (r && r.token) {
+          if (!await copyText(r.token)) prompt(t("prm.tokenOnce"), r.token);
+        }
+        toast(t("msg.tokenRegenDl"));
+        loadNodes();
+        setTimeout(() => openGuide(`/api/nodes/${id}/guide`), 500);
+      } finally {
+        // Without this the row's button stayed disabled for the rest of the
+        // session whenever the request failed (429 from the limiter, 5xx):
+        // only the success path rebuilt the table and dropped the dead node.
+        btn.disabled = false;
       }
-      toast(t("msg.tokenRegenDl"));
-      loadNodes();
-      setTimeout(() => openDownload(`/api/nodes/${id}/guide`), 500);
     } else if (btn.dataset.act === "del-node") {
       if (!confirm(t("cfm.nodeDelete", {name: btn.dataset.name}))) return;
       await api("/api/nodes/" + id, { method: "DELETE" });
@@ -1418,7 +1450,8 @@ function inboundRow(ib) {
   });
   cNode.appendChild(nodeSel);
   const c5 = document.createElement("td");
-  c5.appendChild(badge(ib.enabled ? "ON" : "OFF", ib.enabled ? "ok" : "off"));
+  c5.appendChild(badge(ib.enabled ? t("badge.on") : t("badge.off"),
+                        ib.enabled ? "ok" : "off"));
   const c6 = document.createElement("td");
   const tglBtn = iconBtn(ib.enabled ? t("icon.disable") : t("icon.enableObj"), ICONS.toggleOff, ib.enabled ? "warn" : "good");
   tglBtn.dataset.act = "ib-toggle";
@@ -1775,12 +1808,17 @@ async function loadUpdate(announce, fresh, quietNetErr) {
     const badge = $("#update-badge");
     const sum = $("#update-summary");
     $("#update-repo").textContent = st.repo + "@" + st.branch;
-    if (st.error && !st.current) {
+    // `error` arrives whenever GitHub could not be reached (rate limit,
+    // offline) - and `current` is still populated then, so requiring
+    // `!st.current` made this branch unreachable: a failed check fell
+    // through to the "up to date" card and told the operator the panel was
+    // current when nobody had checked. Any error means "could not check".
+    if (st.error) {
       badge.textContent = t("update.error");
       badge.className = "badge proto off";
       sum.textContent = t("update.errStatus", {err: st.error});
       $("#update-now-btn").classList.add("hidden");
-      renderChangelog([], t("update.noData"));
+      renderChangelog(st.local_log || [], t("update.noLocal"));
     } else if (st.updating) {
       badge.textContent = t("update.updating");
       badge.className = "badge proto warn";
@@ -1839,24 +1877,42 @@ async function loadUpdate(announce, fresh, quietNetErr) {
     // transport failure, not an HTTP error) and used to be toasted as a red
     // "Failed to fetch" - a stack of them during a perfectly normal,
     // successful update. The poller passes quietNetErr so a transport
-    // failure inside the restart window is silent.
+    // failure inside the restart window is silent. A throttle (429) is the
+    // same class of noise for the same reason: it says nothing about the
+    // update, it only says the poller asked too often.
     const isNetErr = err instanceof TypeError;
-    if (!isNetErr || !quietNetErr) {
+    const isThrottled = /throttled|429|too many/i.test(String(err && err.message));
+    if ((!isNetErr && !isThrottled) || !quietNetErr) {
       if (err.message !== "auth") toast(err.message, false);
     }
     return null;
   }
 }
 $("#update-check-btn").addEventListener("click", () => loadUpdate(true));
-$("#update-now-btn").addEventListener("click", async () => {
+$("#update-now-btn").addEventListener("click", async (e) => {
   if (!confirm(t("cfm.updateNow"))) return;
   const pw = prompt(t("prm.updatePw"));
   if (!pw) return;
+  // The handler spans four awaits, so without this a second click started a
+  // second /api/update/apply and the operator saw a 409/429 error toast on
+  // top of "Update started".
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
   try {
     const before = await api("/api/update/status?fresh=1");
-    // Bind to the commit that was just reviewed: if upstream moved in between,
-    // the server refuses rather than installing something nobody saw.
-    const sha = before.latest_full || approvedUpdateSha || "";
+    // Bind to the commit the CARD SHOWED, never to a value re-read here.
+    // The server refuses when upstream advertises something other than the
+    // approved SHA - but re-reading the head at click time made the approved
+    // SHA *be* that fresh head, so the check could never fire and a release
+    // pushed after the operator read the card was installed unseen.
+    let sha = approvedUpdateSha;
+    if (!/^[0-9a-f]{40}$/.test(sha || "")) {
+      // The card was never rendered with a SHA (first paint, or a cached
+      // answer): refresh it once and approve THAT, so the operator still
+      // consents to one specific commit.
+      const shown = await loadUpdate(false, true);
+      sha = (shown && shown.latest_full) || "";
+    }
     if (!/^[0-9a-f]{40}$/.test(sha)) {
       toast(t("msg.updateNoSha"), false);
       return;
@@ -1885,7 +1941,15 @@ $("#update-now-btn").addEventListener("click", async () => {
           updatePoll = null;
           try {
             const after = await api("/api/update/status");
-            if ((after.latest || "") === (before.latest || "") && !after.updating) {
+            // Compare the RUNNING commit, not `latest` (the upstream head,
+            // which is identical before and after a successful install - so
+            // this always took the "nothing changed" branch and every
+            // successful update ended on the red systemd warning).
+            // `restart_pending` is the server saying the code landed but the
+            // process did not restart: git already reports the new commit, so
+            // the SHA compare alone would call it a success.
+            if (after.restart_pending
+                || ((after.current || "") === (before.current || "") && !after.updating)) {
               toast(t("msg.updateNoSystemd"), false);
             } else {
               toast(t("msg.updateDone"));
@@ -1898,7 +1962,8 @@ $("#update-now-btn").addEventListener("click", async () => {
           updatePoll = null;
           try {
             const after = await api("/api/update/status");
-            if ((after.latest || "") === (before.latest || "") && !after.updating) {
+            if (after.restart_pending
+                || ((after.current || "") === (before.current || "") && !after.updating)) {
               toast(t("msg.updateNoSystemd"), false);
             } else {
               toast(t("msg.updateDone"));
@@ -1911,6 +1976,10 @@ $("#update-now-btn").addEventListener("click", async () => {
     }, 5000);
   } catch (err) {
     if (err.message !== "auth") toast(err.message, false);
+  } finally {
+    // The card hides this button on success; on a failed apply it must come
+    // back, or the operator cannot retry without reloading the page.
+    btn.disabled = false;
   }
 });
 

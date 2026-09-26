@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=10">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,15 @@
 
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
+
+<h2 id="v1142"><span>v1.14.2</span> <span data-i18n="chg.v1142">&#8212; Panel sections, end to end: the update button could die for good, and a REALITY link could be born dead</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1142a_lead">The update button could die permanently: </b> <span data-i18n="chg.v1142a">the refusal to update through an outdated systemd unit sat <i>before</i> the block that releases the update lock, so one click left the lock held for good &#8212; the card then read &#8220;updating&#8221; forever, hid the button, and every later attempt answered 409 until you restarted the service by hand. The reviewed-commit guard was also unreachable: the browser re-read the branch head at click time, so the SHA you approved was always the SHA that got installed. Both are fixed, and the card now says so when the code landed but the process still needs a restart.</span></li>
+  <li><b data-i18n="chg.v1142b_lead">A REALITY link could be born dead: </b> <span data-i18n="chg.v1142b">an empty SNI list was accepted, and the builder then used the <i>connect address</i> as the servername &#8212; something no REALITY deployment can verify, so every customer's link was broken while the panel reported a healthy save. An empty list is now refused, a legacy row falls back to the documented defaults, and the Clash config rotates through the list exactly like the share links instead of always pinning the first entry.</span></li>
+  <li><b data-i18n="chg.v1142c_lead">One port, one listener: </b> <span data-i18n="chg.v1142c">the conflict check compared protocol <i>and</i> port, so a VLESS inbound and a VMess inbound could both claim 8000 &#8212; a configuration no server can start. It also never ran when deleting a server node, which quietly moved its inbounds onto this panel's port and could shadow the main subscription port. Both are checked now, and the delete tells you which inbound blocks it. A node-pinned inbound with no host of its own also links to the node's address now, not to this panel's domain.</span></li>
+  <li><b data-i18n="chg.v1142d_lead">The panel stopped lying to you: </b> <span data-i18n="chg.v1142d">a failed update check (rate limit, offline) was shown as &#8220;up to date&#8221;, because the error branch also required an empty version; a successful update always ended on the red &#8220;no systemd?&#8221; warning because it compared the upstream head instead of the running commit; &#8220;Copy Both Keys&#8221; copied an <i>empty</i> private key after every reload (pasting that into Xray kills REALITY for every user); a failed token regen left that row's button dead for the session; the automatic guide download was eaten by the popup blocker with no message; the inbound Enabled column was hard-coded English; and a duplicate tunnel name could answer 500 instead of 409.</span></li>
+  <li><b data-i18n="chg.v1142e_lead">Tests: </b> <span data-i18n="chg.v1142e">a new <code>panel_sections_test.py</code> (176 checks) walks all ten panel sections the way an operator does &#8212; create, edit, toggle, check, delete, and assert the state the screen renders, including what a customer actually receives when a node goes offline. <code>frontend_bugs_test.py</code> grew 10 checks for the UI fixes above and no longer probes a hard-coded port, so its live checks cannot silently test the wrong server. Eight suites, 802 checks, all green.</span></li>
+</ul>
 
 <h2 id="v1141"><span>v1.14.1</span> <span data-i18n="chg.v1141">&#8212; Bug hunt: a customer could vanish on restore, and half the update card was invisible</span></h2>
 <ul>
@@ -283,8 +292,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=7"></script>
-<script src="assets/docs.js?v=7"></script>
-<script src="assets/support-ai.js?v=7"></script>
+<script src="assets/i18n.js?v=10"></script>
+<script src="assets/docs.js?v=10"></script>
+<script src="assets/support-ai.js?v=10"></script>
 </body>
 </html>

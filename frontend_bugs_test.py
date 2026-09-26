@@ -16,8 +16,14 @@ import uuid
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = r"C:\Users\mrlurix\Desktop\laptop pro\zefira"
-BASE = "http://127.0.0.1:8000"
-PW = "kf0MrM3rm0GLg47x"
+# Take the target from argv like every other suite. It used to hard-code
+# 127.0.0.1:8000, so under run_all_tests.py - which serves on 8011 - the live
+# markup checks silently probed a different server (or nothing) and the result
+# depended on whatever happened to be listening on 8000.
+BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 and sys.argv[1] else "http://127.0.0.1:8000"
+# No default password: run_all_tests.py always passes it. A real credential
+# used to live in this line, so cloning the repo shipped a working login.
+PW = sys.argv[3] if len(sys.argv) > 3 else "YOUR_PASSWORD"
 XW = {"X-Requested-With": "XMLHttpRequest"}
 COOKIE = {"v": ""}
 results = []
@@ -40,6 +46,7 @@ ai_js = read("docs/assets/support-ai.js")
 panel = read("templates/panel.html")
 subtpl = read("templates/sub.html")
 docs_i18n = read("docs/assets/i18n.js")
+panel_i18n = read("static/i18n.js")
 # The asset version is asserted against the real docs pages, not a constant.
 panel_docs_html = "".join(
     read("docs/" + f) for f in
@@ -151,7 +158,55 @@ check("single newlines are preserved in assistant answers",
       "body.split(/\\n+/)" in ai_js)
 check("the assistant chat is capped", "msgsBox.children.length > 40" in ai_js)
 
-# ---------------------------------------------------------------- 12. customer dashboard
+# ------------------------------------------- 12. section wiring: update/reality/tunnels
+# Each of these shipped as a real bug, verified by reading app.js:
+# the reviewed-SHA guard was defeated by re-reading the head at click time,
+# the post-update verdict compared `latest` (the upstream head, identical
+# before and after) so every successful update ended on the red warning, the
+# error card required `!current` and so never rendered, "Copy Both Keys" sent
+# an empty private key after a reload, the regen button stayed disabled after
+# a failure, the Enabled badge was hard-coded English, and the auto guide
+# download was silently eaten by the popup blocker.
+check("the update apply sends the SHA the card displayed, not a fresh head read",
+      re.search(r"let sha = approvedUpdateSha;.*?expected_sha: sha", app, re.S) is not None
+      and 'const sha = before.latest_full || approvedUpdateSha' not in app,
+      "approvedUpdateSha must win over before.latest_full")
+check("the post-update verdict compares the running commit, not the upstream head",
+      app.count('(after.current || "") === (before.current || "")') == 2
+      and '(after.latest || "") === (before.latest || "")' not in app,
+      f"current-compare count: {app.count('(after.current || \"\") === (before.current || \"\")')}")
+check("a failed update check is shown as an error, not as 'up to date'",
+      re.search(r"if \(st\.error\) \{", app) is not None
+      and "st.error && !st.current" not in app)
+_copy = re.search(r'reality-copy-btn"\)\.addEventListener\("click".*?\n\}\);', app, re.S)
+_copy_body = _copy.group(0) if _copy else ""
+check("Copy Both Keys fetches the private key instead of copying it empty",
+      'let priv = $("#reality-priv").value;' in _copy_body
+      and "/api/reality/private" in _copy_body
+      and "if (!priv)" in _copy_body,
+      "handler not found" if not _copy_body else "no DOM read / no fetch")
+check("the tunnel token regen re-enables its button on failure",
+      re.search(r'act === "refresh".*?finally \{[^}]*btn\.disabled = false;', app, re.S)
+      is not None)
+check("the inbound Enabled badge is translated, not hard-coded ON/OFF",
+      'badge(ib.enabled ? t("badge.on") : t("badge.off")' in app
+      and 'badge(ib.enabled ? "ON" : "OFF"' not in app)
+check("an auto-downloaded guide reports a blocked popup",
+      "function openGuide(url)" in app and "openDownload(url)) toast(t(\"msg.popupBlocked\")"
+      in app and "setTimeout(() => openDownload(" not in app)
+check("the destructive Update button is guarded against a double click",
+      re.search(r'update-now-btn"\)\.addEventListener\("click".*?guardBtn\(btn\)',
+                app, re.S) is not None)
+_guard_chunks = re.split(r"if \(!guardBtn\(btn\)\) return;", app)[1:]
+check("every guardBtn call is released again",
+      bool(_guard_chunks) and all("btn.disabled = false" in c for c in _guard_chunks),
+      "unguarded chunks: "
+      + str(sum(1 for c in _guard_chunks if "btn.disabled = false" not in c)))
+check("the new private-key message exists in all four panel languages",
+      panel_i18n.count('"msg.realityNoPriv"') == 4,
+      str(panel_i18n.count('"msg.realityNoPriv"')))
+
+# ---------------------------------------------------------------- 13. customer dashboard
 check("the sub page guards t() on the copy path",
       'const T = (k) => (typeof t === "function"' in sub)
 check("the sub page reload measures the HIDDEN period, not the page age",

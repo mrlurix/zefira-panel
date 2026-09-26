@@ -29,6 +29,7 @@ SUITES = [
     ("attack_quota_test.py", "quota / schema boundaries"),
     ("attack_paths_test.py", "operator paths / restore"),
     ("frontend_bugs_test.py", "front-end regressions"),
+    ("panel_sections_test.py", "panel sections end-to-end"),
 ]
 
 
