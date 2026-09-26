@@ -19,6 +19,61 @@ if (navToggle) {
   });
 }
 
+// Compact header on scroll (the deepseek.com behaviour): scrolling down past
+// the fold slims the pill down, and scrolling back up brings the full size
+// back so the nav is always one flick away.
+(function () {
+  var bar = document.querySelector(".topbar");
+  if (!bar) return;
+  var mini = false, anchor = 0, last = window.scrollY || 0, ticking = false;
+
+  function apply() {
+    ticking = false;
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
+    var down = y > last;
+    if (y < 24) {
+      // Back at the top: always the full header.
+      if (mini) { mini = false; bar.classList.remove("mini"); }
+    } else if (down) {
+      if (!mini) { mini = true; anchor = y; bar.classList.add("mini"); }
+    } else if (mini && y < anchor - 70) {
+      // Scrolling up: hysteresis, so a jittery trackpad cannot make the
+      // header pulse between the two sizes.
+      mini = false;
+      bar.classList.remove("mini");
+    }
+    last = y;
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(apply);
+  }
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", onScroll, { passive: true });
+  apply();
+
+  // Publish the header's real height so the sidebar can stack under it
+  // instead of guessing. A ResizeObserver also catches the height change the
+  // compact state itself causes, and the mobile drawer's two-row wrap -
+  // neither of which a scroll handler can know about.
+  // (Height, NOT getBoundingClientRect().bottom: the bar is sticky, so its
+  // rect is a viewport position and grows with the scroll offset.)
+  var root = document.documentElement;
+  function publish() {
+    var h = Math.round(bar.offsetHeight);
+    if (h > 0) root.style.setProperty("--topbar-h", h + "px");
+  }
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(publish).observe(bar);
+  } else {
+    addEventListener("resize", publish);
+  }
+  publish();
+  addEventListener("load", publish);
+})();
+
 // Sidebar search filter
 var navSearch = document.getElementById("nav-search");
 if (navSearch) {
@@ -165,7 +220,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   // (render() was only ever called from search()).
   var index = null, items = [], sel = 0, lastQ = "";
   function isOpen() { return overlay && !overlay.hidden; }
-  fetch("assets/search-index.json?v=10").then(function (r) {
+  fetch("assets/search-index.json?v=11").then(function (r) {
     if (!r.ok) throw new Error("index http " + r.status);
     return r.json();
   }).then(function (j) {

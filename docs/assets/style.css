@@ -12,6 +12,12 @@
   --orange: #f5a623;
   --code-bg: #0b0b12;
   --sidebar-w: 264px;
+  /* How far the floating header sits from the top of the viewport. Declared
+     once here so the sidebar can stack under the header without repeating
+     the number (it used to hardcode 80px and drifted the moment the header
+     changed height). */
+  --bar-top: 12px;
+  --bar-gap: 24px;
   --radius: 12px;
 }
 
@@ -28,7 +34,7 @@ body {
 /* ---------- header ---------- */
 .topbar {
   position: sticky;
-  top: 12px;
+  top: var(--bar-top);
   z-index: 50;
   display: flex;
   align-items: center;
@@ -43,10 +49,18 @@ body {
   border: 1px solid var(--border-red);
   border-radius: 18px;
   box-shadow: 0 10px 34px rgba(0, 0, 0, .5), 0 0 22px var(--red-glow);
+  /* Compaction on scroll (docs.js adds .mini): only animatable properties
+     here, and `top` is deliberately left alone - moving a sticky element's
+     offset is not transitionable and reads as a jerk. */
+  transition: padding .22s ease, background-color .22s ease, border-radius .22s ease,
+              box-shadow .22s ease, gap .22s ease;
 }
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
-.brand img { width: 28px; height: 28px; border-radius: 7px; }
-.brand b { font-size: 16px; letter-spacing: 2px; }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text);
+         transition: gap .22s ease; }
+.brand img { width: 28px; height: 28px; border-radius: 7px; transition: width .22s ease,
+             height .22s ease, border-radius .22s ease; }
+.brand b { font-size: 16px; letter-spacing: 2px; transition: font-size .22s ease,
+           letter-spacing .22s ease; }
 .brand b span { color: var(--red); }
 .ver {
   font-size: 11px;
@@ -55,6 +69,7 @@ body {
   border-radius: 20px;
   padding: 0 8px;
   white-space: nowrap;
+  transition: padding .22s ease, font-size .22s ease;
 }
 .topbar .spacer { flex: 1; }
 .topbar a.gh {
@@ -64,6 +79,7 @@ body {
   border: 1px solid var(--border);
   padding: 4px 11px;
   border-radius: 8px;
+  transition: padding .22s ease, font-size .22s ease, border-radius .22s ease;
 }
 .topbar a.gh:hover { color: var(--text); border-color: var(--red); }
 #nav-toggle {
@@ -75,17 +91,38 @@ body {
   font-size: 16px;
   padding: 3px 10px;
   cursor: pointer;
+  transition: padding .22s ease, font-size .22s ease, border-radius .22s ease;
 }
 
+/* Compact header once the page is scrolled (deepseek-style): the pill loses
+   its padding, the logo and wordmark step down, and the blur deepens so the
+   text passing underneath stops competing with it. */
+.topbar.mini {
+  gap: 8px;
+  padding: 3px 12px;
+  background: rgba(9, 9, 15, .86);
+  border-radius: 13px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45), 0 0 10px var(--red-glow);
+}
+.topbar.mini .brand { gap: 7px; }
+.topbar.mini .brand img { width: 19px; height: 19px; border-radius: 5px; }
+.topbar.mini .brand b { font-size: 12.5px; letter-spacing: 1.2px; }
+.topbar.mini .ver { font-size: 10px; padding: 0 7px; }
+.topbar.mini a.gh { font-size: 12px; padding: 2px 9px; border-radius: 7px; }
+.topbar.mini #nav-toggle { font-size: 13px; padding: 1px 8px; border-radius: 7px; }
+
 /* ---------- layout ---------- */
+/* --topbar-h is the header's real height, published by docs.js through a
+   ResizeObserver so it follows the compact state and the mobile drawer's
+   two-row wrap. The sidebar then stacks under it exactly, at any size. */
 .layout { display: flex; }
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
   position: fixed;
   left: 0;
-  top: 80px;
-  height: calc(100vh - 94px);
+  top: calc(var(--topbar-h, 47px) + var(--bar-top) + var(--bar-gap));
+  height: calc(100vh - var(--topbar-h, 47px) - var(--bar-top) - var(--bar-gap) - 14px);
   overflow-y: auto;
   padding: 22px 14px 40px 22px;
   border-right: 1px solid var(--border);
@@ -321,11 +358,14 @@ footer a { color: var(--red); text-decoration: none; }
   .hero-xl h1 { font-size: 34px; letter-spacing: 7px; }
   .sidebar {
     display: none;
-    top: 80px;
+    /* Same measured offset as the desktop rule: the mobile drawer used to
+       hardcode 80px, which drifted out of step with the header the moment
+       the header changed height. */
+    top: calc(var(--topbar-h, 47px) + var(--bar-top) + var(--bar-gap));
+    height: calc(100vh - var(--topbar-h, 47px) - var(--bar-top) - var(--bar-gap) - 14px);
     left: 0;
     background: var(--bg);
     z-index: 40;
-    height: calc(100vh - 94px);
     box-shadow: 4px 0 24px rgba(0,0,0,.6);
   }
   [dir="rtl"] .sidebar {

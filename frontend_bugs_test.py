@@ -46,6 +46,7 @@ ai_js = read("docs/assets/support-ai.js")
 panel = read("templates/panel.html")
 subtpl = read("templates/sub.html")
 docs_i18n = read("docs/assets/i18n.js")
+docs_css = read("docs/assets/style.css")
 panel_i18n = read("static/i18n.js")
 # The asset version is asserted against the real docs pages, not a constant.
 panel_docs_html = "".join(
@@ -205,6 +206,45 @@ check("every guardBtn call is released again",
 check("the new private-key message exists in all four panel languages",
       panel_i18n.count('"msg.realityNoPriv"') == 4,
       str(panel_i18n.count('"msg.realityNoPriv"')))
+
+# ------------------------------------------- 12b. compact header on scroll
+# docs.js with the comment lines dropped, so a check about code cannot be
+# satisfied (or broken) by the comment that explains the code.
+_docs_code = "\n".join(ln for ln in docs_js.splitlines()
+                      if not ln.strip().startswith(("//", "*", "/*")))
+# The docs header slims down as you scroll (the deepseek.com behaviour) and
+# the sidebar used to hardcode `top: 80px`, so the moment the header changed
+# height the two drifted apart. Pin both: the class the scroll handler toggles,
+# the properties it compacts, the height the layout measures, and the
+# invariant that keeps the sticky bar from jerking.
+check("the docs header compacts on scroll and expands again on scroll-up",
+      re.search(r'addEventListener\("scroll"', docs_js) is not None
+      and 'classList.add("mini")' in docs_js
+      # the removal must be INSIDE the scroll-up branch, not only in the
+      # back-at-the-top branch: a header that shrinks and never comes back
+      # leaves the nav permanently mini for the rest of the visit.
+      and re.search(r'y < anchor - 70\)\s*\{[^}]*classList\.remove\("mini"\)',
+                    docs_js, re.S) is not None,
+      "scroll handler / scroll-up restore missing")
+check("the compact state is CSS-driven, with every compacted property animated",
+      ".topbar.mini {" in docs_css
+      and all(p in docs_css for p in (".topbar.mini .brand img { width: 19px",
+                                      ".topbar.mini .brand b { font-size: 12.5px",
+                                      ".topbar.mini a.gh {", ".topbar.mini #nav-toggle {")),
+      "")
+check("the compact state never moves the sticky offset (that reads as a jerk)",
+      re.search(r"\.topbar\.mini\s*\{[^}]*\btop\s*:", docs_css) is None
+      and "transition: padding .22s ease" in docs_css,
+      ".topbar.mini must not set `top`")
+check("the sidebar follows the header's real height instead of a guessed offset",
+      "--topbar-h" in docs_css and "var(--topbar-h" in docs_css
+      and 'setProperty("--topbar-h"' in docs_js
+      and re.search(r"\.sidebar\s*\{[^}]*top:\s*80px", docs_css) is None,
+      "hardcoded sidebar offset still present")
+check("the header height is published from a measurement, not from a rect",
+      "ResizeObserver" in docs_js and "bar.offsetHeight" in docs_js
+      and "getBoundingClientRect().bottom" not in _docs_code,
+      "a sticky element's rect is a viewport position, not a height")
 
 # ---------------------------------------------------------------- 13. customer dashboard
 check("the sub page guards t() on the copy path",
