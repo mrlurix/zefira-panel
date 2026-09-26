@@ -21,23 +21,29 @@ Built with FastAPI + SQLite. No Docker required, just Python.
 
 ### Install on a server
 
+One-liner:
+
 ```bash
-# Download into a private directory, read it, then run THAT copy as root.
+curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh | sudo bash
+```
+
+Prefer to read it first? Download, look, then run that exact copy:
+
+```bash
 umask 077 && mkdir -p /tmp/zefira-inst
 curl -fsSL -o /tmp/zefira-inst/install.sh \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.13.9/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.0/install.sh
 less /tmp/zefira-inst/install.sh
 sudo bash /tmp/zefira-inst/install.sh
 ```
 
-> **There is no `sudo bash <(curl ...)` one-liner, on purpose.** Piping a
-> remote script into a root shell means whatever upstream serves at that
-> second runs as root with no review step. Two more reasons to download
-> first: the file lands in a private directory instead of a predictable path
-> a local user could swap between your `less` and your `sudo bash`, and
-> pinning the **release tag** makes the install reproducible — the installer
-> otherwise clones whatever `main` points at. Set `ZEFIRA_INSTALL_REF` to a
-> tag or commit SHA to pin the source as well.
+> Both work. The one-liner pipes whatever upstream serves at that second
+> straight into a root shell, so if you care which code runs as root, use the
+> second form: it lands in a private directory (not a predictable path another
+> local user could swap between your `less` and your `sudo bash`) and the
+> `v1.14.0` tag pins the installer itself. The installer clones
+> `ZEFIRA_INSTALL_REF` (default `main`) for the panel source — set it to a
+> tag or commit SHA for a fully reproducible install.
 
 The script installs Python deps, creates a systemd service and stores your
 first-run credentials in `instance/first-run-credentials.txt` (mode 600) -

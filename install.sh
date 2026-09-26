@@ -2,18 +2,17 @@
 # ============================================================
 #  ZEFIRA PANEL - Interactive Installer
 #
-#  Recommended (review before you run it as root):
-#     curl -fsSL -o /tmp/zefira-install.sh \
-#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.13.9/install.sh
-#     less /tmp/zefira-install.sh
-#     sudo bash /tmp/zefira-install.sh
+#  One-line:
+#     curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh | sudo bash
 #
-#  There is deliberately NO `curl | sudo bash` one-liner: piping a moving
-#  branch straight into a root shell means whatever upstream serves at that
-#  second runs as root unreviewed. Pin a tag (v1.13.9), read the file, then
-#  run that exact copy.
+#  Or read it first (recommended - it runs as root):
+#     umask 077 && mkdir -p /tmp/zefira-inst
+#     curl -fsSL -o /tmp/zefira-inst/install.sh \
+#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.0/install.sh
+#     less /tmp/zefira-inst/install.sh
+#     sudo bash /tmp/zefira-inst/install.sh
 #
-#  Source selection: the installer's OWN directory is used when it sits next
+#  Source selection: this installer's OWN directory is used when it sits next
 #  to main.py + requirements.txt; otherwise it clones ZEFIRA_INSTALL_REF
 #  (defaults to the `main` branch - set it to a tag or commit SHA for a
 #  reproducible install).
