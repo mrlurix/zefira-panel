@@ -20,7 +20,7 @@
     if (KB_FAILED) { cb(null); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=6").then(function (r) {
+    fetch("assets/site-knowledge.json?v=7").then(function (r) {
       if (!r.ok) throw new Error("kb http " + r.status);
       return r.json();
     }).then(function (j) {

@@ -165,7 +165,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   // (render() was only ever called from search()).
   var index = null, items = [], sel = 0, lastQ = "";
   function isOpen() { return overlay && !overlay.hidden; }
-  fetch("assets/search-index.json?v=6").then(function (r) {
+  fetch("assets/search-index.json?v=7").then(function (r) {
     if (!r.ok) throw new Error("index http " + r.status);
     return r.json();
   }).then(function (j) {

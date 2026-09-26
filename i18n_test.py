@@ -116,6 +116,54 @@ for js in ("docs.js", "support-ai.js", "i18n.js"):
 for k in sorted(_djs - _dbase):
     fail(f"docs JS key missing from en dict: {k}")
 print(f"docs JS keys used: {len(_djs)}")
+# ---- 6. no value written in the wrong language ----
+# A Russian draft pasted into the en block shipped for months: English
+# visitors saw "Нравится Zefira?" on the support page. Key-parity checks
+# cannot catch that (the key exists, in every locale), so look at the SCRIPT
+# each value is written in.
+_CYR = re.compile(r"[\u0400-\u04FF\u0500-\u052F]")
+_CJK = re.compile(r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]")
+_FA = re.compile(r"[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]")
+# A value may quote a word from another script ON PURPOSE (the changelog
+# explains that a Persian "سلام" was mis-answered). Listed explicitly.
+_SCRIPT_OK = {
+    # quotes the Persian greeting as an example, in every locale
+    ("en", "chg.v1141f"),
+    ("fa", "chg.v1141f"),
+    ("zh", "chg.v1141f"),
+    ("ru", "chg.v1141f"),
+}
+
+
+def _script_mix(path, blocks_re, label):
+    src = path.read_text(encoding="utf-8")
+    marks = [(m.start(), m.end(), m.group(1)) for m in blocks_re.finditer(src)]
+    for i, (s, _e, loc) in enumerate(marks):
+        nxt = marks[i + 1][0] if i + 1 < len(marks) else len(src)
+        for km in re.finditer(r'"([a-zA-Z0-9_.]+)"\s*:\s*"((?:[^"\\]|\\.)*)"',
+                              src[s:nxt]):
+            key, val = km.group(1), km.group(2)
+            if (loc, key) in _SCRIPT_OK:
+                continue
+            bad = []
+            if loc in ("en", "fa"):
+                if _CYR.search(val):
+                    bad.append("Cyrillic")
+            if loc in ("en", "fa", "ru"):
+                if _CJK.search(val):
+                    bad.append("CJK")
+            if loc in ("en", "ru", "zh"):
+                if _FA.search(val):
+                    bad.append("Persian/Arabic")
+            for b in bad:
+                fail(f"{label} {loc}.{key} contains {b} text (wrong language)")
+
+
+_script_mix(HERE / "docs" / "assets" / "i18n.js",
+            re.compile(r"Object\.assign\(Z_STRINGS\.(\w+), \{"), "docs")
+_script_mix(HERE / "static" / "i18n.js",
+            re.compile(r"Object\.assign\(Z_STRINGS\.(\w+), \{"), "panel")
+print("language-mix scan: done")
 
 print("i18n checks:", "ALL OK" if not fails else f"{len(fails)} FAILURES")
 sys.exit(1 if fails else 0)
