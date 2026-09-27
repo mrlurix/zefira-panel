@@ -267,7 +267,13 @@ class ServerNode(Base):
             "last_check": (
                 self.last_check.isoformat(timespec="seconds") + "Z" if self.last_check else None
             ),
-            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            # Guarded like VpnUser.to_dict: a hand-edited or migrated row with
+            # a NULL created_at raised AttributeError here, and that took out
+            # /api/server-nodes, its check endpoint and the monitor loop with
+            # a 500. safe_text's own docstring calls it a panel-wide DoS.
+            "created_at": (
+                self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
+            ),
         }
 
 
@@ -337,7 +343,10 @@ class AuditLog(Base):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
-            "ts": self.ts.isoformat(timespec="seconds") + "Z",
+            # Same NULL guard as the other rows: the audit log is read by the
+            # panel's own dashboard, and one legacy row without a timestamp
+            # 500'd /api/audit.
+            "ts": self.ts.isoformat(timespec="seconds") + "Z" if self.ts else None,
             "event": safe_text(self.event),
             "detail": safe_text(self.detail[:200]),
             "ip": safe_text(self.ip),

@@ -49,19 +49,10 @@ body {
   border: 1px solid var(--border-red);
   border-radius: 18px;
   box-shadow: 0 10px 34px rgba(0, 0, 0, .5), 0 0 22px var(--red-glow);
-  /* Compaction on scroll (docs.js adds .mini): only animatable properties
-     here, and `top` is deliberately left alone - moving a sticky element's
-     offset is not transitionable and reads as a jerk. */
-  transition: max-width .24s cubic-bezier(.4, 0, .2, 1), padding .22s ease,
-              background-color .22s ease, border-radius .22s ease,
-              box-shadow .22s ease, gap .22s ease;
 }
-.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text);
-         transition: gap .22s ease; }
-.brand img { width: 28px; height: 28px; border-radius: 7px; transition: width .22s ease,
-             height .22s ease, border-radius .22s ease; }
-.brand b { font-size: 16px; letter-spacing: 2px; transition: font-size .22s ease,
-           letter-spacing .22s ease; }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.brand img { width: 28px; height: 28px; border-radius: 7px; }
+.brand b { font-size: 16px; letter-spacing: 2px; }
 .brand b span { color: var(--red); }
 .ver {
   font-size: 11px;
@@ -70,9 +61,6 @@ body {
   border-radius: 20px;
   padding: 0 8px;
   white-space: nowrap;
-  overflow: hidden;
-  transition: padding .22s ease, font-size .22s ease, max-width .24s ease,
-              opacity .18s ease, border-width .22s ease;
 }
 .topbar .spacer { flex: 1; }
 .topbar a.gh {
@@ -82,9 +70,6 @@ body {
   border: 1px solid var(--border);
   padding: 4px 11px;
   border-radius: 8px;
-  overflow: hidden;
-  transition: padding .22s ease, font-size .22s ease, border-radius .22s ease,
-              max-width .24s ease, opacity .18s ease, border-width .22s ease;
 }
 .topbar a.gh:hover { color: var(--text); border-color: var(--red); }
 #nav-toggle {
@@ -96,46 +81,12 @@ body {
   font-size: 16px;
   padding: 3px 10px;
   cursor: pointer;
-  transition: padding .22s ease, font-size .22s ease, border-radius .22s ease;
-}
-
-/* Compact header once the page is scrolled: the pill narrows from BOTH sides
-   (it is centred, so shrinking max-width pulls each edge inward) and the
-   links that are not needed while reading collapse to zero width. Everything
-   comes back the moment the visitor scrolls up. */
-.topbar.mini {
-  max-width: 520px;
-  gap: 8px;
-  padding: 5px 12px;
-  background: rgba(9, 9, 15, .86);
-  border-radius: 13px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .45), 0 0 10px var(--red-glow);
-}
-.topbar.mini .brand { gap: 7px; }
-.topbar.mini .brand img { width: 21px; height: 21px; border-radius: 5px; }
-.topbar.mini .brand b { font-size: 13px; letter-spacing: 1.2px; }
-.topbar.mini a.gh { font-size: 12px; padding: 2px 9px; border-radius: 7px; }
-.topbar.mini #nav-toggle { font-size: 13px; padding: 1px 8px; border-radius: 7px; }
-/* The Docs pill duplicates the logo, and Donate / GitHub are links you follow
-   when you are done reading. Collapsing them (not display:none, which cannot
-   be animated) is what makes the sideways shrink visible. */
-.topbar.mini .ver,
-.topbar.mini a.gh[href$="donate.html"],
-.topbar.mini a.gh[href*="github.com"] {
-  max-width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  border-width: 0;
-  opacity: 0;
-  /* Without this the clipped text wraps to one character per line and the
-     collapsed row grows TALLER than the open one (56px vs 47px measured). */
-  white-space: nowrap;
 }
 
 /* ---------- layout ---------- */
 /* --topbar-h is the header's real height, published by docs.js through a
-   ResizeObserver so it follows the compact state and the mobile drawer's
-   two-row wrap. The sidebar then stacks under it exactly, at any size. */
+   ResizeObserver, so the sidebar stacks under it exactly instead of
+   guessing 80px (which drifted the moment the bar wrapped on mobile). */
 .layout { display: flex; }
 .sidebar {
   width: var(--sidebar-w);

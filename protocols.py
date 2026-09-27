@@ -458,6 +458,19 @@ PORN_DOMAINS = [
     "xvideos2.com", "hclips.com", "empflix.com", "porntrex.com", "hdzog.com",
 ]
 
+# Clash (mihomo) can only carry the proxy types it implements. A plan built
+# from WireGuard / OpenVPN / L2TP / Cisco has no Clash representation, and a
+# REALITY plan with no generated public key has no link either - so the
+# endpoint must say so rather than hand back a profile that routes everything
+# through DIRECT.
+_NO_CLASH_REASON = (
+    "This plan cannot be expressed as a Clash/Mihomo config: the selected "
+    "protocols (WireGuard, OpenVPN, L2TP, Cisco) have no Clash proxy type, or "
+    "the REALITY keys have not been generated yet. Import the .ovpn/.conf "
+    "config from the dashboard, or add a VLESS/Trojan/VMess/SS/Hysteria2 "
+    "protocol to this account."
+)
+
 def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) -> str:
     protos = u.get("protocols") or []
     secrets_map = u.get("secret_map") or {}
@@ -587,10 +600,17 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
     lines.append("proxies:")
     for p in proxies:
         lines.append("  - " + _json_scalar(p))
+    if not proxies:
+        # A syntactically valid profile with an empty proxy list is the worst
+        # possible outcome: the client imports it happily, MATCH sends every
+        # request to the fallback and the customer browses the open internet
+        # believing they are tunnelled. Clash cannot express WireGuard,
+        # OpenVPN, L2TP or Cisco at all, and a REALITY plan whose keys were
+        # never generated has nothing to emit either. Refuse instead, and let
+        # the endpoint answer with something the operator can act on.
+        raise ValueError(_NO_CLASH_REASON)
     lines.append("proxy-groups:")
-    # An empty proxy list (e.g. only misconfigured REALITY) must still
-    # parse: fall back to DIRECT so clients never choke on `proxies: []`.
-    group_proxies = names if names else ["DIRECT"]
+    group_proxies = names
     lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": group_proxies}))
     lines.append("rules:")
     if blocked:

@@ -370,6 +370,8 @@ function renderUserTable(items) {
 
 let usersSeq = 0;
 let usersTotal = 0;
+// The search text USERS_CACHE was loaded with. Empty = the whole table.
+let usersQuery = "";
 async function loadUsers(q = "") {
   // Last-issued query wins: a slow earlier fetch must not overwrite the
   // table with stale rows for a superseded query.
@@ -378,6 +380,10 @@ async function loadUsers(q = "") {
     const data = await api("/api/users?q=" + encodeURIComponent(q));
     if (my !== usersSeq) return;
     USERS_CACHE = data.items;
+    // Remember what the cache holds: the CSV export and the "latest users"
+    // card both read it, and neither can tell a filtered set from the whole
+    // table without this.
+    usersQuery = q;
     usersTotal = data.total || data.items.length;
     renderUserTable(USERS_CACHE);
     $("#empty-state").classList.toggle("hidden", data.items.length > 0);
@@ -507,13 +513,22 @@ $("#logout-btn").addEventListener("click", async () => {
 
 const overlay = $("#modal-overlay");
 $("#add-user-btn").addEventListener("click", () => { bumpUserFormOp(); loadTemplates(); overlay.classList.remove("hidden"); });
-$("#modal-close").addEventListener("click", () => { bumpUserFormOp(); overlay.classList.add("hidden"); });
-overlay.addEventListener("click", (e) => { if (e.target === overlay) { bumpUserFormOp(); overlay.classList.add("hidden"); } });
-// Operation generation: a finished add/edit from a modal the operator already
-// closed used to reset+close the modal they had since reopened, wiping the
-// new form. Each open/submit bumps the counter and only the newest op acts.
+// Closing the dialog must NOT bump the counter. It used to, and since the
+// counter is what cancels a finished submit, dismissing the modal while the
+// POST was in flight made the handler return early: the user WAS created, but
+// there was no toast and no table refresh, so the operator created the same
+// username again and hit a 409. Only REOPENING (a new form) may cancel.
+$("#modal-close").addEventListener("click", () => { overlay.classList.add("hidden"); });
+overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.add("hidden"); } });
+// Operation generation: a finished add/edit from a modal the operator has
+// since REOPENED must not reset+close the new form. Each open/submit bumps
+// the counter and only the newest op acts.
 let userFormOp = 0;
 function bumpUserFormOp() { userFormOp += 1; return userFormOp; }
+// Separate generation for the edit dialog: one shared counter let the Add
+// dialog cancel an edit that was still saving.
+let editFormOp = 0;
+function bumpEditFormOp() { editFormOp += 1; return editFormOp; }
 
 const qrModal = $("#qr-modal");
 $("#qr-close").addEventListener("click", () => qrModal.classList.add("hidden"));
@@ -528,7 +543,18 @@ $("#qr-copy-btn").addEventListener("click", async () => {
   else toast(t("msg.copyFailed"), false);
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { bumpUserFormOp(); overlay.classList.add("hidden"); qrModal.classList.add("hidden"); }
+  if (e.key !== "Escape") return;
+  // Escape closes whatever is open. #ai-chat is role="dialog" but was in
+  // neither handler, so Escape did nothing while the operator was typing in
+  // the assistant - the one place a stray keystroke is most likely.
+  overlay.classList.add("hidden");
+  qrModal.classList.add("hidden");
+  const edit = $("#edit-modal");
+  if (edit) edit.classList.add("hidden");
+  const ai = $("#ai-chat");
+  if (ai && !ai.classList.contains("hidden")) ai.classList.add("hidden");
+  const m = $("#menu-pop");
+  if (m) m.classList.add("hidden");
 });
 
 $("#add-user-form").addEventListener("submit", async (e) => {
@@ -654,7 +680,7 @@ $("#sort-sel").addEventListener("change", () => {
   renderUserTable(USERS_CACHE);
 });
 
-$("#export-csv-btn").addEventListener("click", () => {
+$("#export-csv-btn").addEventListener("click", async () => {
   if (!USERS_CACHE.length) { toast(t("msg.noUsersExport"), false); return; }
   const safeCell = (v) => {
     // Normalize fullwidth ASCII (＝+＠) and strip bidi controls first:
@@ -683,14 +709,31 @@ $("#export-csv-btn").addEventListener("click", () => {
   const csv = rows.map((r) => r.map((c) => `"${String(safeCell(c)).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
+  // USERS_CACHE is whatever the last query returned, and usersTotal counts
+  // that same filtered set - so a search left in the box produced a file
+  // named zefira-users.csv holding only the hits, toasted as a plain
+  // "Exported 12 users". An operator shipping that to accounting as the
+  // customer list was silently losing rows. The file now says what it holds
+  // and the toast names the filter and the real total.
+  const filtered = !!usersQuery;
   a.href = URL.createObjectURL(blob);
-  a.download = "zefira-users.csv";
+  a.download = filtered ? "zefira-users-filtered.csv" : "zefira-users.csv";
   a.click();
   URL.revokeObjectURL(a.href);
   const n = rows.length - 1;
-  // Never claim completeness when the backend truncated at 500: the notice
-  // above the table says the same.
-  toast(usersTotal > n ? t("msg.exportedOf", {n, total: usersTotal}) : t("msg.exported", {n}));
+  if (filtered) {
+    let realTotal = usersTotal;
+    try {
+      // One cheap unfiltered number, so the toast can say "12 of 340".
+      const st = await api("/api/stats");
+      if (Number.isFinite(Number(st.total_users))) realTotal = Number(st.total_users);
+    } catch (_) { /* fall back to the filtered count */ }
+    toast(t("msg.exportedFiltered", {n, total: realTotal, q: usersQuery}), n < realTotal);
+  } else {
+    // Never claim completeness when the backend truncated at 500: the notice
+    // above the table says the same.
+    toast(usersTotal > n ? t("msg.exportedOf", {n, total: usersTotal}) : t("msg.exported", {n}));
+  }
 });
 
 $("#users-table").addEventListener("click", async (e) => {
@@ -709,6 +752,11 @@ $("#users-table").addEventListener("click", async (e) => {
       f.device_limit.value = u.device_limit || "";
       f.reset_used.checked = false;
       f.dataset.uid = id;
+      // A new edit session: cancel any submit still in flight for the
+      // previous one. Uses its OWN counter - sharing one with the Add dialog
+      // meant opening "Add User" mid-save silently dropped the edit's
+      // toast and table refresh.
+      bumpEditFormOp();
       $("#edit-modal").classList.remove("hidden");
       return;
     }
@@ -757,9 +805,25 @@ $("#users-table").addEventListener("click", async (e) => {
       return;
     }
     if (btn.dataset.act === "toggle") {
-      const isActive = btn.classList.contains("warn");
-      await api("/api/users/" + id, { method: "PATCH", body: { is_active: !isActive } });
-      toast(isActive ? t("msg.paused") : t("msg.enabled"));
+      // Decide from the row DATA the server sent, not from a CSS class: the
+      // class is only a paint, and a double click (no in-flight guard) sent
+      // is_active:false twice - the customer stayed paused while the operator
+      // counted it as pause-then-resume.
+      const row = USERS_CACHE.find((x) => String(x.id) === String(id));
+      if (!row) { toast(t("msg.badNumbers"), false); loadUsers($("#search").value.trim()); return; }
+      if (!guardBtn(btn)) return;
+      const isActive = !!row.is_active;
+      try {
+        await api("/api/users/" + id, { method: "PATCH", body: { is_active: !isActive } });
+        toast(isActive ? t("msg.paused") : t("msg.enabled"));
+      } finally {
+        // A failed pause/resume left the button dead for the session, and
+        // the row kept painting the old state. The refresh is here because
+        // the toggle falls through to the shared loadUsers() only on the
+        // success path further below.
+        btn.disabled = false;
+      }
+      loadUsers($("#search").value.trim());
     } else if (btn.dataset.act === "reset") {
       if (!confirm(t("cfm.userReset"))) return;
       // confirm() only blocks the dialog; a second click during the request
@@ -1732,15 +1796,16 @@ $("#block-list")?.addEventListener("click", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
-$("#edit-close").addEventListener("click", () => { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); });
-$("#edit-modal").addEventListener("click", (e) => { if (e.target === $("#edit-modal")) { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); } });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { bumpUserFormOp(); $("#edit-modal").classList.add("hidden"); } });
+// Closing never bumps: only REOPENING starts a new session. (Escape is
+// handled by the single global handler further up.)
+$("#edit-close").addEventListener("click", () => { $("#edit-modal").classList.add("hidden"); });
+$("#edit-modal").addEventListener("click", (e) => { if (e.target === $("#edit-modal")) { $("#edit-modal").classList.add("hidden"); } });
 
 $("#edit-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
-  const myOp = bumpUserFormOp();
+  const myOp = bumpEditFormOp();
   const body = {};
   // Always send the note: omitting it when emptied made "clear the note"
   // impossible (the UI said "nothing changed" / the old note survived).
@@ -1764,7 +1829,7 @@ $("#edit-user-form").addEventListener("submit", async (e) => {
   if (!Object.keys(body).length) { toast(t("msg.nothingChanged"), false); releaseSubmit(f); return; }
   try {
     await api("/api/users/" + f.dataset.uid, { method: "PATCH", body });
-    if (myOp !== userFormOp) return;   // modal closed/reopened meanwhile
+    if (myOp !== editFormOp) return;   // the dialog was reopened meanwhile
     $("#edit-modal").classList.add("hidden");
     toast(t("msg.userUpdated"));
     loadUsers($("#search").value.trim());

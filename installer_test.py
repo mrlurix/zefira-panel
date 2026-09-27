@@ -46,6 +46,22 @@ if art:
           rows[0][:40] if rows else "")
     check("the art fits an 80-column terminal",
           max(widths) <= 72, f"widest row={max(widths) if widths else '?'}")
+    # THE bug this replaces: the glyphs were written with no gap between
+    # letters, so the whole word came out as ONE cell and read as a smear
+    # instead of ZEFIRA. Scan for columns that are blank in every row: there
+    # must be exactly one cell per letter.
+    w = max(widths)
+    padded = [r.ljust(w) for r in rows]
+    blank = [all(r[c] == " " for r in padded) for c in range(w)]
+    cells, start = 0, None
+    for c, is_blank in enumerate(blank + [True]):
+        if not is_blank and start is None:
+            start = c
+        elif is_blank and start is not None:
+            cells += 1
+            start = None
+    check("each letter is its own glyph cell (the word is legible)",
+          cells == 6, f"{cells} cell(s) for 6 letters")
 
 # ---- 3. the header lines, like the reference CLI ------------------------
 check("the banner prints the product name and version",

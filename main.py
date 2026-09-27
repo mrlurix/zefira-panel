@@ -3171,6 +3171,48 @@ _update_status_lock = threading.Lock()
 update_status_limiter = SlidingWindowLimiter(max_events=60, window_seconds=300)
 
 
+def _uses_sqlite() -> bool:
+    """True when the panel is running on the local SQLite file."""
+    return not (os.environ.get("DATABASE_URL", "") or "").strip()
+
+
+def _external_db_snapshot(stamp: str) -> str | None:
+    """Best-effort pre-restore dump of an external Postgres/MySQL database.
+
+    Returns the file path, or None when the server-side tools are not
+    installed - in which case the caller logs that the restore is a
+    one-way door rather than pretending a snapshot exists.
+    """
+    try:
+        url = (os.environ.get("DATABASE_URL", "") or "").strip()
+        if not url:
+            return None
+        from config import INSTANCE_DIR
+
+        dest = INSTANCE_DIR / f"db.pre-restore-{stamp}.dump"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(dest.parent, 0o700)
+        scheme = url.split(":", 1)[0].lower()
+        if scheme.startswith("postgres"):
+            cmd = ["pg_dump", "--dbname=" + url, "--file=" + str(dest)]
+        elif scheme.startswith("mysql"):
+            cmd = ["mysqldump", "--result-file=" + str(dest), url]
+        else:
+            return None
+        if not shutil.which(cmd[0]):
+            return None
+        r = subprocess.run(cmd, capture_output=True, timeout=600)
+        if r.returncode != 0:
+            log.error("%s failed for the pre-restore snapshot: %s",
+                      cmd[0], (r.stderr or b"")[:200])
+            return None
+        os.chmod(dest, 0o600)
+        return str(dest)
+    except Exception as exc:  # noqa: BLE001 - a snapshot must never block
+        log.error("pre-restore snapshot error: %s", exc)
+        return None
+
+
 def _snapshot_runtime_state() -> str | None:
     """Copy the live secrets/database aside before `git reset --hard`.
 
@@ -4163,6 +4205,21 @@ def _snapshot_db_before_restore() -> None:
         from config import INSTANCE_DIR
         import shutil as _shutil
 
+        # Only SQLite has a file to copy. On the documented external-DB
+        # install (DATABASE_URL -> Postgres/MySQL) instance/zefira.db does not
+        # exist, and this function returned silently - so the restore wiped
+        # every customer with NO rollback point at all, while its docstring
+        # promised a safety copy. Take one from the server's own backup
+        # command instead, and say so in the log when that is unavailable.
+        if not _uses_sqlite():
+            dest = _external_db_snapshot(stamp=utcnow().strftime("%Y%m%d-%H%M%S"))
+            if dest:
+                log.warning("Pre-restore safety snapshot of the external "
+                            "database written to %s", dest)
+            else:
+                log.error("PRE-RESTORE SNAPSHOT UNAVAILABLE for the external "
+                          "database - the restore below cannot be undone")
+            return
         db_path = INSTANCE_DIR / "zefira.db"
         if not db_path.exists():
             return
@@ -4215,6 +4272,10 @@ def _apply_restore_tx(data: RestoreIn, request: Request, admin: Admin):
 def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     now = utcnow()
     added_users = skipped = restored_settings = restored_admins = restored_templates = restored_blocked = restored_tokens = restored_snodes = restored_ibs = restored_tnodes = 0
+    # Rows the panel REFUSED on purpose (API tokens, admin credentials) are
+    # not lost customers, so they are reported apart from `skipped`. Mixing
+    # them in is what made a perfectly clean restore answer "(-3 skipped)".
+    refused = dropped_settings = 0
     prepared_users = []
     for ru_raw in data.users:
         # Per-row validation: one bad customer must not abort the file.
@@ -4250,6 +4311,14 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         duration = ru.duration_days if (ru.duration_days and 1 <= ru.duration_days <= 3650) else 30
         if not sofu and expires.year >= PENDING_YEAR:
             sofu, duration = True, 30
+        # A pending plan whose stored expiry is already in the PAST is dead:
+        # the panel shows "Expired" (the sentinel check fails), and the
+        # activation UPDATE requires expires_at >= the sentinel, so the stored
+        # duration is never used and nobody is ever told. Re-arm it as a
+        # pending plan with that duration, which is what the seller meant.
+        if sofu and expires <= now:
+            sofu = True
+            expires = datetime(PENDING_YEAR, 1, 1)
         # Quota sanity: zero/negative volumes would be instantly-limited
         # (and bypass plan logic). Skip rather than import dead rows.
         _vol = _rfloat(ru.volume_gb, 0, 100000)
@@ -4346,8 +4415,13 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             # 100 keys, and a 50k-key dict otherwise ran the whole per-key
             # validator chain (str() + regex + int()) inside one request.
             if len(data.settings) > 500:
+                # Count the DROPPED keys, not the kept ones. It added
+                # len(data.settings) *after* truncating, so it reported 500
+                # skipped for a 600-key file (100 dropped) and 500 for a
+                # 50k-key file (49,500 dropped) - a number the operator
+                # cannot use to judge whether anything was lost.
+                dropped_settings += len(data.settings) - 500
                 data.settings = dict(list(data.settings.items())[:500])
-                skipped += len(data.settings)
             _raw_settings = {str(k): v for k, v in data.settings.items()}
             _reality_priv_ok = not (
                 str(_raw_settings.get("reality_priv_enc") or "")
@@ -4719,7 +4793,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             # was a working admin token - a backdoor delivered as a backup.
             # Tokens are cheap to re-create, so the local set is kept as-is and
             # the file's token section is reported, never activated.
-            skipped += len(data.api_tokens)
+            refused += len(data.api_tokens)
             restored_tokens = 0
         if data.admins:
             # Same reason, higher stakes: an `admins` row carries a password
@@ -4727,7 +4801,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             # either changed the operator's password to one they do not know,
             # or created a second admin nobody sees in the login form. Admin
             # credentials are never imported; the operator keeps their own.
-            skipped += len(data.admins)
+            refused += len(data.admins)
             restored_admins = 0
         current = s.get(Admin, admin.id)
         current.token_version += 1
@@ -4735,7 +4809,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens}, snodes={restored_snodes}, inbounds={restored_ibs}, tunnels={restored_tnodes} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped, -{refused} refused by design), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens}, snodes={restored_snodes}, inbounds={restored_ibs}, tunnels={restored_tnodes} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -4745,6 +4819,11 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             "ok": True,
             "added_users": added_users,
             "skipped": skipped,
+            # Reported apart from `skipped`: nothing was lost, these were
+            # refused on purpose (unsigned-file credentials) or dropped by a
+            # hard cap.
+            "refused": refused,
+            "dropped_settings": dropped_settings,
             "restored_settings": restored_settings,
             "restored_admins": restored_admins,
             "restored_blocked": restored_blocked,
@@ -5127,7 +5206,13 @@ def api_stats(admin: Admin = Depends(require_admin)):
         if expires_at is None or expires_at <= now:
             expired += 1
         else:
-            active += 1
+            # "Active" must mean the same thing here as in the AI assistant's
+            # own count (panel_stats): an unexpired account that has burned its
+            # volume is NOT active - it is out of volume, and the subscription
+            # endpoint 404s it. Counting it in both places gave the operator
+            # two different "active" numbers for one database.
+            if used < vol:
+                active += 1
             if expires_at <= soon:
                 expiring_soon += 1
     return {
@@ -5144,10 +5229,17 @@ def api_stats(admin: Admin = Depends(require_admin)):
 
 
 @app.get("/api/users")
-def api_users(q: str = "", admin: Admin = Depends(require_admin)):
+def api_users(q: str = "", limit: int = 500, offset: int = 0,
+              admin: Admin = Depends(require_admin)):
     q = q.strip()[:64]
+    # Paging: the endpoint used to hard-cap at 500 with no offset, so a
+    # reseller with 600 customers got {"items": 500 rows, "total": 600} and
+    # no way to reach rows 501-600 except one `q` search each. The panel
+    # admits 10,000 users, so the tail was unreachable, not merely awkward.
+    limit = max(1, min(int(limit) if str(limit).lstrip("-").isdigit() else 500, 500))
+    offset = max(0, min(int(offset) if str(offset).lstrip("-").isdigit() else 0, 1_000_000))
     q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    stmt = select(VpnUser).order_by(VpnUser.id.desc()).limit(500)
+    stmt = select(VpnUser).order_by(VpnUser.id.desc()).limit(limit).offset(offset)
     count_stmt = select(func.count()).select_from(VpnUser)
     if q_esc:
         like = f"%{q_esc}%"
@@ -5156,13 +5248,14 @@ def api_users(q: str = "", admin: Admin = Depends(require_admin)):
             select(VpnUser)
             .where(cond)
             .order_by(VpnUser.id.desc())
-            .limit(500)
+            .limit(limit)
+            .offset(offset)
         )
         count_stmt = select(func.count()).select_from(VpnUser).where(cond)
     with db.s() as s:
         items = [u.to_dict() for u in s.scalars(stmt)]
         total = s.scalar(count_stmt) or 0
-    return {"items": items, "total": total}
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @app.post("/api/users")
@@ -5828,6 +5921,11 @@ def _dashboard_ctx(udict: dict, srv: dict, inbounds: list, request: Request) -> 
 @app.get("/sub/{token}")
 def subscription(token: str, request: Request):
     ip = client_ip(request)
+    # The per-IP budget is charged ONCE, here. It used to be charged again
+    # inside _subscription_inner, and SlidingWindowLimiter records one event
+    # per call - so the documented 120 req/min/IP was really 60, and several
+    # customers' devices behind one NAT (office, campus, CGNAT) 429'd each
+    # other and their clients stopped refreshing.
     if not sub_limiter.hit(f"sub|{ip}"):
         raise HTTPException(status_code=429, detail="Too many requests")
     if not TOKEN_RE.fullmatch(token or ""):
@@ -5849,8 +5947,7 @@ def subscription(token: str, request: Request):
 
 def _subscription_inner(token: str, request: Request):
     ip = client_ip(request)
-    if not sub_limiter.hit(f"sub|{ip}"):
-        raise HTTPException(status_code=429, detail="Too many requests")
+    # Per-IP budget already charged by the caller - see subscription().
     if not TOKEN_RE.fullmatch(token or ""):
         raise HTTPException(status_code=404, detail="Not Found")
     fmt = (request.query_params.get("format") or "").strip().lower()
@@ -5870,7 +5967,16 @@ def _subscription_inner(token: str, request: Request):
         # customer can see why their app stopped working instead of staring
         # at a bare 404. Machine formats stay fail-closed 404 as before.
         dashboard_req = not want_clash and wants_dashboard(request)
-        if user.start_on_first_use and user.expires_at is not None and user.expires_at.year >= PENDING_YEAR:
+        # A plan that starts on first use must be started by a CLIENT, not by
+        # someone opening the link in a browser. The claim used to run above
+        # this gate, so the seller's own preview (or a chat app's link
+        # preview, or the customer "checking the link") burned the paid
+        # period and the customer's app then connected to an expiry that was
+        # already counting down.
+        if (not dashboard_req
+                and user.start_on_first_use
+                and user.expires_at is not None
+                and user.expires_at.year >= PENDING_YEAR):
             duration = user.duration_days or 30
             # Atomic claim: a conditional UPDATE lets exactly one racer flip
             # the sentinel. The old read-modify-write let two simultaneous
@@ -5884,7 +5990,13 @@ def _subscription_inner(token: str, request: Request):
                     VpnUser.expires_at.isnot(None),
                     VpnUser.expires_at >= datetime(PENDING_YEAR, 1, 1),
                 )
-                .values(expires_at=utcnow() + timedelta(days=duration))
+                .values(
+                    expires_at=utcnow() + timedelta(days=duration),
+                    # ...and disarm the flag. Leaving it True next to a real
+                    # expiry meant the row still claimed "starts on first
+                    # use" while already counting down.
+                    start_on_first_use=False,
+                )
             ).rowcount
             if claimed:
                 audit(s, "USER_START", f"{user.username} activated on first connection (+{duration}d)", ip)
@@ -5933,14 +6045,48 @@ def _subscription_inner(token: str, request: Request):
     blocked = load_blocked_for_clash()
     info = _sub_info(udict)
     if want_clash:
-        yaml_text = protocols.clash_yaml(udict, srv, blocked, inbounds)
+        # One snapshot for both machine formats: reading the inbounds twice
+        # could hand a client a Clash config and a base64 config describing
+        # different endpoints inside a single request.
+        try:
+            yaml_text = protocols.clash_yaml(udict, srv, blocked, inbounds)
+        except ValueError as exc:
+            # Never answer with an empty Clash profile: the client would
+            # import it and send every request straight out unencrypted.
+            raise HTTPException(status_code=422, detail=str(exc))
         return PlainTextResponse(
             yaml_text,
             media_type="text/yaml; charset=utf-8",
             headers={"Cache-Control": "no-store", "subscription-userinfo": info},
         )
-    body, ct = protocols.subscription_body(udict, srv, load_inbounds())
+    body, ct = protocols.subscription_body(udict, srv, inbounds)
+    if not _body_has_content(body, ct):
+        # A 200 with an empty body imports as "no nodes" in every client and
+        # tells the customer nothing. Say what is missing instead.
+        raise HTTPException(
+            status_code=422,
+            detail=("This account has no usable endpoint yet: the selected "
+                    "protocols produced no link (a REALITY plan needs its keys "
+                    "generated in the panel, and WireGuard/OpenVPN/L2TP/Cisco "
+                    "plans are served as config files, not link lists)."),
+        )
     return PlainTextResponse(body, media_type=ct, headers={"Cache-Control": "no-store", "subscription-userinfo": info})
+
+
+def _body_has_content(body: str, content_type: str) -> bool:
+    """False when a subscription body carries no link at all.
+
+    The base64 form of an empty list is "Cg==" (a lone newline), which every
+    client accepts as a successful, empty subscription.
+    """
+    import base64 as _b64
+
+    raw = (body or "").strip()
+    try:
+        text = _b64.b64decode(raw + "=" * (-len(raw) % 4)).decode("utf-8", "replace")
+    except Exception:
+        text = body or ""
+    return bool(text.strip())
 
 
 try:

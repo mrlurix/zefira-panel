@@ -207,49 +207,32 @@ check("the new private-key message exists in all four panel languages",
       panel_i18n.count('"msg.realityNoPriv"') == 4,
       str(panel_i18n.count('"msg.realityNoPriv"')))
 
-# ------------------------------------------- 12b. compact header on scroll
+# ------------------------------------------- 12b. docs header + sidebar
 # docs.js with the comment lines dropped, so a check about code cannot be
 # satisfied (or broken) by the comment that explains the code.
 _docs_code = "\n".join(ln for ln in docs_js.splitlines()
                       if not ln.strip().startswith(("//", "*", "/*")))
-# The docs header slims down as you scroll (the deepseek.com behaviour) and
-# the sidebar used to hardcode `top: 80px`, so the moment the header changed
-# height the two drifted apart. Pin both: the class the scroll handler toggles,
-# the properties it compacts, the height the layout measures, and the
-# invariant that keeps the sticky bar from jerking.
-check("the docs header compacts on scroll and expands again on scroll-up",
-      re.search(r'addEventListener\("scroll"', docs_js) is not None
-      and 'classList.add("mini")' in docs_js
-      # the removal must be INSIDE the scroll-up branch, not only in the
-      # back-at-the-top branch: a header that shrinks and never comes back
-      # leaves the nav permanently mini for the rest of the visit.
-      and re.search(r'y < anchor - 70\)\s*\{[^}]*classList\.remove\("mini"\)',
-                    docs_js, re.S) is not None,
-      "scroll handler / scroll-up restore missing")
-check("the compact state is CSS-driven, with every compacted property animated",
-      ".topbar.mini {" in docs_css
-      and all(p in docs_css for p in (".topbar.mini .brand img { width: 21px",
-                                      ".topbar.mini .brand b { font-size: 13px",
-                                      ".topbar.mini a.gh {", ".topbar.mini #nav-toggle {")),
-      "")
-check("the compact state narrows the pill from BOTH sides, not just vertically",
-      re.search(r"\.topbar\.mini\s*\{[^}]*max-width:\s*(\d+)px", docs_css) is not None
-      and int(re.search(r"\.topbar\.mini\s*\{[^}]*max-width:\s*(\d+)px", docs_css).group(1))
-      < int(re.search(r"^\.topbar\s*\{[^}]*max-width:\s*(\d+)px", docs_css, re.M).group(1)),
-      "the mini pill must be narrower than the resting one")
-check("max-width is transitioned, so the sideways shrink animates",
-      "max-width .24s" in docs_css, "")
-check("what collapses to make room is animated, and cannot wrap",
-      re.search(r"\.topbar\.mini \.ver,.*?max-width: 0;.*?white-space: nowrap;",
-                docs_css, re.S) is not None
-      and 'a.gh[href$="donate.html"]' in docs_css
-      and 'a.gh[href*="github.com"]' in docs_css,
-      "the collapsed links must keep nowrap - clipped text wrapped to one "
-      "character per line and grew the bar from 47px to 56px")
-check("the compact state never moves the sticky offset (that reads as a jerk)",
-      re.search(r"\.topbar\.mini\s*\{[^}]*\btop\s*:", docs_css) is None
-      and "transition: padding .22s ease" in docs_css,
-      ".topbar.mini must not set `top`")
+# The header must NOT react to scrolling: a compact-on-scroll pill was built,
+# shipped and then reverted at the operator's request, so pin the decision -
+# a stray scroll listener or a leftover .mini rule would bring it back
+# silently. The sidebar measurement stays, because that one is about layout
+# correctness (a hardcoded 80px drifts when the bar wraps on mobile), not
+# about the bar changing size.
+check("the docs header does NOT change on scroll",
+      'addEventListener("scroll"' not in _docs_code
+      and "classList.add(\"mini\")" not in _docs_code
+      and "classList.remove(\"mini\")" not in _docs_code,
+      "a scroll listener or a .mini toggle is back")
+check("no compact-header styling survives in the stylesheet",
+      ".topbar.mini" not in docs_css
+      and "max-width .24s" not in docs_css
+      and "transition: padding .22s ease" not in docs_css,
+      ".mini rules or scroll transitions are still in style.css")
+check("the header keeps its resting size",
+      re.search(r"^\.topbar\s*\{[^}]*max-width:\s*860px", docs_css, re.M) is not None
+      and re.search(r"^\.topbar\s*\{[^}]*padding:\s*7px 16px", docs_css, re.M) is not None
+      and re.search(r"^\.brand img\s*\{\s*width: 28px", docs_css, re.M) is not None,
+      "the resting header size drifted")
 check("the sidebar follows the header's real height instead of a guessed offset",
       "--topbar-h" in docs_css and "var(--topbar-h" in docs_css
       and 'setProperty("--topbar-h"' in docs_js
