@@ -6,11 +6,12 @@
 #     curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh | sudo bash
 #
 #  Or read it first (recommended - it runs as root):
-#     umask 077 && mkdir -p /tmp/zefira-inst
-#     curl -fsSL -o /tmp/zefira-inst/install.sh \
-#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.0/install.sh
-#     less /tmp/zefira-inst/install.sh
-#     sudo bash /tmp/zefira-inst/install.sh
+#     d="$(mktemp -d)"
+#     curl -fsSL -o "$d/install.sh" \
+#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.2/install.sh
+#     less "$d/install.sh"
+#     sudo bash "$d/install.sh"
+#     rm -rf "$d"
 #
 #  Source selection: this installer's OWN directory is used when it sits next
 #  to main.py + requirements.txt; otherwise it clones ZEFIRA_INSTALL_REF
@@ -41,7 +42,7 @@ TARGET="/opt/zefira"
 SERVICE="zefira"
 # Single source of truth is the VERSION file; keep the literal as fallback
 # for pipe-installs where no checkout exists yet.
-ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.13.1)"
+ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.14.2)"
 
 # Shared by `--uninstall` and by option 6 of the aftercare menu. A function,
 # not `exec bash "$0"`: under the documented one-liner (`curl ... | sudo bash`)
@@ -327,32 +328,59 @@ copy_tree() {
         --exclude='./.venv' --exclude='./instance' --exclude='./.git' \
         --exclude='./.env' --exclude='./__pycache__' . ) | ( cd "$dst" && tar -xf - )
 }
-# Source discovery: anchor to the SCRIPT'S OWN directory, never to $PWD.
-# Using $(pwd) meant that any directory containing main.py + requirements.txt
-# became the root installer's input - including the service-writable
-# /opt/zefira itself. A foothold as the `zefira` user could edit that tree and
-# wait for the next `sudo bash install.sh` to run its code as root.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-if [[ -f "$SCRIPT_DIR/main.py" && -f "$SCRIPT_DIR/requirements.txt" ]]; then
+# Source discovery. NEVER fall back to $PWD.
+#
+# The previous version anchored to the script's own directory, but that only
+# works when the script HAS a path: piped (`curl ... | sudo bash`, the
+# documented one-liner) BASH_SOURCE[0] is empty, `dirname ""` is `.`, and
+# SCRIPT_DIR silently became the caller's working directory. Running
+# `sudo bash install.sh` from /opt/zefira therefore treated the SERVICE-WRITABLE
+# tree as the installer's source, skipped the copy, and had root pip install
+# from a requirements.lock the `zefira` account owns. --require-hashes proves
+# the artifacts match a hash from that same file, so rewriting the file is
+# enough to get arbitrary setup.py execution as root.
+#
+# So: only trust a script that actually has a path, and never a directory the
+# service account can write.
+HAVE_SELF_PATH=0
+[[ -n "${BASH_SOURCE[0]:-}" ]] && HAVE_SELF_PATH=1
+SCRIPT_DIR=""
+if [[ $HAVE_SELF_PATH -eq 1 ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P || true)"
+fi
+TARGET_REAL="$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")"
+SELF_TRUSTED=0
+if [[ -n "$SCRIPT_DIR" && "$SCRIPT_DIR" != "$TARGET_REAL" && -f "$SCRIPT_DIR/main.py" \
+      && -f "$SCRIPT_DIR/requirements.txt" ]]; then
+    SELF_TRUSTED=1
+fi
+if [[ $SELF_TRUSTED -eq 1 ]]; then
     SRC="$SCRIPT_DIR"
-    # Re-running from inside the install dir: copying a tree onto itself is a
-    # no-op at best and an infinite read at worst. Nothing to do.
-    if [[ "$SRC" != "$(cd "$TARGET" 2>/dev/null && pwd -P || echo "$TARGET")" ]]; then
-        copy_tree "$SRC" "$TARGET"
-    else
-        echo "[*] Already running from $TARGET - keeping the existing tree"
-    fi
+    copy_tree "$SRC" "$TARGET"
+    echo "[*] Installing from $SRC"
 else
-    # No source next to the installer: clone the pinned tag/commit, never a
-    # moving branch. A floating `main` means whoever controls upstream (or a
-    # MITM on the fetch) chooses code that runs as root here.
-    REF="${ZEFIRA_INSTALL_REF:-$REPO_URL}"
+    if [[ -n "$SCRIPT_DIR" && "$SCRIPT_DIR" == "$TARGET_REAL" ]]; then
+        warn "refusing to install from $TARGET_REAL - that tree is writable by the service account"
+    fi
+    # No trusted source on disk: clone. ZEFIRA_INSTALL_REF pins it; the
+    # default is the release tag this installer ships with, so the one-liner
+    # is reproducible instead of tracking whatever upstream pushes later.
+    # Set ZEFIRA_EXPECTED_SHA to additionally require an exact commit.
+    REF="${ZEFIRA_INSTALL_REF:-v${ZEFIRA_VERSION}}"
     rm -rf "$TARGET.tmp"
-    git clone --depth 1 --branch "${ZEFIRA_INSTALL_REF:-main}" "$REPO_URL" "$TARGET.tmp" \
-        || { rm -rf "$TARGET.tmp"; echo "[!] clone failed (ref: ${ZEFIRA_INSTALL_REF:-main})"; exit 1; }
-    # Pin the commit that was actually checked out so a re-run is reproducible.
-    if CLONE_SHA="$(cd "$TARGET.tmp" && git rev-parse HEAD 2>/dev/null)"; then
-        echo "[*] Installing commit ${CLONE_SHA:0:12}"
+    echo "[*] Cloning $REPO_URL @ $REF"
+    git clone --depth 1 --branch "$REF" "$REPO_URL" "$TARGET.tmp" \
+        || { rm -rf "$TARGET.tmp"; echo "[!] clone failed (ref: $REF)"; exit 1; }
+    CLONE_SHA="$(cd "$TARGET.tmp" && git rev-parse HEAD 2>/dev/null || echo "")"
+    if [[ -z "$CLONE_SHA" ]]; then
+        rm -rf "$TARGET.tmp"; echo "[!] could not determine the cloned commit - refusing"; exit 1
+    fi
+    echo "[*] Installing commit ${CLONE_SHA:0:12}"
+    if [[ -n "${ZEFIRA_EXPECTED_SHA:-}" && "$CLONE_SHA" != "$ZEFIRA_EXPECTED_SHA" ]]; then
+        rm -rf "$TARGET.tmp"
+        echo "[!] upstream is at ${CLONE_SHA:0:12}, you approved ${ZEFIRA_EXPECTED_SHA:0:12}."
+        echo "[!] nothing was installed. Re-run with the right ZEFIRA_EXPECTED_SHA."
+        exit 1
     fi
     copy_tree "$TARGET.tmp" "$TARGET"
     rm -rf "$TARGET.tmp"

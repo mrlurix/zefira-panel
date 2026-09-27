@@ -13,6 +13,8 @@ import subprocess
 import sys
 import threading
 import time as time_mod
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote as urlquote
@@ -204,11 +206,19 @@ TUNNEL_KEYS = {"public_url", "trusted_proxies"}
 _settings_cache: dict = {}
 
 APPEARANCE_KEYS = {"theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted", "brand_name", "dash_note", "menu_layout", "dash_layout"}
-# Settings that define WHERE this deployment lives. Never imported from a
-# backup: the file is unsigned, and a crafted `public_url`/`domain` silently
-# repoints every customer's subscription link, QR and one-tap import at the
-# attacker's host. The operator changes these explicitly in Settings.
-RESTORE_ORIGIN_KEYS = {"public_url", "domain"}
+# Settings that define WHERE and HOW this deployment is reached. Never
+# imported from a backup: the file is unsigned, and a crafted value silently
+# repoints every customer's link (public_url/domain) or disarms the panel.
+#
+# `trusted_proxies` is here for the same reason as the two above, and it is
+# the one that actually hands over the panel: it is the input to client_ip(),
+# which is the KEY of every per-IP rate limiter (login brute force, sub,
+# restore, qr, probe). A single attacker /32 in a "customer list" backup made
+# every later request carry an attacker-chosen X-Forwarded-For as its limiter
+# key - unbounded login guesses - and wrote that chosen value into the audit
+# log, so the operator's own trail pointed at a third party. The operator sets
+# it once, in Settings, like the other two.
+RESTORE_ORIGIN_KEYS = {"public_url", "domain", "trusted_proxies"}
 APPEARANCE_DEFAULTS = {
     "theme_accent": "#ff2740",
     "theme_bg": "#06060a",
@@ -321,6 +331,84 @@ def _resolved_ips_blocked(host: str, allow_private: bool = True) -> bool:
                     or ip.is_link_local or ip.is_multicast or ip.is_unspecified):
                 return True
     return not found
+
+
+class _NoRedirectCls(urllib.request.HTTPRedirectHandler):
+    """AI providers never legitimately redirect; a 3xx is either a mistake
+    or an attempt to walk the request to a blocked address."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _ai_pinned_ip(base_url: str) -> str | None:
+    """Resolve the AI base URL ONCE and return the address to dial.
+
+    The guards above each do their own lookup, and urllib then resolved the
+    name a THIRD time when it opened the socket. A host the attacker controls
+    DNS for (two answers, low TTL) therefore passed validation, passed the
+    "is it local, should I send the key" check, and then connected to
+    127.0.0.1 - handing a live provider key to a loopback listener, and
+    giving a hijacked admin session an SSRF into the metadata address. The
+    connect-time address must be the validated one, not a fresh lookup.
+    """
+    import socket as _sock
+
+    try:
+        host = (urlparse(base_url).hostname or "").strip()
+    except Exception:
+        return None
+    if not host:
+        return None
+    try:
+        ipaddress.ip_address(host)
+        return host  # already a literal
+    except ValueError:
+        pass
+    try:
+        infos = _sock.getaddrinfo(host, None, 0, _sock.SOCK_STREAM)
+    except OSError:
+        return None
+    for _fam, _typ, _proto, _canon, sa in infos[:8]:
+        ip_str = sa[0] if isinstance(sa, tuple) else str(sa)
+        return ip_str
+    return None
+
+
+def _ai_pinned_opener(base_url: str, pinned_ip: str):
+    """An opener that dials `pinned_ip` but keeps the real Host/SNI.
+
+    The connection object is built with the hostname (so the Host header, the
+    TLS server_name and certificate validation are all for the real name) and
+    only the ADDRESS it dials is replaced - which is exactly the gap that
+    allowed the rebind.
+    """
+    import http.client as _hc
+    import socket as _sock
+
+    scheme = (urlparse(base_url).scheme or "https").lower()
+    dial = pinned_ip
+
+    def _pin(base):
+        class _Pinned(base):  # noqa: N801 - a local class, not public API
+            def connect(self):  # noqa: D401
+                self._create_connection = (
+                    lambda addr, timeout, source_address=None:
+                    _sock.create_connection((dial, addr[1]), timeout, source_address)
+                )
+                super().connect()
+        return _Pinned
+
+    class _HTTPHandler(urllib.request.HTTPHandler):
+        def http_open(self, req):
+            return self.do_open(_pin(_hc.HTTPConnection), req)
+
+    class _HTTPSHandler(urllib.request.HTTPSHandler):
+        def https_open(self, req):
+            return self.do_open(_pin(_hc.HTTPSConnection), req,
+                                context=self._context,
+                                check_hostname=self._check_hostname)
+
+    return urllib.request.build_opener(_NoRedirectCls, _HTTPSHandler, _HTTPHandler)
 
 
 def _ai_base_url_blocked(base_url: str) -> str | None:
@@ -649,6 +737,16 @@ BOT_ALLOWED_RE = [
     ("POST", re.compile(r"\A/api/users/[0-9]{1,10}/reset-token\Z")),
     ("GET", re.compile(r"\A/api/users/[0-9]{1,10}/qr\Z")),
 ]
+
+
+def _token_expired(row) -> bool:
+    """True once a token's lifetime is over. NULL expires_at = never.
+
+    Without this column a token was valid forever by construction, so the
+    only cleanup path was deleting it by hand.
+    """
+    exp = getattr(row, "expires_at", None)
+    return bool(exp) and exp <= utcnow()
 
 
 def _token_scope_allowed(scopes: str | None, method: str, path: str) -> bool:
@@ -1730,7 +1828,8 @@ async def require_admin(request: Request) -> Admin:
             digest = hashlib.sha256(raw.encode()).hexdigest()
             with db.s() as s:
                 row = s.scalar(select(ApiToken).where(ApiToken.token_sha == digest))
-                tok = (row.id, row.name, row.admin_id, (row.scopes or "full")) if row else None
+                tok = ((row.id, row.name, row.admin_id, (row.scopes or "full"))
+                       if row and not _token_expired(row) else None)
             if tok is not None:
                 # Least-privilege scopes: bot tokens are limited to the
                 # reseller-safe subset. Cookie sessions are always full.
@@ -2297,20 +2396,46 @@ def api_tokens_list(admin: Admin = Depends(require_admin)):
 def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = Depends(require_admin)):
     if not sensitive_limiter.hit(f"tokencreate|{admin.id}"):
         raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    # Re-prompt, like every other operation that hands out a durable
+    # credential. Without it a stolen `full` token minted its own replacement
+    # with nothing but the leaked token, and the only way to stop it was to
+    # change the admin password - i.e. the attacker was never locked out by
+    # revoking the one token the operator could see.
+    if not verify_password(data.password_confirm, admin.password_hash):
+        with db.s() as s:
+            audit(s, "APITOKEN_FAIL", "wrong confirm password by "
+                   f"{admin.username}", client_ip(request), ok=False)
+            _commit(s)
+        raise HTTPException(status_code=400, detail="Confirm password is incorrect")
     raw = "zfp_" + secrets.token_urlsafe(32)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     scopes = data.scopes if data.scopes in ("full", "bot") else "full"
+    expires_at = (utcnow() + timedelta(days=data.expires_in_days)
+                  if data.expires_in_days > 0 else None)
     with db.s() as s:
         if s.scalar(select(ApiToken.id).where(ApiToken.name == data.name)):
             raise HTTPException(status_code=409, detail="A token with this name already exists")
         if s.scalar(select(ApiToken.id).where(ApiToken.token_sha == digest)):
             raise HTTPException(status_code=409, detail="Token collision, try again")
+        # A live-token cap: the per-endpoint throttle (10 per 10 minutes) let
+        # an attacker accumulate a backdoor fleet faster than the operator
+        # could delete one (deletions are capped at 10 per 10 minutes).
+        live = s.scalar(
+            select(func.count()).select_from(ApiToken).where(ApiToken.admin_id == admin.id)
+        ) or 0
+        if live >= API_TOKEN_MAX_PER_ADMIN:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"You already have {live} API tokens. Delete the ones you "
+                        "no longer use before creating another."),
+            )
         row = ApiToken(
             name=data.name,
             prefix=raw[:12],
             token_sha=digest,
             admin_id=admin.id,
             scopes=scopes,
+            expires_at=expires_at,
         )
         s.add(row)
         s.flush()
@@ -2319,7 +2444,9 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
         # only returned after a successful commit (never lost to a 500).
         out = row.to_dict()
         out["token_once"] = raw
-        audit(s, "APITOKEN_CREATE", f"{data.name} [{scopes}] by {admin.username}", client_ip(request))
+        audit(s, "APITOKEN_CREATE",
+              f"{data.name} [{scopes}] expires={data.expires_in_days}d by {admin.username}",
+              client_ip(request))
         try:
             _commit(s)
         except IntegrityError:
@@ -2383,10 +2510,34 @@ def theme_css():
 
 
 AI_KEYS = ("ai_enabled", "ai_provider", "ai_base_url", "ai_model", "ai_api_key_enc", "ai_extra")
-# api key is deliberately EXCLUDED from backups: it is encrypted with the
-# host-local master key, so it would be dead weight (or worse, confusing)
-# anywhere else. Re-enter it after a cross-server restore.
-AI_BACKUP_KEYS = {"ai_enabled", "ai_provider", "ai_base_url", "ai_model", "ai_extra"}
+# Live API tokens per admin. Minting is throttled to 10 per 10 minutes and
+# deletion to 10 per 10 minutes, so without a cap an attacker holding one
+# leaked token could build a fleet faster than the operator could remove it.
+API_TOKEN_MAX_PER_ADMIN = 20
+# Re-minting an OpenVPN client certificate costs a fresh 2048-bit RSA key.
+# A restore may re-provision at most this many such rows; the rest are refused
+# and reported, so a crafted file cannot turn one request into hours of CPU
+# while the restore lock 409s the entire write plane.
+RESTORE_OPENVPN_MINT_BUDGET = 200
+# Ceiling on configured inbounds. Every matching inbound adds an endpoint to
+# every subscription render, and that render runs on the UNAUTHENTICATED
+# /sub/{token} path, so an operator (or a hijacked session) creating tens of
+# thousands of rows could make one anonymous request emit ~88 MB.
+MAX_INBOUNDS = 200
+
+# The API KEY is excluded from backups: it is encrypted with the host-local
+# master key, so it would be dead weight (or worse, confusing) anywhere else.
+# Re-enter it after a cross-server restore.
+#
+# The REST of the AI config is excluded too, for a different reason: the
+# assistant is an LLM that executes a tool allowlist (create/extend users,
+# add volume, reset usage, set active) against a system prompt that
+# `ai_extra` is spliced into as "ADMIN NOTE (trusted)". A crafted backup
+# could otherwise point the panel at an attacker's endpoint AND plant text
+# in that prompt, and the next time the operator asked the assistant anything
+# the traffic - and up to nine tool calls - went to the attacker. Like the
+# admin credentials, the AI setup is re-entered by the operator in Settings.
+AI_BACKUP_KEYS: set[str] = set()
 
 try:
     AI_KNOWLEDGE = json.loads((BASE_DIR / "ai_knowledge.json").read_text(encoding="utf-8"))
@@ -2673,11 +2824,10 @@ def _ai_complete(provider: str, base_url: str, model: str, api_key: str, system:
         # No-redirect fetch: urllib follows 301/302 by default, so a public
         # URL that 302s to 169.254.169.254 would bypass the check above.
         # Refuse redirects outright (AI APIs never legitimately redirect).
-        class _NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
-                return None
-
-        opener = urllib.request.build_opener(_NoRedirect)
+        pinned = _ai_pinned_ip(eff_base)
+        if not pinned:
+            return False, "AI base URL could not be resolved (blocked)"
+        opener = _ai_pinned_opener(eff_base, pinned)
         req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
         try:
             with opener.open(req, timeout=60) as resp:
@@ -3201,10 +3351,22 @@ def _external_db_snapshot(stamp: str) -> str | None:
             return None
         if not shutil.which(cmd[0]):
             return None
+        # pg_dump --file / mysqldump --result-file create the file with the
+        # process umask, so under the common 0022 the COMPLETE database -
+        # admin hashes, every customer's WireGuard private key, token hashes -
+        # was world-readable for the whole duration of the dump. Create it
+        # ourselves at 0600 first; both tools overwrite in place.
+        fd = os.open(str(dest), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(fd)
+        os.chmod(dest, 0o600)
         r = subprocess.run(cmd, capture_output=True, timeout=600)
         if r.returncode != 0:
             log.error("%s failed for the pre-restore snapshot: %s",
                       cmd[0], (r.stderr or b"")[:200])
+            try:
+                os.unlink(dest)
+            except OSError:
+                pass
             return None
         os.chmod(dest, 0o600)
         return str(dest)
@@ -4249,6 +4411,18 @@ def _snapshot_db_before_restore() -> None:
                 old.unlink()
             except OSError:
                 pass
+        # The external-DB dumps and the pre-update copies hold the same
+        # secrets and were never pruned, so N updates quietly consumed N times
+        # the database size on the same volume. Keep the last 2 of each.
+        for pattern in ("db.pre-restore-*.dump", "pre-update-*"):
+            for old in sorted(INSTANCE_DIR.glob(pattern))[:-2]:
+                try:
+                    if old.is_dir():
+                        shutil.rmtree(old, ignore_errors=True)
+                    else:
+                        old.unlink()
+                except OSError:
+                    pass
     except Exception as exc:
         log.debug("pre-restore snapshot failed: %s", exc)
 
@@ -4276,6 +4450,9 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     # not lost customers, so they are reported apart from `skipped`. Mixing
     # them in is what made a perfectly clean restore answer "(-3 skipped)".
     refused = dropped_settings = 0
+    # Rows whose credentials must be re-minted server-side, charged per
+    # expensive protocol. See the re-provision branch below.
+    ovpn_budget = 0
     prepared_users = []
     for ru_raw in data.users:
         # Per-row validation: one bad customer must not abort the file.
@@ -4358,6 +4535,19 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         ):
             secret_json = ru.secret_data
         else:
+            # Re-provisioning can mean minting a fresh RSA keypair per row
+            # (an OpenVPN client certificate), and that is ~0.5s of CPU each.
+            # The row cap is 10,000 and nothing here bounded the work, so a
+            # 12 kB crafted file held one core for close to two hours - and
+            # because every mutating /api/* route answers 409 while a restore
+            # holds the lock, the whole write plane was down for that long.
+            # Budget it: past the cap the row is refused and REPORTED, never
+            # silently dropped.
+            if "openvpn" in clean_protos:
+                if ovpn_budget >= RESTORE_OPENVPN_MINT_BUDGET:
+                    refused += 1
+                    continue
+                ovpn_budget += 1
             try:
                 secret_json = protocols.serialize_secrets(
                     protocols.provision_map(clean_protos, ru.username)
@@ -4966,6 +5156,15 @@ def api_inbounds_create(data: InboundIn, request: Request, admin: Admin = Depend
         conflict = _inbound_port_conflict(s, data.protocol, data.port, data.node_id)
         if conflict:
             raise HTTPException(status_code=409, detail=conflict)
+        # Hard ceiling: each enabled inbound multiplies every customer's link
+        # list, and that list is rendered on the unauthenticated /sub path.
+        if (s.scalar(select(func.count()).select_from(Inbound)) or 0) >= MAX_INBOUNDS:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"You have reached the limit of {MAX_INBOUNDS} inbounds. "
+                        "Each one adds an endpoint to every subscription, so "
+                        "the list is kept short deliberately."),
+            )
         ib = Inbound(
             name=data.name,
             protocol=data.protocol,

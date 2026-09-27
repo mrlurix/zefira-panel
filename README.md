@@ -30,20 +30,32 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 Prefer to read it first? Download, look, then run that exact copy:
 
 ```bash
-umask 077 && mkdir -p /tmp/zefira-inst
-curl -fsSL -o /tmp/zefira-inst/install.sh \
+d="$(mktemp -d)"                       # a private dir only you can read
+curl -fsSL -o "$d/install.sh" \
   https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.0/install.sh
-less /tmp/zefira-inst/install.sh
-sudo bash /tmp/zefira-inst/install.sh
+less "$d/install.sh"
+sudo bash "$d/install.sh"
+rm -rf "$d"
 ```
 
 > Both work. The one-liner pipes whatever upstream serves at that second
 > straight into a root shell, so if you care which code runs as root, use the
-> second form: it lands in a private directory (not a predictable path another
-> local user could swap between your `less` and your `sudo bash`) and the
-> `v1.14.0` tag pins the installer itself. The installer clones
-> `ZEFIRA_INSTALL_REF` (default `main`) for the panel source — set it to a
-> tag or commit SHA for a fully reproducible install.
+> second form: it lands in a directory `mktemp` just created for you (a fixed
+> `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
+> succeeds silently on a directory it does not own), and the `v1.14.0` tag pins
+> the installer itself.
+>
+> The installer then clones the panel source at the release tag it ships with.
+> Pin it harder if you want to name the exact commit:
+>
+> ```bash
+> ZEFIRA_EXPECTED_SHA=<40-char commit> sudo bash install.sh
+> ```
+>
+> Refused unless the clone is that commit. `ZEFIRA_INSTALL_REF=main` restores
+> the older "track the branch" behaviour. The installer also refuses to use
+> `/opt/zefira` itself as its source: that tree is writable by the service
+> account, so trusting it would hand a service foothold root.
 
 The script installs Python deps, creates a systemd service and stores your
 first-run credentials in `instance/first-run-credentials.txt` (mode 600) -

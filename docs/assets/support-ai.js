@@ -20,7 +20,7 @@
     if (KB_FAILED) { cb(null); return; }
     if (kbLoading) { setTimeout(function () { loadKB(cb); }, 200); return; }
     kbLoading = true;
-    fetch("assets/site-knowledge.json?v=14").then(function (r) {
+    fetch("assets/site-knowledge.json?v=16").then(function (r) {
       if (!r.ok) throw new Error("kb http " + r.status);
       return r.json();
     }).then(function (j) {
@@ -98,12 +98,17 @@
     a.textContent = label;
     // KB links are static, but never let a data-driven href become
     // javascript:/data: executable: allow http(s) + same-origin relative only.
+    // The character class includes "/" and ":" so it also accepted a
+    // PROTOCOL-RELATIVE "//evil.example", which navigates off-site with no
+    // rel="noopener" and nothing to warn the reader.
     var h = String(href || "");
     if (/^https?:\/\//i.test(h)) {
       a.href = h;
       a.target = "_blank";
       a.rel = "noopener";
-    } else if (/^[a-zA-Z0-9._~:/?#@!$&'()*+,;=%-]*$/.test(h) && !/^\s*javascript:/i.test(h) && !/^\s*data:/i.test(h)) {
+    } else if (h && h.indexOf("//") !== 0
+               && /^[a-zA-Z0-9._~:/?#@!$&'()*+,;=%-]*$/.test(h)
+               && !/^\s*javascript:/i.test(h) && !/^\s*data:/i.test(h)) {
       a.href = h;
     } else {
       return;

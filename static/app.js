@@ -2217,9 +2217,16 @@ $("#apitoken-create-btn").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#apitoken-name").value.trim();
   if (!name) { toast(t("msg.tokenNameEmpty"), false); return; }
+  // A token is a credential, and a `full` one can mint another, so the
+  // server re-prompts for the admin password. Prompt here too, instead of
+  // letting the request fail with a 422 the operator cannot act on. Cancelled
+  // = do nothing (an empty confirm is a 422 with no way to recover in-place).
+  const pw = prompt(t("prm.tokenPw"));
+  if (!pw) return;
   if (!guardBtn(btn)) return;
   try {
-    const r = await api("/api/api-tokens", { method: "POST", body: { name } });
+    const r = await api("/api/api-tokens", { method: "POST",
+                                           body: { name, password_confirm: pw } });
     $("#apitoken-name").value = "";
     // The token is shown once and never stored: copy it AND always show
     // it for manual backup (clipboard content is easily lost/overwritten).

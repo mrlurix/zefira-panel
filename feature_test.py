@@ -647,7 +647,8 @@ check("update: wrong confirm password rejected", st == 400, f"{st} {d}")
 
 # ---------------------------------------------------------------- API tokens
 tn1 = "ftbot_" + uuid.uuid4().hex[:6]
-st, tokd = js("POST", "/api/api-tokens", {"name": tn1, "scopes": "bot"}, AUTH)
+st, tokd = js("POST", "/api/api-tokens", {"name": tn1, "scopes": "bot",
+                                      "password_confirm": PASSWORD}, AUTH)
 check("tokens: create bot-scoped", st == 200 and tokd.get("token_once", "").startswith("zfp_"), f"{st} {tokd}")
 botraw = tokd.get("token_once", "")
 if st == 200:
@@ -689,16 +690,18 @@ if st == 200:
                                                  "Authorization": f"Bearer {botraw}"})
     check("tokens: bad cookie falls through to valid bearer", st == 200, f"{st}")
 tn2 = "ftfull_" + uuid.uuid4().hex[:6]
-st, tokf = js("POST", "/api/api-tokens", {"name": tn2, "scopes": "full"}, AUTH)
+st, tokf = js("POST", "/api/api-tokens", {"name": tn2, "scopes": "full",
+                                      "password_confirm": PASSWORD}, AUTH)
 check("tokens: create full-scoped", st == 200, f"{st}")
 if st == 200:
     CREATED_TOKENS.append(tokf["id"])
     FH = {"Authorization": f"Bearer {tokf['token_once']}"}
     st, d = js("GET", f"/api/users/{uid}/config", headers=FH, timeout=30)
     check("tokens: full token can download config", st == 200, f"{st}")
-st, d = js("POST", "/api/api-tokens", {"name": tn1}, AUTH)
+st, d = js("POST", "/api/api-tokens", {"name": tn1, "password_confirm": PASSWORD}, AUTH)
 check("tokens: duplicate name 409", st == 409, f"{st}")
-st, d = js("POST", "/api/api-tokens", {"name": "ftbad", "scopes": "root"}, AUTH)
+st, d = js("POST", "/api/api-tokens", {"name": "ftbad", "scopes": "root",
+                                      "password_confirm": PASSWORD}, AUTH)
 check("tokens: unknown scope rejected", st == 422, f"{st}")
 st, d = js("GET", "/api/api-tokens", headers=AUTH)
 check("tokens: list hides secrets", st == 200 and all("token_once" not in t and "token_sha" not in t

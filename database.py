@@ -371,6 +371,10 @@ class ApiToken(Base):
     # change settings, or manage tokens/update.
     scopes = Column(String(16), nullable=False, default="full")
     created_at = Column(DateTime, nullable=False, default=utcnow)
+    # NULL = never expires (the operator's explicit choice at creation). A
+    # token with no expiry at all is indistinguishable from a leaked one a
+    # year later, so the default is a bounded life.
+    expires_at = Column(DateTime, nullable=True)
     last_used_at = Column(DateTime, nullable=True)
 
     def to_dict(self) -> dict:
@@ -380,6 +384,9 @@ class ApiToken(Base):
             "prefix": safe_text(self.prefix),
             "scopes": self.scopes or "full",
             "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            "expires_at": (
+                self.expires_at.isoformat(timespec="seconds") + "Z" if self.expires_at else None
+            ),
             "last_used_at": (
                 self.last_used_at.isoformat(timespec="seconds") + "Z" if self.last_used_at else None
             ),
@@ -465,6 +472,11 @@ class Database:
             self._add_column(conn, "inbounds", "node_id", "node_id INTEGER")
             self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
             self._add_column(conn, "api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'")
+            # Token lifetime. NULL on an EXISTING row means "never expires",
+            # which is exactly what those tokens had before this column
+            # existed - so no operator is locked out by the upgrade, and the
+            # new default applies to anything created from now on.
+            self._add_column(conn, "api_tokens", "expires_at", f"expires_at {dt_ddl}")
             # Backfill the nullable MySQL TEXT columns so the ORM's
             # non-nullable contract holds on every dialect.
             for col in ("secret_data", "protocols"):

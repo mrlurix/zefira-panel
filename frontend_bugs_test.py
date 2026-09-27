@@ -286,6 +286,40 @@ try:
 except Exception as exc:
     check("panel reachable for the live check", False, str(exc)[:80])
 
+# ---- API tokens: the UI must match the server's re-prompt ---------------
+# POST /api/api-tokens requires the admin password (a `full` token can mint
+# another, so a leaked one used to be self-perpetuating). The button has to
+# collect it, or the operator gets a bare 422 with no way to recover in-place.
+_tok_i = app.find('"/api/api-tokens", { method: "POST"')
+check("the token create call exists",
+      _tok_i != -1, "no POST /api/api-tokens in app.js")
+# The body object is nested, so a bracket-balanced regex is the wrong tool:
+# look at the call's own text instead of trying to match the literal.
+_tok_win = app[_tok_i:_tok_i + 240] if _tok_i != -1 else ""
+check("the token form sends password_confirm with the create request",
+      _tok_i != -1 and "password_confirm: pw" in _tok_win,
+      "the UI would 422 against the server contract")
+check("the token form prompts for the password before creating",
+      re.search(r'prompt\(t\("prm\.tokenPw"\)\)', app) is not None,
+      "no prompt: the operator only sees a 422")
+check("a cancelled prompt creates nothing",
+      re.search(r'const pw = prompt\(t\("prm\.tokenPw"\)\);\s*\n\s*if \(!pw\) return;',
+                app) is not None,
+      "a cancelled prompt must abort, not send an empty confirm")
+check("prm.tokenPw exists in all four panel locales",
+      panel_i18n.count('"prm.tokenPw"') == 4,
+      f"found {panel_i18n.count(chr(34) + 'prm.tokenPw' + chr(34))} of 4")
+check("the token form does not leak the password into the query string",
+      "password_confirm=" not in app,
+      "a credential in a URL lands in logs and Referer")
+_schemas = read("schemas.py")
+check("the server really does require the confirm password",
+      re.search(r"class ApiTokenCreateIn\(RestoreConfirmIn\):", _schemas) is not None,
+      "the UI and the schema disagree")
+check("a new token's lifetime is bounded by default",
+      re.search(r"expires_in_days: int = Field\(default=(?!0)\d+", _schemas) is not None,
+      "no default expiry: an integration token lives forever")
+
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} passed ===")
 for n, ok, d in results:

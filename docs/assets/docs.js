@@ -1,4 +1,22 @@
 "use strict";
+// Clickjacking: every docs page carried `frame-ancestors 'none'` in a <meta>
+// CSP, which browsers IGNORE (CSP3 only enforces frame-ancestors from a real
+// header), and GitHub Pages cannot send headers for a project site. So the
+// directive was decoration. This is the working equivalent: refuse to render
+// inside a frame at all.
+(function () {
+  try {
+    if (window.top !== window.self) {
+      document.documentElement.textContent = "";
+      window.top.location = window.self.location;
+    }
+  } catch (_) {
+    // A cross-origin parent throws on the comparison above; treat that as
+    // framed and refuse rather than guessing.
+    try { window.top.location = window.self.location; } catch (__) {}
+  }
+})();
+
 // Active nav link
 (function () {
   var path = location.pathname.split("/").pop() || "index.html";
@@ -188,7 +206,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   // (render() was only ever called from search()).
   var index = null, items = [], sel = 0, lastQ = "";
   function isOpen() { return overlay && !overlay.hidden; }
-  fetch("assets/search-index.json?v=14").then(function (r) {
+  fetch("assets/search-index.json?v=16").then(function (r) {
     if (!r.ok) throw new Error("index http " + r.status);
     return r.json();
   }).then(function (j) {

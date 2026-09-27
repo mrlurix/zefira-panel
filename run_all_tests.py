@@ -30,6 +30,7 @@ SUITES = [
     ("attack_paths_test.py", "operator paths / restore"),
     ("frontend_bugs_test.py", "front-end regressions"),
     ("panel_sections_test.py", "panel sections end-to-end"),
+    ("security_audit_test.py", "security audit round 1"),
 ]
 # Suites that need no running panel: static guards over the installer, which
 # is only ever executed on a Linux VPS (never here).
@@ -74,6 +75,12 @@ RESET_SQL = (
     "c.execute(\"update settings set value='' where key in "
     "('tg_bot_token','tg_chat_id','ai_api_key_enc')\");"
     "c.execute(\"update settings set value='0' where key='ai_enabled'\");"
+    # trusted_proxies is the key of every per-IP rate limiter, and
+    # ai_base_url/ai_extra steer the assistant: a suite that plants either (the
+    # security one does, on purpose) must not hand it to the next suite.
+    "c.execute(\"update settings set value='' where key='trusted_proxies'\");"
+    "c.execute(\"update settings set value='' where key in "
+    "('ai_base_url','ai_extra')\");"
     "c.commit()"
 )
 

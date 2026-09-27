@@ -343,11 +343,26 @@ class SslIssueIn(BaseModel):
     email: str = Field(min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+\z")
 
 
-class ApiTokenCreateIn(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+# Re-prompt contract for anything that hands out a durable credential.
+# Defined before its first subclass (ApiTokenCreateIn) - Python needs
+# the base to exist first.
+class RestoreConfirmIn(BaseModel):
+    password_confirm: str = Field(min_length=8, max_length=128)
 
+
+class ApiTokenCreateIn(RestoreConfirmIn):
+    # A token IS a credential, and a `full` one can mint another - so a stolen
+    # token used to be self-perpetuating: the attacker called this endpoint
+    # with nothing but the leaked token and got an equally powerful one. Every
+    # other durable-credential operation in the panel (backup, restore, apply
+    # an update, change the password) re-prompts for the admin password; this
+    # now does too.
     name: str = Field(min_length=1, max_length=40, pattern=r"^[a-zA-Z0-9 _\-]+\z")
     scopes: Literal["full", "bot"] = "full"
+    # 0 = no expiry, which has to be the operator's explicit choice. The
+    # default is a bounded life: an integration token still present six
+    # months later is indistinguishable from one that leaked.
+    expires_in_days: int = Field(default=180, ge=0, le=3650)
 
 
 class TemplateCreateIn(BaseModel):
@@ -530,10 +545,10 @@ class RestoreAdminIn(BaseModel):
     token_version: StrictInt = Field(default=0, ge=0, le=999999999)
 
 
-class RestoreConfirmIn(BaseModel):
-    password_confirm: str = Field(min_length=8, max_length=128)
 
-
+# Defined here rather than next to the other API-token fields because
+# ApiTokenCreateIn inherits it (see above): "re-prompt for a durable
+# credential" is the same contract as backup / restore / apply-update.
 class UpdateApplyIn(RestoreConfirmIn):
     # The exact commit the Update card showed. Required (checked after the
     # password, so a wrong password still reports 400 rather than 422) so the

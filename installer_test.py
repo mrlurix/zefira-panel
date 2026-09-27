@@ -17,6 +17,7 @@ sh = io.open(ROOT + r"\install.sh", encoding="utf-8").read()
 # broken - by the comment that explains the code.
 sh_code = "\n".join(ln for ln in sh.splitlines()
                     if not ln.strip().startswith("#"))
+readme = io.open(ROOT + r"\README.md", encoding="utf-8").read()
 fails = []
 
 
@@ -100,6 +101,46 @@ check("the documented one-liner is untouched",
       in sh)
 check("non-interactive installs still skip the wizard",
       "[[ -t 0 ]] && INTERACTIVE=1" in sh)
+
+# ---- 5b. the source-discovery escalation -------------------------------
+# Under the documented pipe BASH_SOURCE[0] is EMPTY, so `dirname ""` is "."
+# and the old "anchor to the script's own directory" rule silently became
+# $PWD. `sudo bash install.sh` from /opt/zefira - a tree the service account
+# owns - then had root pip install from a requirements.lock that account could
+# rewrite (--require-hashes trusts the hashes in that same file).
+check("a piped install never treats the working directory as its source",
+      "HAVE_SELF_PATH=0" in sh_code
+      and re.search(r'\[\[ -n "\$\{BASH_SOURCE\[0\]:-\}" \]\] && HAVE_SELF_PATH=1', sh)
+      is not None
+      and 'SCRIPT_DIR=""' in sh,
+      "the guard needs the empty-BASH_SOURCE case")
+check("the service-writable install dir is refused as a source",
+      re.search(r'SCRIPT_DIR" != "\$TARGET_REAL', sh) is not None
+      and re.search(r"refusing to install from \$TARGET_REAL", sh) is not None,
+      "$TARGET must never be trusted as the installer's own source")
+check("the clone ref is a real variable again, defaulting to the release tag",
+      'REF="${ZEFIRA_INSTALL_REF:-v${ZEFIRA_VERSION}}"' in sh
+      and '--branch "$REF"' in sh
+      and "${ZEFIRA_INSTALL_REF:-main}" not in sh,
+      "REF was assigned and never used; the clone followed a moving branch")
+check("a clone can be pinned to an exact commit, and a mismatch aborts",
+      "ZEFIRA_EXPECTED_SHA" in sh
+      and 'CLONE_SHA" != "$ZEFIRA_EXPECTED_SHA"' in sh
+      and "nothing was installed" in sh,
+      "no expected-commit check")
+check("the read-it-first instructions use a private mktemp directory",
+      re.search(r"mktemp -d", sh) is not None
+      and "/tmp/zefira-inst" not in sh,
+      "a predictable /tmp path can be pre-created by another local user")
+check("the version fallback names a tag that exists upstream",
+      re.search(r'cat "\$TARGET/VERSION" 2>/dev/null \|\| echo 1\.14\.2', sh) is not None,
+      "the pipe-install fallback version is stale")
+check("the README's read-it-first block has the same fix",
+      "mktemp -d" in readme
+      # Mentioning the old path in prose is fine; USING it is not.
+      and "mkdir -p /tmp/zefira-inst" not in readme
+      and "-o /tmp/zefira-inst" not in readme,
+      "the documented mitigation was a predictable /tmp path")
 
 # ---- 6. uninstall must work from the menu ------------------------------
 check("uninstall is a function both entry points call",

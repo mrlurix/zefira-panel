@@ -728,7 +728,7 @@ stauw, _, _ = req("PUT", "/api/appearance", json.dumps({"theme_accent": "#00c853
 check("appearance PUT requires auth", stauw in (401, 403), f"got {stauw}")
 sttk, _, _ = req("GET", "/api/api-tokens")
 check("api tokens require auth", sttk == 401, f"got {sttk}")
-sttk2, _, _ = req("POST", "/api/api-tokens", json.dumps({"name": "x"}), {"X-Requested-With": "XMLHttpRequest"})
+sttk2, _, _ = req("POST", "/api/api-tokens", json.dumps({"name": "x", "password_confirm": PASSWORD}), {"X-Requested-With": "XMLHttpRequest"})
 check("api token create blocked w/o session", sttk2 in (401, 403), f"got {sttk2}")
 stupd, _, _ = req("GET", "/api/update/status")
 check("update status requires auth", stupd == 401, f"got {stupd}")
@@ -788,7 +788,8 @@ stru2, _, _ = req("POST", "/api/users/999999/reset-usage")
 check("reset-usage requires auth", stru2 in (401, 403), f"got {stru2}")
 
 # ---- 35b. API tokens lifecycle (bots & integrations) ----
-stmk3, _, mkb3 = req("POST", "/api/api-tokens", json.dumps({"name": "pentest-bot"}), AUTH2)
+stmk3, _, mkb3 = req("POST", "/api/api-tokens", json.dumps({"name": "pentest-bot",
+                                                    "password_confirm": PASSWORD}), AUTH2)
 tok_once = ""
 try:
     tj = json.loads(mkb3)

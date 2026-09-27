@@ -522,7 +522,8 @@ st, rib = js("POST", "/api/inbounds", {
 st, rtn = js("POST", "/api/nodes", {
     "name": "rtn" + uuid.uuid4().hex[:6], "transport": "tcp",
     "iran_ip": "10.9.0.1", "kharej_ip": "10.9.0.2", "tunnel_port": 4600}, AUTH)
-st, tokrow = js("POST", "/api/api-tokens", {"name": "rtok" + uuid.uuid4().hex[:4]}, AUTH)
+st, tokrow = js("POST", "/api/api-tokens", {"name": "rtok" + uuid.uuid4().hex[:4],
+                                      "password_confirm": PASSWORD}, AUTH)
 bearer = (tokrow or {}).get("token_once") or ""
 
 st, _, bkraw = req("POST", "/api/backup", json.dumps({"password_confirm": PASSWORD}),
