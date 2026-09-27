@@ -228,10 +228,24 @@ check("the docs header compacts on scroll and expands again on scroll-up",
       "scroll handler / scroll-up restore missing")
 check("the compact state is CSS-driven, with every compacted property animated",
       ".topbar.mini {" in docs_css
-      and all(p in docs_css for p in (".topbar.mini .brand img { width: 19px",
-                                      ".topbar.mini .brand b { font-size: 12.5px",
+      and all(p in docs_css for p in (".topbar.mini .brand img { width: 21px",
+                                      ".topbar.mini .brand b { font-size: 13px",
                                       ".topbar.mini a.gh {", ".topbar.mini #nav-toggle {")),
       "")
+check("the compact state narrows the pill from BOTH sides, not just vertically",
+      re.search(r"\.topbar\.mini\s*\{[^}]*max-width:\s*(\d+)px", docs_css) is not None
+      and int(re.search(r"\.topbar\.mini\s*\{[^}]*max-width:\s*(\d+)px", docs_css).group(1))
+      < int(re.search(r"^\.topbar\s*\{[^}]*max-width:\s*(\d+)px", docs_css, re.M).group(1)),
+      "the mini pill must be narrower than the resting one")
+check("max-width is transitioned, so the sideways shrink animates",
+      "max-width .24s" in docs_css, "")
+check("what collapses to make room is animated, and cannot wrap",
+      re.search(r"\.topbar\.mini \.ver,.*?max-width: 0;.*?white-space: nowrap;",
+                docs_css, re.S) is not None
+      and 'a.gh[href$="donate.html"]' in docs_css
+      and 'a.gh[href*="github.com"]' in docs_css,
+      "the collapsed links must keep nowrap - clipped text wrapped to one "
+      "character per line and grew the bar from 47px to 56px")
 check("the compact state never moves the sticky offset (that reads as a jerk)",
       re.search(r"\.topbar\.mini\s*\{[^}]*\btop\s*:", docs_css) is None
       and "transition: padding .22s ease" in docs_css,

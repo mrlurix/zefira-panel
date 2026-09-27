@@ -43,7 +43,10 @@ SERVICE="zefira"
 # for pipe-installs where no checkout exists yet.
 ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.13.1)"
 
-if [[ "${1:-}" == "--uninstall" ]]; then
+# Shared by `--uninstall` and by option 6 of the aftercare menu. A function,
+# not `exec bash "$0"`: under the documented one-liner (`curl ... | sudo bash`)
+# $0 is "bash", so re-executing the script by path silently does nothing.
+do_uninstall() {
     systemctl stop "$SERVICE" 2>/dev/null || true
     systemctl disable "$SERVICE" 2>/dev/null || true
     rm -f "/etc/systemd/system/$SERVICE.service"
@@ -62,6 +65,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -rf "$TARGET"
     echo "[zefira] uninstalled (system user 'zefira' kept for safety; userdel zefira to remove)."
     echo "[zefira] manual leftovers, if applicable: certbot delete --cert-name <domain> ; ufw delete allow <port>/tcp ; journalctl --vacuum-time=1s (logs)."
+}
+
+if [[ "${1:-}" == "--uninstall" ]]; then
+    do_uninstall
     exit 0
 fi
 
@@ -77,19 +84,26 @@ INTERACTIVE=0
 [[ -t 0 ]] && INTERACTIVE=1
 
 # ---------- banner ----------
+# figlet-block art, so the wordmark reads as solid glyphs the way the BackPack
+# CLI's does. 50 columns wide: still inside an 80-column terminal.
+ZEFIRA_ART=(
+"██╗      ███████╗███████╗██╗ █████╗ "
+"██║     ██╔════╝██╔════╝██║██╔══██╗ "
+"██║     █████╗  █████╗  ██║███████║ "
+"██║     ██╔══╝  ██╔══╝  ██║██╔══██║ "
+"███████╗███████╗██║     ██║██║  ██║ "
+"╚══════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝ "
+)
 banner() {
-    echo "${C_RED}${C_BLD}███████ ███████ ███████ ███████ ██████   ███${C_RST}"
-    echo "${C_RED}${C_BLD}     ██ ██ ██   ███   ██   ██  ██ ██${C_RST}"
-    echo "${C_RED}${C_BLD}    ██  ██ ██   ███   ██   ██ ██   ██${C_RST}"
-    echo "${C_RED}${C_BLD}   ██   ██████ ██████   ███   ██████ ███████${C_RST}"
-    echo "${C_RED}${C_BLD}  ██   ██ ██   ███   ██ ██  ██   ██ ██   ██${C_RST}"
-    echo "${C_RED}${C_BLD} ██    ██ ██   ███   ██  ██ ██   ██ ██   ██${C_RST}"
-    echo "${C_RED}${C_BLD}███████ ███████ ██ ███████ ██   ██ ██   ██${C_RST}"
-    echo "${C_BLD}Zefira${C_RST} ${C_RED}v${ZEFIRA_VERSION}${C_RST}"
-    echo "${C_DIM}GitHub : https://github.com/mrlurix/zefira-panel${C_RST}"
-    echo "${C_DIM}────────────────────────────────────────${C_RST}"
+    local l
+    for l in "${ZEFIRA_ART[@]}"; do echo "${C_RED}${C_BLD}${l}${C_RST}"; done
+    echo "${C_BLD}Zefira${C_RST}  ${C_RED}v${ZEFIRA_VERSION}${C_RST}"
+    echo "${C_DIM}GitHub : https://github.com/mrlurix/zefira-panel  |  Docs : https://mrlurix.github.io/zefira-panel/${C_RST}"
+    echo "${C_DIM}──────────────────────────────────────────────────${C_RST}"
 }
-step()  { echo; echo " ${C_RED}$1)${C_RST} ${C_BLD}$2${C_RST}  ${C_DIM}$3${C_RST}"; }
+# One numbered line, name in bold and the plain-language description dimmed
+# beside it, in the two-column shape the BackPack menu uses.
+step()  { printf ' %s%2s)%s %s%-16s%s %s%s%s\n' "$C_RED" "$1" "$C_RST" "$C_BLD" "$2" "$C_RST" "$C_DIM" "$3" "$C_RST"; }
 
 # ---------- helpers ----------
 ask() {
@@ -673,17 +687,65 @@ ss -tlnp 2>/dev/null | grep -q ":$PORT " && ok "Port $PORT listening" || fail "P
 
 IP=$(curl -fsS4 https://api.ipify.org 2>/dev/null || echo SERVER_IP)
 if [[ "$SSL_DONE" == "yes" ]]; then URL="https://$DOMAIN"; elif [[ -n "$DOMAIN" && "$SETUP_NGINX" == [yY]* ]]; then URL="http://$DOMAIN"; else URL="http://$IP:$PORT"; fi
+if [[ -n "$DB_URL" ]]; then DB_LINE="$DB_CHOICE"; else DB_LINE="SQLite (instance/zefira.db)"; fi
+if [[ "$SSL_DONE" == "yes" ]]; then SSL_LINE="$SSL_CERT (auto-renew installed)"; else SSL_LINE="none - put it behind TLS before using real accounts"; fi
+
 echo
-echo "${C_BLD}${C_GRN}╔════════════════════════════════════════════╗${C_RST}"
-echo "${C_BLD}${C_GRN}║${C_RST}          ${C_BLD}${C_RED}ZEFIRA INSTALLED${C_RST}              ${C_BLD}${C_GRN}║${C_RST}"
-echo "${C_BLD}${C_GRN}╚════════════════════════════════════════════╝${C_RST}"
-echo "  URL      : $URL"
-echo "  Local    : http://127.0.0.1:$PORT"
-echo "  Login    : cat $ENV_FILE"
-echo "  Service  : systemctl status $SERVICE"
-echo "  Logs     : journalctl -u $SERVICE -n 100 --no-pager"
-echo "  Sub path : $SUB_PATH"
-if [[ "$SSL_DONE" == "yes" ]]; then echo "  SSL      : $SSL_CERT (auto-renew cron installed)"; fi
-if [[ -n "$DB_URL" ]]; then echo "  DB       : $DB_CHOICE"; else echo "  DB       : SQLite (instance/zefira.db)"; fi
-echo "  !! Change the password after first login !!"
-echo "============================================================"
+banner
+echo "${C_GRN}${C_BLD}  Installed.${C_RST}  ${C_DIM}${URL}${C_RST}"
+echo
+printf ' %sPanel%s    : %s\n' "$C_BLD" "$C_RST" "$URL"
+printf ' %sLocal%s    : %s\n' "$C_BLD" "$C_RST" "http://127.0.0.1:$PORT"
+printf ' %sSub path%s : %s\n' "$C_BLD" "$C_RST" "$SUB_PATH"
+printf ' %sDatabase%s : %s\n' "$C_BLD" "$C_RST" "$DB_LINE"
+printf ' %sSSL%s      : %s\n' "$C_BLD" "$C_RST" "$SSL_LINE"
+printf ' %sService%s  : %s\n' "$C_BLD" "$C_RST" "$SERVICE.service"
+echo "${C_YEL}  Change the admin password after the first login.${C_RST}"
+echo "${C_DIM}  ────────────────────────────────────────────────────${C_RST}"
+
+# ---------- aftercare menu ----------
+# The same shape as the BackPack CLI: a numbered list with a plain-language
+# note per row, then a "Select an option:" prompt that stays until the
+# operator leaves. Only ever interactive - a piped install has no TTY, and
+# blocking there would hang the very command the docs advertise.
+post_menu() {
+    [[ $INTERACTIVE -eq 1 ]] || return 0
+    local choice
+    while true; do
+        echo
+        step 1 "Panel URL"    "print the address customers and you use"
+        step 2 "Credentials" "show the admin username and password"
+        step 3 "Status"      "is the service up, is the port listening"
+        step 4 "Logs"        "last 100 lines, with journalctl -f to follow"
+        step 5 "Restart"     "systemctl restart $SERVICE"
+        step 6 "Uninstall"   "remove everything this installer created"
+        step 7 "Exit"        "leave this menu (the panel keeps running)"
+        printf '%sSelect an option:%s ' "$C_BLD" "$C_RST"
+        # read -e so the arrow keys work; `|| true` because EOF (Ctrl+D)
+        # returns non-zero and `set -e` would kill the installer's last step.
+        read -e -r choice || { echo; return 0; }
+        case "${choice// /}" in
+            1) echo "$URL" ;;
+            2) grep -E '^ZEFIRA_ADMIN_(USERNAME|PASSWORD)=' "$ENV_FILE" 2>/dev/null \
+                 || fail "cannot read $ENV_FILE" ;;
+            3) systemctl is-active --quiet "$SERVICE" && ok "$SERVICE is running" \
+                 || fail "$SERVICE is NOT running"
+               ss -tln 2>/dev/null | grep -q ":$PORT " && ok "port $PORT is listening" \
+                 || fail "port $PORT is not listening" ;;
+            4) journalctl -u "$SERVICE" -n 100 --no-pager ;;
+            5) if systemctl restart "$SERVICE"; then ok "$SERVICE restarted"
+               else fail "restart failed - see option 4"; fi ;;
+            6) warn "uninstalling: type 'yes' to confirm"
+               local yes
+               printf 'Type yes to remove Zefira: ' ; read -r yes || { echo; return 0; }
+               if [[ "$yes" == "yes" ]]; then
+                   do_uninstall
+               else
+                   echo "kept."
+               fi ;;
+            7|"") echo "Bye."; return 0 ;;
+            *) warn "no option '$choice' - pick 1-7" ;;
+        esac
+    done
+}
+post_menu

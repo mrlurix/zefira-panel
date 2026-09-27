@@ -220,7 +220,7 @@ document.querySelectorAll("pre").forEach(function (pre) {
   // (render() was only ever called from search()).
   var index = null, items = [], sel = 0, lastQ = "";
   function isOpen() { return overlay && !overlay.hidden; }
-  fetch("assets/search-index.json?v=11").then(function (r) {
+  fetch("assets/search-index.json?v=13").then(function (r) {
     if (!r.ok) throw new Error("index http " + r.status);
     return r.json();
   }).then(function (j) {

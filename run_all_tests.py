@@ -31,6 +31,9 @@ SUITES = [
     ("frontend_bugs_test.py", "front-end regressions"),
     ("panel_sections_test.py", "panel sections end-to-end"),
 ]
+# Suites that need no running panel: static guards over the installer, which
+# is only ever executed on a Linux VPS (never here).
+OFFLINE_SUITES = [("installer_test.py", "installer CLI")]
 
 
 def wait_up(timeout=40):
@@ -108,6 +111,11 @@ for script, label in SUITES:
     reset_db(f"after {label}")
 
 print("\n===== ALL SUITES =====")
+for script, label in OFFLINE_SUITES:
+    print(f"\n===== {label} ({script}) =====")
+    rc = subprocess.call([PY, script], cwd=ROOT)
+    results.append((label, rc))
+
 bad = 0
 for label, rc in results:
     print(f"{'PASS' if rc == 0 else 'FAIL'}  {label}")
