@@ -48,6 +48,7 @@ subtpl = read("templates/sub.html")
 docs_i18n = read("docs/assets/i18n.js")
 docs_css = read("docs/assets/style.css")
 panel_i18n = read("static/i18n.js")
+_docs_api = read("docs/api.html")
 # The asset version is asserted against the real docs pages, not a constant.
 panel_docs_html = "".join(
     read("docs/" + f) for f in
@@ -319,6 +320,26 @@ check("the server really does require the confirm password",
 check("a new token's lifetime is bounded by default",
       re.search(r"expires_in_days: int = Field\(default=(?!0)\d+", _schemas) is not None,
       "no default expiry: an integration token lives forever")
+# A token that silently stops working reads as a broken bot, so the expiry has
+# to be on the row - and an already-dead one has to look different from a live
+# one, or the operator keeps debugging the integration.
+check("the token row shows the expiry",
+      re.search(r"if \(tk\.expires_at\)", app) is not None
+      and '"tokens.expiresAt"' in app,
+      "the list gives no hint that a token has a lifetime")
+check("an expired token is marked, not just dated",
+      re.search(r'if \(_dead\) li\.classList\.add\("bad"\)', app) is not None
+      and '"tokens.expiredAt"' in app,
+      "an expired token looks identical to a live one")
+check("the expiry strings exist in all four panel locales",
+      panel_i18n.count('"tokens.expiresAt"') == 4
+      and panel_i18n.count('"tokens.expiredAt"') == 4,
+      f"expiresAt={panel_i18n.count(chr(34) + 'tokens.expiresAt' + chr(34))} "
+      f"expiredAt={panel_i18n.count(chr(34) + 'tokens.expiredAt' + chr(34))} of 4")
+check("the API reference states the new token contract",
+      all(s in _docs_api for s in ("password", "expires_in_days"))
+      and all(s in docs_i18n for s in ("expires_in_days",)),
+      "docs still say only 'create (once-only secret)'")
 
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} passed ===")

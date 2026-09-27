@@ -316,6 +316,47 @@ check("the renderer escapes angle brackets and only then re-allows the tags",
 check("an attribute cannot survive the allowlist (bare tags only)",
       r"&lt;\/?([a-zA-Z][a-zA-Z0-9]*)&gt;" in docs_i18n,
       "the allowlist pattern must not match attributes")
+# The dictionary stores HTML entities (&#8212;, &amp;, and a deliberate
+# &lt;script&gt;). Assigned with textContent they printed the entity itself, so
+# the changelog heading read "v1.14.3 &#8212; ..." and a title attribute read
+# the raw entity. It looked right in the page source because the browser
+# decodes entities when it PARSES the HTML - the break only appeared once the
+# translation pass overwrote that parsed text.
+check("the renderer decodes entities before escaping",
+      "function zDecodeEntities" in docs_i18n
+      and re.search(r'case "amp": return "&"', docs_i18n) is not None
+      and re.search(r'case "lt": return "<"', docs_i18n) is not None,
+      "an em dash in a dictionary value renders as the six characters")
+# The numeric form is the one the dictionary actually uses (&#8212;), and a
+# first attempt tested charAt(1) for the "#" marker instead of charAt(0), so
+# only the named entities decoded and every em dash stayed literal. Check the
+# offsets, since the live page is the only place this shows up.
+check("numeric entities decode (the dictionary's &#NNNN; form)",
+      re.search(r'e\.charAt\(0\) === "#"', docs_i18n) is not None
+      and re.search(r'parseInt\(e\.slice\(1\), 10\)', docs_i18n) is not None
+      and re.search(r'parseInt\(e\.slice\(2\), 16\)', docs_i18n) is not None
+      and re.search(r'e\.charAt\(1\) === "#"', docs_i18n) is None,
+      "a wrong offset leaves &#8212; as literal text")
+check("the dictionary really does lean on numeric entities",
+      docs_i18n.count("&#8212;") > 20,
+      f"only {docs_i18n.count(chr(38) + '#8212;')} em-dash entities - guard is untested in practice")
+check("decoding rejects what fromCodePoint would throw on",
+      re.search(r"n >= 0xd800 && n <= 0xdfff", docs_i18n) is not None
+      and "try" not in docs_i18n.split("function zDecodeEntities")[1][:900].replace(
+          "entity", "").replace("Entity", ""),
+      "a surrogate code point would throw and break the whole pass")
+check("the plain-text path assigns the DECODED string",
+      re.search(r"if \(r\.escaped\) el\.textContent = r\.plain;", docs_i18n) is not None,
+      "assigning the raw value re-prints every entity")
+check("placeholder / title / aria-label / alt are decoded too",
+      re.search(r'placeholder", d\(el\.getAttribute', docs_i18n) is not None
+      and re.search(r'"title", d\(el\.getAttribute', docs_i18n) is not None
+      and re.search(r'"aria-label", d\(el\.getAttribute', docs_i18n) is not None
+      and re.search(r'"alt", d\(el\.getAttribute', docs_i18n) is not None,
+      "setAttribute does not decode entities")
+check("no attribute setter still uses the raw value",
+      re.search(r'place(holder)?", t\(el\.getAttribute', docs_i18n) is None,
+      "an attribute still receives an undecoded entity")
 check("the docs refuse to render inside a frame (meta frame-ancestors is inert)",
       "window.top !== window.self" in docs_js,
       "GitHub Pages cannot send the header; the meta directive is ignored")

@@ -2197,6 +2197,17 @@ async function renderApiTokens(items) {
     } else {
       bits.push(t("tokens.neverUsed"));
     }
+    // Tokens now expire, so the expiry has to be visible here: a row that
+    // silently stops working weeks later looks like a broken bot. An expired
+    // one is called out rather than left to look like the others.
+    if (tk.expires_at) {
+      const _e = new Date(tk.expires_at);
+      const _dead = !isNaN(_e.getTime()) && _e.getTime() <= Date.now();
+      bits.push(t(_dead ? "tokens.expiredAt" : "tokens.expiresAt", {
+        dt: isNaN(_e.getTime()) ? String(tk.expires_at) : dateTimeFmt.format(_e)
+      }));
+      if (_dead) li.classList.add("bad");
+    }
     meta.textContent = bits.join(" · ");
     li.appendChild(main);
     li.appendChild(meta);
