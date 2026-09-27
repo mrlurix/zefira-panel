@@ -1260,7 +1260,7 @@ async function loadSrvSettings() {
     }
   } catch (_) {}
 }
-document.bind("#cdn-preset", "change", (e) => {
+bind("#cdn-preset", "change", (e) => {
   if (e.target.value) document.querySelector('[name="cdn_sni"]').value = e.target.value;
 });
 
@@ -1300,7 +1300,7 @@ async function saveAllSettings() {
     if (err.message !== "auth") toast(err.message, false);
   }
 }
-document.bind("#save-reality-btn", "click", async (e) => {
+bind("#save-reality-btn", "click", async (e) => {
   const btn = e.currentTarget;
   if (!guardBtn(btn)) return;
   try { await saveAllSettings(); } finally { btn.disabled = false; }

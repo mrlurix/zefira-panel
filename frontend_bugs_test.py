@@ -388,6 +388,55 @@ check("the token test is called BEFORE the secret is shown",
 check("a failed token test is reported, not swallowed",
       all(k in _tv_body for k in ("api.testRejected", "api.testFailed")),
       "a rejected token must be distinguishable from a crash")
+# Every {placeholder} in a string must be one the call site actually supplies.
+# The self-test kept a {user} after the endpoint stopped returning a username,
+# and the panel printed it literally: "authenticated as full for {user}." A
+# visible placeholder is worse than none, and nothing else in the suite would
+# have noticed - the string is valid, the keys are all present, and the test
+# passes.
+def _placeholders_in(lang_block, key):
+    m = re.search(r'"' + re.escape(key) + r'":\s*"((?:[^"\\]|\\.)*)"',
+                  lang_block)
+    if m is None:
+        return None
+    return set(re.findall(r"\{(\w+)\}", m.group(1)))
+
+
+_blocks = [(m.start(), m.group(1)) for m in
+           re.finditer(r"Object\.assign\(Z_STRINGS\.(\w+), \{", panel_i18n)]
+# A language has SEVERAL Object.assign blocks and the api.* keys are not in the
+# last one, so concatenate them per language. Taking only the final block made
+# this lookup return None and the two checks below report nonsense.
+_lang_block = {}
+for _i, (_p, _l) in enumerate(_blocks):
+    _end = _blocks[_i + 1][0] if _i + 1 < len(_blocks) else len(panel_i18n)
+    _lang_block[_l] = _lang_block.get(_l, "") + panel_i18n[_p:_end]
+_st_ok = _placeholders_in(_lang_block.get("en", ""), "api.testOk")
+check("no dictionary value keeps a placeholder the call site never fills",
+      _st_ok == {"name", "scope"},
+      f"api.testOk wants {_st_ok}, verifyTokenLive supplies name and scope")
+_tv_call = re.search(r't\("api\.testOk",\s*\{(.*?)\}\)', _tv_body, re.S)
+_supplied = set(re.findall(r"(\w+):", _tv_call.group(1))) if _tv_call else set()
+check("...and the call site supplies exactly those",
+      _st_ok is not None and _supplied == _st_ok,
+      f"string wants {sorted(_st_ok or [])}, call supplies {sorted(_supplied)}")
+check("no {user} survives anywhere in the panel dictionary",
+      "{user}" not in panel_i18n,
+      "an unfilled placeholder is printed verbatim to the operator")
+# The same check across every {…} value the section uses, so the next string
+# added there is covered too.
+_bad_ph = []
+for _lang, _blk in _lang_block.items():
+    for _key in ("api.checkOk", "api.checkExpired", "api.testFailed",
+                 "api.testRejected", "api.checkGone", "tokens.expiresAt",
+                 "tokens.expiredAt", "tokens.lastUsed"):
+        _ph = _placeholders_in(_blk, _key)
+        if _ph and ("dt" in _ph) and _key.startswith("api."):
+            # these are filled by the row/Check handlers
+            if not re.search(r"dt:\s*", app):
+                _bad_ph.append(f"{_lang}.{_key} wants dt but nothing supplies it")
+check("the section's other placeholders are all supplied",
+      not _bad_ph, "; ".join(_bad_ph[:3]))
 check("the panel never keeps the token secret in web storage",
       re.search(r"(localStorage|sessionStorage)[^\n]*token_once", app) is None
       and re.search(r"(localStorage|sessionStorage)[^\n]*zfp_", app) is None,
@@ -750,6 +799,33 @@ _sel = subprocess.run([sys.executable, "find_bad_selectors.py"], capture_output=
 check("no literal selector in app.js would make querySelector throw",
       _sel.returncode == 0,
       (_sel.stdout or "").strip().splitlines()[-1][:120] if _sel.stdout else "no node/python")
+
+# ---- the panel script must actually LOAD --------------------------------
+# `node --check` only parses, and every suite in this repo is HTTP-level: it
+# never clicks a nav button. A scripted refactor left `document.bind(...)` -
+# valid JavaScript that throws on the first call - and all 902 checks stayed
+# green while the panel's entire lower half was dead. The browser found it.
+# This evaluates the whole file against a DOM stub built from panel.html, so
+# the only thing it can report is "the script asked for an id the template does
+# not have" or "module-scope code threw".
+check("the panel script is checked by RUNNING it, not by parsing it",
+      os.path.exists(os.path.join(ROOT, "app_smoke_check.js")),
+      "a parse check cannot see a call that throws when it runs")
+_smoke = subprocess.run(["node", "app_smoke_check.js"], capture_output=True,
+                        text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+check("app.js evaluates without throwing at module scope",
+      _smoke.returncode == 0,
+      " ".join((_smoke.stdout or _smoke.stderr or "").split())[:150])
+check("the smoke stub's element list comes from the template, not a hand-typed one",
+      re.search(r'PANEL = path\.join\(__dirname, "templates", "panel\.html"\)',
+                io.open(os.path.join(ROOT, "app_smoke_check.js"),
+                        encoding="utf-8").read()) is not None,
+      "a typed-in list goes stale on the first new button and then reports a "
+      "product bug that is not there")
+check("no call was accidentally qualified with document.",
+      "document.bind(" not in app,
+      "a scripted rewrite left `document.bind(...)`, which throws on the first "
+      "call and aborts every later top-level statement")
 
 # ---- the docs renderer must be checked by EXECUTING it ----------------
 check("the i18n renderer is checked by running it, not by reading it",
