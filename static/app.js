@@ -1,6 +1,34 @@
 "use strict";
 
 const $ = (sel, root = document) => root.querySelector(sel);
+// Bind an event, tolerating a missing element.
+//
+// This file has ~60 of these bindings at module scope, and `$(sel)` returns
+// null for an id the template does not have - then `null.addEventListener`
+// throws a TypeError that aborts EVERY LATER top-level statement, so one
+// mismatched id silently disables four unrelated features (the password form,
+// the AI form, the token form, the audit list). Two hand-guarded
+// `if (el)` workarounds for exactly this were already in the file, and one id
+// mismatch still is.
+//
+// A missing element is a bug worth seeing, so it is reported - but it no longer
+// takes the rest of the page down with it.
+function bind(sel, evt, fn, opts) {
+  // The try/catch is not decoration: querySelector THROWS a SyntaxError on an
+  // invalid selector (it does not return null), and at module scope that
+  // throw aborts every later top-level statement. `if (!el)` cannot help,
+  // because the exception happens while evaluating the argument.
+  let el = null;
+  try {
+    el = typeof sel === "string" ? $(sel) : sel;
+  } catch (err) {
+    console.warn("[zefira] bind: invalid selector", sel, err && err.message);
+    return null;
+  }
+  if (!el) { console.warn("[zefira] bind: no element for", sel); return null; }
+  el.addEventListener(evt, fn, opts);
+  return el;
+}
 
 const PROTO_LABEL = {
   vless: "VLESS",
@@ -256,6 +284,7 @@ const ICONS = {
   qr: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17.5 17.5h3v3h-3z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>',
   refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
   toggleOff: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   toggleOn: '<svg viewBox="0 0 24 24"><path d="M6 5l14 7-14 7z"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
@@ -493,32 +522,33 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     // must be loaded even when Settings was never opened (blank ports parsed
     // to NaN and the save was rejected).
     if (btn.dataset.section === "reality") { loadSrvSettings(); }
-    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); loadApiTokens(); }
+    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); }
     if (btn.dataset.section === "customize") { loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
     if (btn.dataset.section === "nodes") loadSrvNodes();
     if (btn.dataset.section === "update") loadUpdate();
     if (btn.dataset.section === "blocker") loadBlocklist();
+    if (btn.dataset.section === "api") loadApiDev();
   });
 });
 document.querySelectorAll("[data-goto]").forEach((el) => {
   el.addEventListener("click", () => $(`.nav-btn[data-section="${el.dataset.goto}"]`).click());
 });
 
-$("#logout-btn").addEventListener("click", async () => {
+bind("#logout-btn", "click", async () => {
   try { await api("/api/logout", { method: "POST" }); } catch (_) {}
   location.href = "/login";
 });
 
 const overlay = $("#modal-overlay");
-$("#add-user-btn").addEventListener("click", () => { bumpUserFormOp(); loadTemplates(); overlay.classList.remove("hidden"); });
+bind("#add-user-btn", "click", () => { bumpUserFormOp(); loadTemplates(); overlay.classList.remove("hidden"); });
 // Closing the dialog must NOT bump the counter. It used to, and since the
 // counter is what cancels a finished submit, dismissing the modal while the
 // POST was in flight made the handler return early: the user WAS created, but
 // there was no toast and no table refresh, so the operator created the same
 // username again and hit a 409. Only REOPENING (a new form) may cancel.
-$("#modal-close").addEventListener("click", () => { overlay.classList.add("hidden"); });
+bind("#modal-close", "click", () => { overlay.classList.add("hidden"); });
 overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.add("hidden"); } });
 // Operation generation: a finished add/edit from a modal the operator has
 // since REOPENED must not reset+close the new form. Each open/submit bumps
@@ -531,13 +561,13 @@ let editFormOp = 0;
 function bumpEditFormOp() { editFormOp += 1; return editFormOp; }
 
 const qrModal = $("#qr-modal");
-$("#qr-close").addEventListener("click", () => qrModal.classList.add("hidden"));
+bind("#qr-close", "click", () => qrModal.classList.add("hidden"));
 qrModal.addEventListener("click", (e) => { if (e.target === qrModal) qrModal.classList.add("hidden"); });
 let currentQrUrl = "";
 // Monotonic counter for QR/copy actions: only the newest request may write
 // the modal, the image, or the clipboard.
 let qrSeq = 0;
-$("#qr-copy-btn").addEventListener("click", async () => {
+bind("#qr-copy-btn", "click", async () => {
   if (!currentQrUrl) return;
   if (await copyText(currentQrUrl)) toast(t("msg.linkCopied"));
   else toast(t("msg.copyFailed"), false);
@@ -557,7 +587,7 @@ document.addEventListener("keydown", (e) => {
   if (m) m.classList.add("hidden");
 });
 
-$("#add-user-form").addEventListener("submit", async (e) => {
+bind("#add-user-form", "submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
@@ -619,7 +649,7 @@ async function loadTemplates() {
     }
   } catch (_) {}
 }
-$("#tpl-select").addEventListener("change", () => {
+bind("#tpl-select", "change", () => {
   const sel = $("#tpl-select");
   const opt = sel.selectedOptions[0];
   if (!opt || !opt.dataset.payload) return;
@@ -636,7 +666,7 @@ $("#tpl-select").addEventListener("change", () => {
   $("#sofu-check").checked = !!tpl.start_on_first_use;
   f.device_limit.value = tpl.device_limit || "";
 });
-$("#tpl-save-btn").addEventListener("click", async () => {
+bind("#tpl-save-btn", "click", async () => {
   const f = $("#add-user-form");
   const protos = Array.from(f.querySelectorAll('input[name="proto"]:checked')).map((c) => c.value);
   if (!protos.length) { toast(t("msg.tplSelectProto"), false); return; }
@@ -657,7 +687,7 @@ $("#tpl-save-btn").addEventListener("click", async () => {
     loadTemplates();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#tpl-del-btn").addEventListener("click", async () => {
+bind("#tpl-del-btn", "click", async () => {
   const sel = $("#tpl-select");
   const id = sel.value;
   if (!id) { toast(t("msg.tplSelectDel"), false); return; }
@@ -670,17 +700,17 @@ $("#tpl-del-btn").addEventListener("click", async () => {
 });
 
 let searchTimer;
-$("#search").addEventListener("input", () => {
+bind("#search", "input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => loadUsers($("#search").value.trim()), 300);
 });
 
-$("#sort-sel").addEventListener("change", () => {
+bind("#sort-sel", "change", () => {
   SORT_MODE = $("#sort-sel").value;
   renderUserTable(USERS_CACHE);
 });
 
-$("#export-csv-btn").addEventListener("click", async () => {
+bind("#export-csv-btn", "click", async () => {
   if (!USERS_CACHE.length) { toast(t("msg.noUsersExport"), false); return; }
   const safeCell = (v) => {
     // Normalize fullwidth ASCII (＝+＠) and strip bidi controls first:
@@ -736,7 +766,7 @@ $("#export-csv-btn").addEventListener("click", async () => {
   }
 });
 
-$("#users-table").addEventListener("click", async (e) => {
+bind("#users-table", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   const id = btn.dataset.id;
@@ -855,7 +885,7 @@ $("#users-table").addEventListener("click", async (e) => {
   }
 });
 
-$("#pw-form").addEventListener("submit", async (e) => {
+bind("#pw-form", "submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
@@ -888,7 +918,12 @@ function applyBrand(name) {
 }
 
 // ---- Menu & dashboard layout ----
-const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "settings"];
+// The Developer API section was added without touching this list, so
+// normalizeMenu dropped it and the server refused to store it: the section
+// could be neither reordered nor hidden, which is exactly what Personalize
+// exists to let the operator do. Any new section has to be added here AND to
+// MENU_SECTIONS in main.py, or it is pinned on.
+const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings"];
 const MENU_LOCKED = ["dashboard", "users", "inbounds", "customize", "settings"];
 const DASH_IDS = ["usage", "link", "groups", "apps"];
 let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));
@@ -957,14 +992,62 @@ function applyMenuLayout(layout) {
   if (!first || !Array.isArray(layout)) return;
   const nav = first.parentElement;
   const btns = {};
-  nav.querySelectorAll(".nav-btn").forEach((b) => { btns[b.dataset.section] = b; });
-  for (const item of layout) {
-    const b = btns[item.id];
+  // The TEMPLATE order, captured before anything is moved. This is the only
+  // record of where a section was meant to sit.
+  const templateOrder = [];
+  nav.querySelectorAll(".nav-btn").forEach((b) => {
+    btns[b.dataset.section] = b;
+    templateOrder.push(b.dataset.section);
+  });
+  // The saved layout only knows the sections that existed when it was saved.
+  // A section added by a later release is NOT in it, and the old loop -
+  // "append every button the layout mentions" - left the unknown one
+  // stranded at the FRONT of the menu: Developer API appeared above
+  // Dashboard on every existing install.
+  //
+  // So: take the saved order for the sections it knows, and slot each unknown
+  // one in at its template position, right after the last known section that
+  // precedes it.
+  const rank = new Map();
+  layout.forEach((item, i) => { if (item && btns[item.id]) rank.set(item.id, i); });
+  const placed = templateOrder.filter((id) => rank.has(id))
+    .sort((a, b) => rank.get(a) - rank.get(b));
+  for (const id of templateOrder) {
+    if (rank.has(id)) continue;
+    // Slot the unknown section in at its template position: after the last
+    // known section that precedes it, or - if the layout mentions NO earlier
+    // section - before the first known one that FOLLOWS it.
+    //
+    // The fallback matters. Splicing at index 0 in that case INVERTS the menu
+    // (everything unknown piles up at the top, reversed), which is the exact
+    // regression this block exists to prevent. Unreachable today only because
+    // both normalizers happen to backfill every id.
+    const at = templateOrder.indexOf(id);
+    let prev = null;
+    for (let i = 0; i < at; i++) {
+      if (rank.has(templateOrder[i])) prev = templateOrder[i];
+    }
+    if (prev) {
+      placed.splice(placed.indexOf(prev) + 1, 0, id);
+    } else {
+      let next = null;
+      for (let i = at + 1; i < templateOrder.length; i++) {
+        if (rank.has(templateOrder[i])) { next = templateOrder[i]; break; }
+      }
+      placed.splice(next ? placed.indexOf(next) : placed.length, 0, id);
+    }
+  }
+  for (const id of placed) {
+    const b = btns[id];
     if (!b) continue;
     nav.appendChild(b);
-    const hide = !!item.hidden;
+    // An unknown section has no saved entry, and that means VISIBLE: it did
+    // not exist to be hidden. Defaulting it to hidden would ship a new
+    // section that nobody can find.
+    const item = layout.find((x) => x && x.id === id);
+    const hide = !!(item && item.hidden);
     b.classList.toggle("hidden", hide);
-    const sec = document.getElementById("section-" + item.id);
+    const sec = document.getElementById("section-" + id);
     if (sec) sec.classList.toggle("hidden", hide);
   }
 }
@@ -1097,14 +1180,14 @@ async function loadAppearance() {
     applyMenuLayout(MENU_STATE);
   } catch (_) {}
 }
-$("#ap-save-btn").addEventListener("click", async () => {
+bind("#ap-save-btn", "click", async () => {
   try {
     const r = await api("/api/appearance", { method: "PUT", body: collectAppearance() });
     applyBrand(r.brand_name);
     toast(t("msg.appearanceSaved"));
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#ap-reset-btn").addEventListener("click", async () => {
+bind("#ap-reset-btn", "click", async () => {
   if (!confirm(t("cfm.appearanceReset"))) return;
   try {
     // Full reset: colors/brand/note AND menu/dashboard layouts back to
@@ -1177,7 +1260,7 @@ async function loadSrvSettings() {
     }
   } catch (_) {}
 }
-document.getElementById("cdn-preset")?.addEventListener("change", (e) => {
+document.bind("#cdn-preset", "change", (e) => {
   if (e.target.value) document.querySelector('[name="cdn_sni"]').value = e.target.value;
 });
 
@@ -1217,19 +1300,19 @@ async function saveAllSettings() {
     if (err.message !== "auth") toast(err.message, false);
   }
 }
-document.getElementById("save-reality-btn")?.addEventListener("click", async (e) => {
+document.bind("#save-reality-btn", "click", async (e) => {
   const btn = e.currentTarget;
   if (!guardBtn(btn)) return;
   try { await saveAllSettings(); } finally { btn.disabled = false; }
 });
-$("#srv-form").addEventListener("submit", async (e) => {
+bind("#srv-form", "submit", async (e) => {
   e.preventDefault();
   if (!guardSubmit(e.target)) return;
   try { await saveAllSettings(); }
   finally { releaseSubmit(e.target); }
 });
 
-$("#reality-gen-btn").addEventListener("click", async (e) => {
+bind("#reality-gen-btn", "click", async (e) => {
   if (!confirm(t("cfm.realityGen"))) return;
   const btn = e.currentTarget;
   if (!guardBtn(btn)) return;
@@ -1242,14 +1325,14 @@ $("#reality-gen-btn").addEventListener("click", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
-$("#reality-reveal-btn").addEventListener("click", async () => {
+bind("#reality-reveal-btn", "click", async () => {
   try {
     const d = await api("/api/reality/private");
     $("#reality-priv").value = d.private_key;
     $("#reality-out").classList.remove("hidden");
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#reality-copy-btn").addEventListener("click", async () => {
+bind("#reality-copy-btn", "click", async () => {
   // The private box is only filled by Generate/Reveal, so after any reload
   // "Copy Both Keys" copied `private_key: ` + an empty line and reported
   // success - the operator then pasted an empty privateKey into Xray and
@@ -1281,7 +1364,7 @@ async function loadTunnelSettings() {
     $("#tunnel-trusted").value = t.trusted_proxies || "";
   } catch (_) {}
 }
-$("#tunnel-save-btn").addEventListener("click", async () => {
+bind("#tunnel-save-btn", "click", async () => {
   try {
     await api("/api/tunnel-settings", {
       method: "PUT",
@@ -1363,7 +1446,7 @@ function openGuide(url) {
   if (!openDownload(url)) toast(t("msg.popupBlocked"), false);
 }
 
-$("#node-create-btn").addEventListener("click", async (e) => {
+bind("#node-create-btn", "click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#node-name").value.trim();
   const iran = $("#node-iran").value.trim();
@@ -1400,7 +1483,7 @@ $("#node-create-btn").addEventListener("click", async (e) => {
   finally { btn.disabled = false; }
 });
 
-$("#nodes-list").addEventListener("click", async (e) => {
+bind("#nodes-list", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   const id = btn.dataset.id;
@@ -1550,7 +1633,7 @@ async function loadInbounds() {
   } catch (_) {}
 }
 
-$("#ib-add-btn").addEventListener("click", async (e) => {
+bind("#ib-add-btn", "click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#ib-name").value.trim();
   const port = numInput($("#ib-port").value);
@@ -1581,7 +1664,7 @@ $("#ib-add-btn").addEventListener("click", async (e) => {
   finally { btn.disabled = false; }
 });
 
-$("#inbounds-tbody").addEventListener("click", async (e) => {
+bind("#inbounds-tbody", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   try {
@@ -1680,7 +1763,7 @@ async function loadSrvNodes() {
   } catch (_) {}
 }
 
-$("#snode-create-btn").addEventListener("click", async (e) => {
+bind("#snode-create-btn", "click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#snode-name").value.trim();
   const address = $("#snode-addr").value.trim();
@@ -1706,7 +1789,7 @@ $("#snode-create-btn").addEventListener("click", async (e) => {
   finally { btn.disabled = false; }
 });
 
-$("#snodes-list").addEventListener("click", async (e) => {
+bind("#snodes-list", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   const id = btn.dataset.id;
@@ -1732,7 +1815,7 @@ $("#snodes-list").addEventListener("click", async (e) => {
     }
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#snodes-refresh").addEventListener("click", loadSrvNodes);
+bind("#snodes-refresh", "click", loadSrvNodes);
 
 async function loadBlocklist() {
   try {
@@ -1762,7 +1845,7 @@ async function loadBlocklist() {
   } catch (_) {}
 }
 
-$("#porn-toggle")?.addEventListener("change", async (e) => {
+bind("#porn-toggle", "change", async (e) => {
   try {
     await api("/api/blocklist/porn", { method: "PUT", body: { porn_enabled: e.target.checked } });
     toast(e.target.checked ? t("msg.pornOn") : t("msg.pornOff"));
@@ -1770,7 +1853,7 @@ $("#porn-toggle")?.addEventListener("change", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); e.target.checked = !e.target.checked; }
 });
 
-$("#block-add-btn")?.addEventListener("click", async (e) => {
+bind("#block-add-btn", "click", async (e) => {
   const btn = e.currentTarget;
   const inp = $("#block-domain");
   const domain = inp.value.trim().toLowerCase();
@@ -1785,7 +1868,7 @@ $("#block-add-btn")?.addEventListener("click", async (e) => {
   finally { btn.disabled = false; }
 });
 
-$("#block-list")?.addEventListener("click", async (e) => {
+bind("#block-list", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   if (!confirm(t("cfm.unblock", {domain: btn.dataset.domain}))) return;
@@ -1798,10 +1881,10 @@ $("#block-list")?.addEventListener("click", async (e) => {
 
 // Closing never bumps: only REOPENING starts a new session. (Escape is
 // handled by the single global handler further up.)
-$("#edit-close").addEventListener("click", () => { $("#edit-modal").classList.add("hidden"); });
-$("#edit-modal").addEventListener("click", (e) => { if (e.target === $("#edit-modal")) { $("#edit-modal").classList.add("hidden"); } });
+bind("#edit-close", "click", () => { $("#edit-modal").classList.add("hidden"); });
+bind("#edit-modal", "click", (e) => { if (e.target === $("#edit-modal")) { $("#edit-modal").classList.add("hidden"); } });
 
-$("#edit-user-form").addEventListener("submit", async (e) => {
+bind("#edit-user-form", "submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   if (!guardSubmit(f)) return;
@@ -1953,8 +2036,8 @@ async function loadUpdate(announce, fresh, quietNetErr) {
     return null;
   }
 }
-$("#update-check-btn").addEventListener("click", () => loadUpdate(true));
-$("#update-now-btn").addEventListener("click", async (e) => {
+bind("#update-check-btn", "click", () => loadUpdate(true));
+bind("#update-now-btn", "click", async (e) => {
   if (!confirm(t("cfm.updateNow"))) return;
   const pw = prompt(t("prm.updatePw"));
   if (!pw) return;
@@ -2077,7 +2160,7 @@ async function loadAi() {
     }
   } catch (_) {}
 }
-$("#ai-save-btn").addEventListener("click", async () => {
+bind("#ai-save-btn", "click", async () => {
   try {
     await api("/api/ai/settings", {
       method: "PUT",
@@ -2095,7 +2178,7 @@ $("#ai-save-btn").addEventListener("click", async () => {
     loadAi();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#ai-test-btn").addEventListener("click", async () => {
+bind("#ai-test-btn", "click", async () => {
   const btn = $("#ai-test-btn");
   if (btn.disabled) return;
   btn.disabled = true;
@@ -2105,7 +2188,7 @@ $("#ai-test-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
-$("#ai-fab").addEventListener("click", () => {
+bind("#ai-fab", "click", () => {
   $("#ai-chat").classList.toggle("hidden");
   if (!$("#ai-chat").classList.contains("hidden")) {
     // Badge may be stale (saved/disabled in another tab): refresh on open.
@@ -2116,7 +2199,7 @@ $("#ai-fab").addEventListener("click", () => {
     $("#ai-input").focus();
   }
 });
-$("#ai-close").addEventListener("click", () => $("#ai-chat").classList.add("hidden"));
+bind("#ai-close", "click", () => $("#ai-chat").classList.add("hidden"));
 let aiSending = false;
 async function aiSend() {
   // No overlapping requests: double-send interleaves history and burns
@@ -2156,8 +2239,8 @@ async function aiSend() {
     inp.focus();
   }
 }
-$("#ai-send").addEventListener("click", aiSend);
-$("#ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") aiSend(); });
+bind("#ai-send", "click", aiSend);
+bind("#ai-input", "keydown", (e) => { if (e.key === "Enter") aiSend(); });
 
 // ---- API tokens (bots & integrations) ----
 async function renderApiTokens(items) {
@@ -2200,9 +2283,11 @@ async function renderApiTokens(items) {
     // Tokens now expire, so the expiry has to be visible here: a row that
     // silently stops working weeks later looks like a broken bot. An expired
     // one is called out rather than left to look like the others.
+    // _dead is hoisted out of the if because the Check button below needs it.
+    let _dead = false;
     if (tk.expires_at) {
       const _e = new Date(tk.expires_at);
-      const _dead = !isNaN(_e.getTime()) && _e.getTime() <= Date.now();
+      _dead = !isNaN(_e.getTime()) && _e.getTime() <= Date.now();
       bits.push(t(_dead ? "tokens.expiredAt" : "tokens.expiresAt", {
         dt: isNaN(_e.getTime()) ? String(tk.expires_at) : dateTimeFmt.format(_e)
       }));
@@ -2211,6 +2296,19 @@ async function renderApiTokens(items) {
     meta.textContent = bits.join(" · ");
     li.appendChild(main);
     li.appendChild(meta);
+    // Status check, not a second live auth round-trip: the panel stores only
+    // the token's SHA-256, so it cannot re-send the secret - and deliberately
+    // does not keep it in sessionStorage either, where any XSS would have it.
+    // This reports what the server knows about the token, which is what an
+    // operator can actually act on.
+    const chkBtn = iconBtn(t("api.checkBtn"), ICONS.check, "good");
+    chkBtn.dataset.act = "check-token";
+    chkBtn.dataset.id = tk.id;
+    chkBtn.dataset.name = tk.name;
+    chkBtn.dataset.scopes = tk.scopes || "full";
+    chkBtn.dataset.expired = tk.expires_at ? String(_dead) : "";
+    chkBtn.dataset.last = tk.last_used_at || "";
+    li.appendChild(chkBtn);
     const delBtn = iconBtn(t("icon.revoke"), ICONS.trash, "bad");
     delBtn.dataset.act = "del-token";
     delBtn.dataset.id = tk.id;
@@ -2224,7 +2322,48 @@ async function loadApiTokens() {
     renderApiTokens(await api("/api/api-tokens"));
   } catch (_) {}
 }
-$("#apitoken-create-btn").addEventListener("click", async (e) => {
+
+// Prove a freshly minted token is one the server recognises, BEFORE the secret
+// is handed over.
+//
+// It deliberately does NOT make a cookie-less `GET /api/me` with the token in
+// an Authorization header. That looked like the obvious way to test "exactly
+// what a bot sends" - and it destroys the one signal the token list exists to
+// show: require_admin stamps `last_used_at` on EVERY bearer request, so the
+// panel's own self-test made "never used" unreachable for every token the UI
+// ever created, and the Check button then reported "just now" for a token
+// nobody had used. That is the field an operator scans for a leaked
+// credential, so forging it is worse than not testing.
+//
+// The dedicated endpoint runs the same hash-and-lookup without the write.
+async function verifyTokenLive(raw) {
+  const out = $("#apitoken-test-result");
+  if (!raw) return null;
+  try {
+    const r = await api("/api/api-tokens/self-test", { method: "POST", body: { token: raw } });
+    if (r && r.ok) {
+      if (out) {
+        out.className = "hint ok-text";
+        out.textContent = t("api.testOk", { name: r.name, scope: r.scopes });
+      }
+      return r;
+    }
+    if (out) {
+      out.className = "hint warn-text";
+      out.textContent = t("api.testRejected");
+    }
+    return null;
+  } catch (err) {
+    if (out) {
+      out.className = "hint warn-text";
+      out.textContent = err && err.message !== "auth"
+        ? t("api.testFailed", { code: String(err.message || "").slice(0, 40) })
+        : t("api.testRejected");
+    }
+    return null;
+  }
+}
+bind("#apitoken-create-btn", "click", async (e) => {
   const btn = e.currentTarget;
   const name = $("#apitoken-name").value.trim();
   if (!name) { toast(t("msg.tokenNameEmpty"), false); return; }
@@ -2239,6 +2378,9 @@ $("#apitoken-create-btn").addEventListener("click", async (e) => {
     const r = await api("/api/api-tokens", { method: "POST",
                                            body: { name, password_confirm: pw } });
     $("#apitoken-name").value = "";
+    // Test it first: a token that does not authenticate is a problem the
+    // operator should hear about now, not after pasting it into a bot.
+    await verifyTokenLive(r.token_once);
     // The token is shown once and never stored: copy it AND always show
     // it for manual backup (clipboard content is easily lost/overwritten).
     // The prompt is deliberately unconditional - a dismissed prompt plus a
@@ -2249,10 +2391,36 @@ $("#apitoken-create-btn").addEventListener("click", async (e) => {
     loadApiTokens();  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
   finally { btn.disabled = false; }
 });
-$("#apitoken-list").addEventListener("click", async (e) => {
+bind("#apitoken-list", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
   try {
+    if (btn.dataset.act === "check-token") {
+      if (!guardBtn(btn)) return;
+      try {
+        // The server is the only place that knows whether a token is still
+        // usable, so ask it rather than guessing from the row we already have.
+        const fresh = await api("/api/api-tokens");
+        const row = (fresh || []).find((x) => String(x.id) === String(btn.dataset.id));
+        if (!row) { toast(t("api.checkGone"), false); }
+        else {
+          const _e = row.expires_at ? new Date(row.expires_at) : null;
+          const _dead = _e && !isNaN(_e.getTime()) && _e.getTime() <= Date.now();
+          const out = $("#apitoken-test-result");
+          out.className = "hint " + (_dead ? "warn-text" : "ok-text");
+          out.textContent = t(_dead ? "api.checkExpired" : "api.checkOk", {
+            name: row.name,
+            scope: row.scopes || "full",
+            used: row.last_used_at
+              ? dateTimeFmt.format(new Date(row.last_used_at))
+              : t("tokens.neverUsed"),
+            until: _e && !isNaN(_e.getTime()) ? dateTimeFmt.format(_e) : "",
+          });
+        }
+        loadApiTokens();
+      } finally { btn.disabled = false; }
+      return;
+    }
     if (btn.dataset.act === "del-token") {
       if (!confirm(t("cfm.tokenRevoke", {name: btn.dataset.name}))) return;
       if (!guardBtn(btn)) return;
@@ -2269,6 +2437,134 @@ $("#apitoken-list").addEventListener("click", async (e) => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); loadApiTokens(); }
 });
 
+// ---- Developer API section ----
+// The base URL is the one thing a developer cannot guess and the panel never
+// showed. Prefer the operator's configured public_url: behind a reverse
+// proxy that is the address clients actually reach, and location.origin is
+// whatever hostname the admin happens to be typing right now.
+function apiBaseUrl(publicUrl) {
+  let base = String(publicUrl || "").trim();
+  if (!base) base = location.origin;
+  return base.replace(/\/+$/, "");
+}
+function renderApiQuickstart(base) {
+  const b = base || apiBaseUrl("");
+  const set = (sel, text) => { const el = $(sel); if (el) el.textContent = text; };
+  set("#api-base-url", b);
+  set("#api-auth-header", "Authorization: Bearer zfp_...");
+  set("#api-example-curl", "curl -sS " + b + "/api/me \\\n"
+    + "  -H 'Authorization: Bearer zfp_YOUR_TOKEN'");
+  // A bearer token is a full-scope credential and it is about to be typed into
+  // a shell. Over plain http it crosses the network in cleartext - and the
+  // panel supports plaintext installs (start-lan.bat, and copyText's own
+  // fallback exists for exactly that case), so `public_url` may legitimately
+  // be http:// here. The domain fallback already forces https; the public_url
+  // path did not, and nothing said so. Say it now, loudly, on the card.
+  const insecure = /^http:\/\//i.test(b);
+  const warn = $("#api-insecure-warning");
+  if (warn) {
+    warn.classList.toggle("hidden", !insecure);
+    if (insecure) warn.textContent = t("api.insecureWarning");
+  }
+  document.querySelectorAll("#section-api [data-copy]").forEach((btn) => {
+    // Copying is not blocked - the operator may be on a trusted LAN and an
+    // outright refusal would just teach them to work around it - but the
+    // button says so, so the risk is a decision rather than an accident.
+    btn.classList.toggle("warn-btn", insecure);
+  });
+}
+async function loadApiDev() {
+  let base = apiBaseUrl("");
+  try {
+    // public_url lives on the tunnel settings, NOT on /api/settings - reading
+    // it from there always came back undefined, so the card silently fell
+    // through to the domain and the whole "prefer what clients reach" rule
+    // was dead code.
+    const [tun, s] = await Promise.all([
+      api("/api/tunnel-settings").catch(() => null),
+      api("/api/settings").catch(() => null),
+    ]);
+    const pub = (tun && tun.public_url) || "";
+    const dom = (s && s.domain) || "";
+    if (pub) base = apiBaseUrl(pub);
+    else if (dom) base = apiBaseUrl("https://" + dom);
+  } catch (_) {}
+  renderApiQuickstart(base);
+  loadApiTokens();
+  // Static reference lists: what each scope may reach, and the rules a bot
+  // author keeps getting wrong. Rendered from data so the four languages only
+  // have to supply the text, not the markup.
+  const scopes = [
+    { k: "full", can: t("api.scopeFullCan"), cant: "" },
+    { k: "bot", can: t("api.scopeBotCan"), cant: t("api.scopeBotCant") },
+  ];
+  const ul = $("#api-scope-list");
+  if (ul) {
+    ul.innerHTML = "";
+    scopes.forEach((sc) => {
+      const li = document.createElement("li");
+      const b = document.createElement("b");
+      b.textContent = sc.k;
+      li.appendChild(b);
+      const s1 = document.createElement("small");
+      s1.textContent = sc.can;
+      li.appendChild(s1);
+      if (sc.cant) {
+        const s2 = document.createElement("small");
+        s2.className = "muted";
+        s2.textContent = sc.cant;
+        li.appendChild(s2);
+      }
+      ul.appendChild(li);
+    });
+  }
+  const rules = $("#api-rules-list");
+  if (rules) {
+    rules.innerHTML = "";
+    ["api.ruleAuth", "api.ruleCsrf", "api.ruleScope403", "api.ruleThrottle",
+     "api.ruleExpiry", "api.ruleRotate", "api.ruleDocs"].forEach((k) => {
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = t(k);
+      rules.appendChild(li);
+    });
+  }
+}
+
+// One delegated handler for every copy button in the section, so adding a row
+// to the quick start does not need a new listener.
+//
+// Scoped and allowlisted on purpose. A document-wide `[data-copy]` handler
+// that reads `value` off any element is a "copy anything on the page to the
+// clipboard" primitive for the whole page lifetime - all it would take is one
+// stored-HTML injection anywhere in the panel, and copyText's
+// execCommand fallback (which exists because plaintext-http installs are
+// supported) turns that into silent exfiltration. Neither precondition exists
+// today, but a primitive that broad does not need one to be wrong later.
+const API_COPY_IDS = ["#api-base-url", "#api-auth-header", "#api-example-curl"];
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-copy]");
+  if (!btn) return;
+  // Must be inside this section, and must name one of the three known rows.
+  const section = btn.closest("#section-api");
+  if (!section) return;
+  const sel = btn.dataset.copy;
+  if (API_COPY_IDS.indexOf(sel) === -1) return;
+  let src;
+  try {
+    src = $(sel);
+  } catch (_) {
+    // A malformed selector throws a SyntaxError; an unhandled rejection here
+    // would look like a dead button with no explanation.
+    toast(t("msg.copyFailed"), false);
+    return;
+  }
+  if (!src) { toast(t("msg.copyFailed"), false); return; }
+  const text = (src.value !== undefined && src.tagName !== "CODE" ? src.value : src.textContent) || "";
+  if (await copyText(String(text).trim())) toast(t("msg.linkCopied"));
+  else toast(t("msg.copyFailed"), false);
+});
+
 // ---- Telegram ----
 async function loadTelegram() {
   try {
@@ -2282,7 +2578,7 @@ async function loadTelegram() {
       : t("tg.noToken");
   } catch (_) {}
 }
-$("#tg-save-btn").addEventListener("click", async () => {
+bind("#tg-save-btn", "click", async () => {
   try {
     await api("/api/telegram", {
       method: "PUT",
@@ -2293,7 +2589,7 @@ $("#tg-save-btn").addEventListener("click", async () => {
     loadTelegram();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#tg-test-btn").addEventListener("click", async () => {
+bind("#tg-test-btn", "click", async () => {
   try {
     await api("/api/telegram/test", { method: "POST", body: {} });
     toast(t("msg.tgSent"));
@@ -2321,7 +2617,7 @@ async function loadSslStatus() {
     renderSslStatus(await api("/api/ssl/status"));
   } catch (_) {}
 }
-$("#ssl-issue-btn").addEventListener("click", async () => {
+bind("#ssl-issue-btn", "click", async () => {
   const domain = $("#ssl-domain").value.trim().toLowerCase();
   let subdomain = $("#ssl-subdomain").value.trim().toLowerCase();
   const email = $("#ssl-email").value.trim();
@@ -2339,7 +2635,7 @@ $("#ssl-issue-btn").addEventListener("click", async () => {
     loadAudit();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
-$("#ssl-renew-btn").addEventListener("click", async () => {
+bind("#ssl-renew-btn", "click", async () => {
   try {
     const r = await api("/api/ssl/renew", { method: "POST", body: {} });
     renderSslStatus(r);
@@ -2348,7 +2644,7 @@ $("#ssl-renew-btn").addEventListener("click", async () => {
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
 });
 
-$("#backup-btn").addEventListener("click", async () => {
+bind("#backup-btn", "click", async () => {
   const pw = prompt(t("prm.backupPw"));
   if (!pw) return;
   // Two-step choice so Cancel always means abort: first confirm the
@@ -2411,7 +2707,7 @@ function restoreNote(r) {
   if (r && r.tunnel_note) toast(r.tunnel_note);
 }
 
-$("#restore-btn").addEventListener("click", async () => {
+bind("#restore-btn", "click", async () => {
   const file = restoreFile.files[0];
   if (!file) return;
   if (file.size > 64 * 1048576) { toast(t("msg.fileTooBig"), false); return; }
@@ -2493,7 +2789,7 @@ async function loadAudit() {
     }
   } catch (_) {}
 }
-$("#audit-refresh").addEventListener("click", loadAudit);
+bind("#audit-refresh", "click", loadAudit);
 
 (async function init() {
   try {

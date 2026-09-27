@@ -365,6 +365,18 @@ class ApiTokenCreateIn(RestoreConfirmIn):
     expires_in_days: int = Field(default=180, ge=0, le=3650)
 
 
+class ApiTokenSelfTestIn(BaseModel):
+    # The raw token, so the panel can ask "does this authenticate?" without
+    # making a real bearer call - which would stamp last_used_at and destroy
+    # the "never used" signal the token list exists to show.
+    #
+    # No password_confirm: this endpoint is a READ that reveals nothing the
+    # caller cannot already see in the token list (name, scope, expiry), and
+    # re-prompting on every Check button press would make it unusable. It is
+    # rate-limited, audited, and never echoes the value back.
+    token: str = Field(min_length=1, max_length=200)
+
+
 class TemplateCreateIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 

@@ -62,6 +62,11 @@ def req(method, path, body=None, headers=None, timeout=25, raw_host=None):
         return 0, {}, str(e).encode()
 
 
+# Every response that was not JSON, so a non-JSON body shows up by name
+# instead of crashing the run further down.
+NOT_JSON = []
+
+
 def js(method, path, body=None, headers=None, timeout=25):
     """JSON convenience wrapper: send, parse, return (status, obj-or-bytes)."""
     st, _hd, b = req(method, path, json.dumps(body) if body is not None else None,
@@ -69,7 +74,11 @@ def js(method, path, body=None, headers=None, timeout=25):
     try:
         return st, json.loads(b or b"{}")
     except Exception:
-        return st, b[:300]
+        raw = b[:300].decode("utf-8", "replace")
+        NOT_JSON.append(f"{method} {path} -> {st} {raw[:80]!r}")
+        # A dict, not bytes: every caller does payload.get(...), and bytes
+        # raised AttributeError that aborted the whole suite.
+        return st, {"_notjson": True, "_raw": raw}
 
 
 def raw_request(method, path, body, headers, host_override, timeout=25):
@@ -949,6 +958,12 @@ print("\n=== SUMMARY ===")
 # Recomputed HERE on purpose: a mid-file `passed = ...` goes stale as soon as
 # another block appends checks, and the suite then reports failures that are
 # not in the list (and exits non-zero on a fully green run).
+if NOT_JSON:
+    print(f"\n!! {len(NOT_JSON)} response(s) were not JSON - the checks above that "
+          f"touched them failed for that reason:")
+    for _n in NOT_JSON[:10]:
+        print("   " + _n)
+
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"{passed}/{len(results)} checks passed")
 if passed != len(results):

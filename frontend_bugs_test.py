@@ -7,7 +7,9 @@ features invisible.
 """
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -49,6 +51,11 @@ docs_i18n = read("docs/assets/i18n.js")
 docs_css = read("docs/assets/style.css")
 panel_i18n = read("static/i18n.js")
 _docs_api = read("docs/api.html")
+login_html = read("templates/login.html")
+auth_js = read("static/auth.js")
+css = read("static/style.css")
+_main_py = read("main.py")
+ANCHOR_I18N = "title.api"
 # The asset version is asserted against the real docs pages, not a constant.
 panel_docs_html = "".join(
     read("docs/" + f) for f in
@@ -180,7 +187,10 @@ check("the post-update verdict compares the running commit, not the upstream hea
 check("a failed update check is shown as an error, not as 'up to date'",
       re.search(r"if \(st\.error\) \{", app) is not None
       and "st.error && !st.current" not in app)
-_copy = re.search(r'reality-copy-btn"\)\.addEventListener\("click".*?\n\}\);', app, re.S)
+# Accepts either spelling: the handler body is what matters, not whether the
+# binding goes through bind() or addEventListener directly.
+_copy = re.search(r'(?:reality-copy-btn"\)|bind\("#reality-copy-btn", )\s*'
+                  r'(?:addEventListener\(|)"click".*?\n\}\);', app, re.S)
 _copy_body = _copy.group(0) if _copy else ""
 check("Copy Both Keys fetches the private key instead of copying it empty",
       'let priv = $("#reality-priv").value;' in _copy_body
@@ -197,7 +207,8 @@ check("an auto-downloaded guide reports a blocked popup",
       "function openGuide(url)" in app and "openDownload(url)) toast(t(\"msg.popupBlocked\")"
       in app and "setTimeout(() => openDownload(" not in app)
 check("the destructive Update button is guarded against a double click",
-      re.search(r'update-now-btn"\)\.addEventListener\("click".*?guardBtn\(btn\)',
+      re.search(r'(?:update-now-btn"\)|bind\("#update-now-btn", )\s*'
+                r'(?:addEventListener\(|)"click".*?guardBtn\(btn\)',
                 app, re.S) is not None)
 _guard_chunks = re.split(r"if \(!guardBtn\(btn\)\) return;", app)[1:]
 check("every guardBtn call is released again",
@@ -331,6 +342,16 @@ check("an expired token is marked, not just dated",
       re.search(r'if \(_dead\) li\.classList\.add\("bad"\)', app) is not None
       and '"tokens.expiredAt"' in app,
       "an expired token looks identical to a live one")
+# The Check button's own message has to branch on the same flag. A global
+# search for the key is not enough: an earlier version of this guard passed
+# even with the branch hard-coded, because it only looked for the key's
+# presence and for the `li` class - neither of which the branch controls.
+_ct = re.search(r'dataset\.act === "check-token"\)?\s*\{(.*?)\n      return;', app, re.S)
+_ct_body = _ct.group(1) if _ct else ""
+check("the Check button says EXPIRED when the token is past its date",
+      re.search(r'_dead\s*\?\s*"api\.checkExpired"\s*:\s*"api\.checkOk"', _ct_body) is not None
+      and re.search(r'_dead\s*\?\s*"warn-text"\s*:\s*"ok-text"', _ct_body) is not None,
+      "an expired token would be reported as active")
 check("the expiry strings exist in all four panel locales",
       panel_i18n.count('"tokens.expiresAt"') == 4
       and panel_i18n.count('"tokens.expiredAt"') == 4,
@@ -340,6 +361,407 @@ check("the API reference states the new token contract",
       all(s in _docs_api for s in ("password", "expires_in_days"))
       and all(s in docs_i18n for s in ("expires_in_days",)),
       "docs still say only 'create (once-only secret)'")
+
+# ---- the Developer API section -----------------------------------------
+# NOTE ON THE TOKEN-TEST DESIGN, because it changed for a reason. The post-
+# create check used to be a cookie-less `GET /api/me` carrying the raw token in
+# an Authorization header, on the reasoning that "exactly what a bot sends" is
+# the only test worth having. It was right about the request and wrong about
+# the consequence: require_admin stamps `last_used_at` on every bearer request,
+# so the panel's own self-test made the `null` that means "never used"
+# unreachable for every token the UI ever created, and the Check button then
+# reported "just now" for a token nobody had used. That field is what an
+# operator scans for a leaked credential, so forging it is worse than not
+# testing. It now goes through a dedicated endpoint that does the same
+# hash-and-lookup WITHOUT the write.
+_tv = re.search(r"async function verifyTokenLive\([^)]*\)\s*\{(.*?)\n\}", app, re.S)
+_tv_body = _tv.group(1) if _tv else ""
+check("the token test exists and runs right after the token is minted",
+      _tv is not None
+      and re.search(r"await verifyTokenLive\(r\.token_once\);", app) is not None,
+      "no live token check")
+check("the token test is called BEFORE the secret is shown",
+      "await verifyTokenLive(r.token_once);" in app
+      and app.index("await verifyTokenLive(r.token_once);")
+      < app.index('prompt(t("prm.tokenOnce"), r.token_once);'),
+      "testing after the prompt means the operator already pasted it")
+check("a failed token test is reported, not swallowed",
+      all(k in _tv_body for k in ("api.testRejected", "api.testFailed")),
+      "a rejected token must be distinguishable from a crash")
+check("the panel never keeps the token secret in web storage",
+      re.search(r"(localStorage|sessionStorage)[^\n]*token_once", app) is None
+      and re.search(r"(localStorage|sessionStorage)[^\n]*zfp_", app) is None,
+      "a stored token is one XSS away from being stolen")
+
+# ---- the section itself -------------------------------------------------
+check("the API section is in the sidebar",
+      re.search(r'class="nav-btn"[^>]*data-section="api"', panel) is not None,
+      "no nav button for it")
+check("the API section has a DOM section to show",
+      re.search(r'<section id="section-api"', panel) is not None,
+      "the nav button would switch to nothing")
+check("the nav button and the section agree on the title key",
+      re.search(r'data-section="api"[^>]*data-title-key="title\.api"', panel) is not None
+      and f'"{ANCHOR_I18N}"' in panel_i18n,
+      "the topbar heading would stay on the previous page's title")
+check("the API section is wired to its loader",
+      re.search(r'btn\.dataset\.section === "api"\) loadApiDev\(\)', app) is not None
+      and "async function loadApiDev(" in app,
+      "clicking it would show an empty page")
+check("the tokens card MOVED: exactly one copy of each id exists",
+      all(len(re.findall(f'id="{i}"', panel)) == 1 for i in
+          ("apitoken-name", "apitoken-create-btn", "apitoken-list")),
+      "two #apitoken-create-btn elements: $(\"…\") binds only the first, so "
+      "one copy of the button would be dead")
+check("Settings no longer loads the token list",
+      re.search(r'btn\.dataset\.section === "settings"[^\n]*loadApiTokens', app) is None,
+      "both sections loading it is harmless, but it means the move is half done")
+check("the quick start shows a base URL built from the deployment",
+      "function apiBaseUrl(" in app
+      and re.search(r'#api-base-url', panel) is not None
+      and re.search(r"location\.origin", app) is not None,
+      "the base URL was never shown anywhere in the panel")
+check("the quick start prefers the operator's public_url over the origin",
+      re.search(r"apiBaseUrl\(pub\)", app) is not None
+      and re.search(r'api\("/api/tunnel-settings"\)', app) is not None,
+      "behind a proxy, location.origin is whatever host the admin typed")
+check("public_url is read from the tunnel settings, not /api/settings",
+      re.search(r'api\("/api/settings"\)[^\n]*\.public_url', app) is None
+      and re.search(r"tun\.public_url", app) is not None,
+      "public_url does not exist on /api/settings, so that read is always "
+      "undefined and the whole prefer-public_url rule is dead code")
+check("the base URL is stripped of a trailing slash anyway",
+      re.search(r'replace\(/\\/\+\$/, ""\)', app) is not None,
+      "the server refuses to store one, but `domain` and an older install's "
+      "setting can still carry it, and https://host/ + /api/me is a double "
+      "slash in every copy-pasted example")
+check("every copy button is handled by one delegated listener",
+      re.search(r'data-copy', panel) is not None
+      and re.search(r'closest\("\[data-copy\]"\)', app) is not None,
+      "a per-button listener would need editing for every new row")
+check("a failed copy is reported",
+      # Scoped to the [data-copy] handler on purpose: an earlier version of
+      # this guard was a global substring search, and the QR button already
+      # had an identical `else toast(t("msg.copyFailed"), false)` - so the
+      # guard passed with the new handler's failure path removed.
+      re.search(r'closest\("\[data-copy\]"\)(.*?)\n\}\);', app, re.S) is not None
+      and re.search(
+          r'closest\("\[data-copy\]"\).*?else toast\(t\("msg\.copyFailed"\), false\);',
+          app, re.S) is not None,
+      "a silent copy means the operator pastes an empty string")
+check("the scope table explains both scopes and bot's limits",
+      all(f'"{k}"' in panel_i18n for k in
+          ("api.scopeFullCan", "api.scopeBotCan", "api.scopeBotCant")),
+      "the section would ship a token-scope list with no text")
+check("the rules list covers the things bot authors get wrong",
+      sum(1 for k in ("api.ruleAuth", "api.ruleCsrf", "api.ruleScope403",
+                      "api.ruleThrottle", "api.ruleExpiry", "api.ruleRotate")
+          if f'"{k}"' in panel_i18n) == 6,
+      "a developer section with no rules is just a link")
+check("the copy-row style exists",
+      re.search(r"^\.copy-row", css, re.M) is not None,
+      "the value and the button would stack instead of sitting in a row")
+check("the check button uses a real icon",
+      re.search(r"check:\s*'<svg", app) is not None
+      and "ICONS.check" in app,
+      "the button would render blank")
+check("the check button reports status, and says so honestly",
+      re.search(r'chkBtn\.dataset\.expired', app) is not None
+      and re.search(r'api\.checkExpired', app) is not None
+      and re.search(r'api\.checkOk', app) is not None,
+      "an expired token must not look like a live one")
+
+# ---- the saved menu layout must not strand a new section ----------------
+# Personalize stores the sidebar order. A section added by a later release is
+# not in that stored list, and the original loop ("append every button the
+# layout mentions") left the unknown one at the FRONT: Developer API rendered
+# above Dashboard on every existing install. The fix slots an unknown section
+# in after the last known one that precedes it in the template.
+sys.path.insert(0, ROOT)
+
+_ml = re.search(r"function applyMenuLayout\(layout\)\s*\{(.*?)\n\}", app, re.S)
+_ml_body = _ml.group(1) if _ml else ""
+check("the menu layout records the template order before moving anything",
+      "templateOrder" in _ml_body
+      and re.search(r"templateOrder\.push", _ml_body) is not None,
+      "without the original order there is nowhere to put a new section")
+check("a section missing from the saved layout is placed, not stranded",
+      re.search(r"placed\.splice\(", _ml_body) is not None
+      and re.search(r"if \(rank\.has\(id\)\) continue;", _ml_body) is not None,
+      "an unknown section would keep its DOM position and end up first")
+check("a new section is visible, not hidden by default",
+      re.search(r"const hide = !!\(item && item\.hidden\);", _ml_body) is not None,
+      "a section with no saved entry must not default to hidden")
+
+
+def _real_menu_order():
+    """Run the SHIPPED applyMenuLayout() in node against a fake nav.
+
+    A Python port of the same logic proved nothing - it tested the port, not
+    the code - and two guards "MISSED" a re-introduced regression for exactly
+    that reason. This executes the function that actually ships, with a layout
+    saved before the api section existed and one item dragged by the operator.
+    """
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        return None
+    try:
+        r = subprocess.run([node, "menu_order_check.js", "static/app.js"],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", cwd=ROOT, timeout=60)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return {"error": (r.stderr or "").strip().splitlines()[-1:] or ["?"]}
+    out = {}
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].isdigit():
+            out[parts[0]] = int(parts[1])
+        elif len(parts) == 2 and parts[1] in ("true", "false"):
+            out[parts[0]] = parts[1] == "true"
+        elif len(parts) >= 2:
+            # e.g. "sparse_order dashboard,users,...", "sparse_all_present true"
+            key = parts[0]
+            rest = " ".join(parts[1:])
+            out[key] = (rest == "true") if rest in ("true", "false") else rest
+    return out
+
+
+# Built before the checks that use it, and defined here rather than inline in a
+# call: a `check(` whose argument list is never closed is a SyntaxError that
+# takes the whole suite down with it.
+_order = _real_menu_order()
+
+# Where the section is SUPPOSED to sit, derived from the template rather than
+# hardcoded: the operator's default position is simply the one in panel.html,
+# and moving the button there must not require editing this test. What matters
+# is that the saved layout does not override it.
+_tpl = re.findall(r'class="nav-btn[^"]*"[^>]*data-section="([a-z]+)"', panel)
+_api_at = _tpl.index("api") if "api" in _tpl else -1
+_want_after = _tpl[_api_at - 1] if _api_at > 0 else None
+_want_before = _tpl[_api_at + 1] if 0 <= _api_at < len(_tpl) - 1 else None
+check("the section is actually reachable from a real install",
+      # The real check: run the SHIPPED applyMenuLayout against a layout saved
+      # BEFORE the api section existed, and assert it lands where the template
+      # puts it. The position itself is the operator's default, read from
+      # panel.html - not a constant in this test.
+      _order is not None
+      and "error" not in _order
+      and _api_at > 0
+      and _order.get("api") == _order.get(_want_after, -99) + 1
+      and (_want_before is None
+           or _order.get("api", 99) < _order.get(_want_before, -1)),
+      f"order={_order} want api right after {_want_after!r} and before {_want_before!r}")
+check("...and the saved order of the other sections is still honoured",
+      _order is not None and "error" not in _order
+      and _order.get("dashboard") == 0
+      # The harness drags Nodes above Inbounds; if that reordering survives,
+      # applyMenuLayout is genuinely reading the saved layout.
+      and _order.get("nodes", 99) < _order.get("inbounds", -1),
+      f"the operator's dragged order was lost: {_order}")
+check("...every section survives, and a new one is visible",
+      _order is not None and "error" not in _order
+      and _order.get("all_present") is True
+      and _order.get("api_visible") is True
+      and _order.get("count") == len(re.findall(r'data-section="[a-z]+"', panel)),
+      f"count={_order.get('count') if _order else None}, "
+      f"nav buttons in the template="
+      f"{len(re.findall(chr(39) + 'data-section=' + chr(34) + '[a-z]+' + chr(34), panel))}")
+
+# ---- a SPARSE layout must not invert the menu --------------------------
+# The unknown-section splice fell back to index 0 when the layout mentioned no
+# EARLIER section, which reversed the whole menu - the precise regression the
+# block claims to fix. Unreachable today only because both normalizers backfill
+# every id, so the shipped helper has to exercise it explicitly.
+check("a sparse layout does not invert the menu",
+      _order is not None
+      and _order.get("sparse_all_present") is True
+      and _order.get("sparse_dashboard_at") == 0
+      and _order.get("sparse_settings_at") == _order.get("count", -1) - 1,
+      f"sparse={_order.get('sparse_order') if _order else None}")
+check("a sparse layout still puts the unknown section at its template slot",
+      _order is not None
+      and _order.get("sparse_order")
+      and "api" in [x for x in _order["sparse_order"].split(",")]
+      and "customize" in [x for x in _order["sparse_order"].split(",")]
+      and ([x for x in _order["sparse_order"].split(",")].index("api")
+           == [x for x in _order["sparse_order"].split(",")].index("customize") + 1),
+      f"sparse={_order.get('sparse_order') if _order else None}")
+
+# ---- the section must be a first-class menu citizen --------------------
+# "api" was missing from MENU_IDS and MENU_SECTIONS, so normalizeMenu dropped
+# it and the server refused to store a layout mentioning it: Personalize could
+# neither move nor hide it, which is the one thing that section exists for.
+_mids = re.search(r"const MENU_IDS = \[([^\]]*)\]", app)
+_mids_list = re.findall(r'"([a-z]+)"', _mids.group(1)) if _mids else []
+_msrv = re.search(r"MENU_SECTIONS = \(([^)]*)\)", _main_py)
+_msrv_list = re.findall(r'"([a-z]+)"', _msrv.group(1)) if _msrv else []
+_tpl_secs = re.findall(r'data-section="([a-z]+)"', panel)
+check("the api section is in the client's menu id list",
+      "api" in _mids_list, f"MENU_IDS={_mids_list}")
+check("the api section is in the server's menu section list",
+      "api" in _msrv_list, f"MENU_SECTIONS={_msrv_list}")
+check("the two canonical menu lists agree with each other",
+      sorted(_mids_list) == sorted(_msrv_list),
+      f"client={sorted(_mids_list)} server={sorted(_msrv_list)}")
+check("...and with the sections that actually exist in the template",
+      sorted(_mids_list) == sorted(set(_tpl_secs)),
+      f"lists={sorted(_mids_list)} template={sorted(set(_tpl_secs))}")
+check("the api section can therefore be reordered and hidden",
+      "api" in _mids_list and "api" in _msrv_list
+      and re.search(r'"api"\s*,\s*"settings"', _mids.group(1)) is not None,
+      "the default slot is the one the operator asked for, and it is editable")
+
+# ---- the token self-test must not forge usage -------------------------
+# require_admin stamps last_used_at on EVERY bearer request. A cookie-less
+# GET /api/me as the self-test therefore made "never used" unreachable for
+# every UI-minted token, and the Check button reported "just now" for a token
+# nobody had used - destroying the exact signal an operator scans for a leak.
+_vt = re.search(r"async function verifyTokenLive\([^)]*\)\s*\{(.*?)\n\}", app, re.S)
+_vt_body = _vt.group(1) if _vt else ""
+_st = re.search(r'def api_token_self_test\(.*?\n(?=\n\n)', _main_py, re.S)
+_st_body = _st.group(0) if _st else ""
+check("the self-test goes through the dedicated endpoint, not the auth path",
+      re.search(r'api\("/api/api-tokens/self-test"', _vt_body) is not None
+      and re.search(r'fetch\("/api/me"', _vt_body) is None
+      and 'Authorization: "Bearer "' not in _vt_body,
+      "a bearer call stamps last_used_at and forges a use")
+check("the self-test endpoint exists and is admin-only",
+      _st_body != "" and "Depends(require_admin)" in _st_body,
+      "no self-test endpoint")
+check("the self-test endpoint never stamps last_used_at",
+      _st_body != "" and "last_used_at =" not in _st_body
+      and "ApiToken.last_used_at" not in _st_body,
+      "it would forge the usage signal it exists to preserve")
+check("the self-test response cannot echo the token back",
+      _st_body != "" and '"token":' not in _st_body
+      and "token_once" not in _st_body
+      and re.search(r'return \{"ok": True, \*\*info\}', _st_body) is not None,
+      "the raw credential must not come back in the response")
+check("the self-test is rate-limited and audited without the value",
+      _st_body != "" and "sensitive_limiter.hit" in _st_body
+      and "APITOKEN_SELFTEST" in _st_body
+      and re.search(r"audit\(s, \"APITOKEN_SELFTEST\",\s*\n?\s*f\"\{'ok' if ok else 'failed'\} \{info\.get\('name'", _st_body)
+      is not None,
+      "an audit row that quoted the token would be the worst possible place for it")
+check("a wrong token is a reported result, not a missing resource",
+      _st_body != "" and 'status_code=404' not in _st_body
+      and re.search(r'return \{"ok": False', _st_body) is not None,
+      "404 reads like a bug; the panel wants a rendered verdict")
+
+# ---- the quick start must not advise a cleartext token ----------------
+check("the quick start warns when the base URL is plain HTTP",
+      re.search(r'const insecure = /\^http:\\/\\//i\.test\(b\);', app) is not None
+      and re.search(r'warn\.classList\.toggle\("hidden", !insecure\)', app) is not None,
+      "a full-scope bearer token was being copied to the clipboard over http "
+      "with nothing said about it")
+check("the warning exists in all four locales",
+      panel_i18n.count('"api.insecureWarning"') == 4,
+      f"found {panel_i18n.count(chr(34) + 'api.insecureWarning' + chr(34))} of 4")
+check("the warning element exists in the section",
+      re.search(r'id="api-insecure-warning"', panel) is not None,
+      "nothing to show the warning in")
+check("copying is not blocked, but the button is marked",
+      re.search(r'btn\.classList\.toggle\("warn-btn", insecure\)', app) is not None,
+      "an outright refusal just teaches people to work around it")
+
+# ---- the copy handler must stay narrow --------------------------------
+_cc = re.search(r'const API_COPY_IDS = \[([^\]]*)\]', app)
+_cc_list = re.findall(r'"([^"]+)"', _cc.group(1)) if _cc else []
+_ccl = re.search(r'document\.addEventListener\("click".*?API_COPY_IDS\.indexOf\(sel\) === -1', app, re.S)
+check("the copy handler is allowlisted, not page-wide",
+      len(_cc_list) == 3
+      and _ccl is not None
+      and re.search(r'btn\.closest\("#section-api"\)', app) is not None,
+      f"allowlist={_cc_list}")
+check("the copy handler cannot throw on a malformed selector",
+      re.search(r'try \{\s*\n\s*src = \$\(sel\);', app) is not None
+      or re.search(r'src = \$\(sel\);\s*\n\s*\} catch', app) is not None,
+      "a SyntaxError from $() would look like a dead button with no reason")
+check("the allowlist covers every copy button in the template",
+      sorted(set(re.findall(r'data-copy="([^"]+)"', panel))) == sorted(_cc_list),
+      f"template={sorted(set(re.findall(chr(39) + 'data-copy=' + chr(34) + '([^' + chr(34) + ']+)', panel)))} "
+      f"allowlist={sorted(_cc_list)}")
+
+# ---- a credential form must POST even if the JS never runs -------------
+# No form declared `method`, so the HTML default is GET: with auth.js blocked,
+# a stale asset_v, a proxy that strips the script, or JS simply off, pressing
+# Enter submitted natively and put the password in the URL -
+#   GET /panel?current=<old>&new1=<new>&new2=<new>
+# The panel's own logs were not exposed (--no-access-log, nginx access_log off,
+# Referrer-Policy: no-referrer, CSP form-action 'self'), but browser history,
+# synced accounts, any third-party proxy and a screen share were.
+_forms = re.findall(r"<form\b[^>]*>", panel) + re.findall(r"<form\b[^>]*>", login_html)
+check("every form declares a method, so the safe default is the default",
+      _forms and all('method="post"' in f for f in _forms),
+      f"forms without method=post: {[f[:60] for f in _forms if 'method=' not in f]}")
+check("the password forms are among them",
+      sum(1 for f in _forms if "pw-form" in f or "login-form" in f) >= 2
+      and all('method="post"' in f for f in _forms
+              if "pw-form" in f or "login-form" in f),
+      "the login and password-change forms are the ones that leak")
+check("the panel's own JS still intercepts these forms",
+      # The login form lives in auth.js, the rest in app.js.
+      re.search(r'login-form', auth_js) is not None
+      and 'addEventListener("submit"' in auth_js
+      and all(re.search(rf'bind\("#{i}", "submit"', app) is not None
+              for i in ("pw-form", "srv-form", "add-user-form", "edit-user-form")),
+      "with method=post a JS failure now 405s instead of leaking, but the "
+      "normal path must still be JS-driven")
+
+# ---- one missing id must not disable the rest of the page --------------
+# ~60 top-level `$("#id").addEventListener(...)` statements: a null from
+# querySelector threw a TypeError that aborted every LATER top-level statement,
+# so one element the template lacks silently disabled the password form, the AI
+# form, the token form and the audit list. Two hand-guarded `if (el)`
+# workarounds for exactly this were already in the file.
+check("there is a bind() helper that tolerates a missing element",
+      re.search(r"function bind\(sel, evt, fn, opts\)", app) is not None
+      and re.search(r'console\.warn\("\[zefira\] bind: no element for", sel\)', app)
+      is not None,
+      "a missing element must be reported without taking the page down")
+check("the missing element is still reported, not swallowed",
+      "console.warn" in app,
+      "silently ignoring a typo hides the very bug it is about")
+_remaining = re.findall(r'^\s*\$\("(#[\w-]+)"\)\.addEventListener\(', app, re.M)
+check("no top-level binding can still abort the ones after it",
+      not _remaining,
+      f"still unguarded: {_remaining[:5]}")
+check("the hand-guarded optional chains are gone (bind covers them now)",
+      len(re.findall(r'addEventListener\(', app)) ==
+      len([1 for m in re.finditer(r'(?:^|\W)addEventListener\(', app)]),
+      "a mixed convention invites the next binding to be the unguarded one")
+_optional = re.findall(r'(?:\$\("(#[\w-]+)"\)|getElementById\("([\w-]+)"\))'
+                       r'\?\.addEventListener\(', app)
+check("no binding is left with its own ad-hoc null guard",
+      not _optional,
+      f"still optional: {[(a or b) for a, b in _optional][:5]}")
+check("bind() also survives an INVALID selector, which throws rather than "
+      "returning null",
+      re.search(r"function bind\(sel, evt, fn, opts\)\s*\{.*?catch \(err\)", app, re.S)
+      is not None,
+      "querySelector THROWS on an invalid selector, and `if (!el)` cannot "
+      "help because the exception happens while evaluating the argument")
+_sel = subprocess.run([sys.executable, "find_bad_selectors.py"], capture_output=True,
+                      text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+check("no literal selector in app.js would make querySelector throw",
+      _sel.returncode == 0,
+      (_sel.stdout or "").strip().splitlines()[-1][:120] if _sel.stdout else "no node/python")
+
+# ---- the docs renderer must be checked by EXECUTING it ----------------
+check("the i18n renderer is checked by running it, not by reading it",
+      os.path.exists(os.path.join(ROOT, "i18n_render_check.js")),
+      "its safety is a chain of escape-order invariants; reading them by eye "
+      "is how they stay safe for a year and then are not")
+check("the renderer escapes the ampersand FIRST, so the sink is safe by "
+      "construction rather than by a parser invariant",
+      re.search(r'plain\.replace\(/&/g, "&amp;"\)\.replace\(/</g, "&lt;"\)'
+                r'\.replace\(/>/g, "&gt;"\)', docs_i18n) is not None,
+      "a decoded &#60; then reaches innerHTML as a live character reference - "
+      "harmless per spec, but the safety would rest on the spec")
 
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} passed ===")

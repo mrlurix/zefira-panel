@@ -54,6 +54,10 @@
         <svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 1 9-9c0 3-2 4.5-3.5 4.5h-2a2 2 0 0 0-1.5 3.3c.5.6-.3 1.2-2 1.2z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/></svg>
         <span data-i18n="nav.customize">Personalize</span>
       </button>
+      <button class="nav-btn" data-section="api" data-title-key="title.api">
+        <svg viewBox="0 0 24 24"><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m13.5 5-3 14"/></svg>
+        <span data-i18n="nav.api">Developer API</span>
+      </button>
       <button class="nav-btn" data-section="settings" data-title-key="title.settings">
         <svg viewBox="0 0 24 24"><path d="M4 6h16"/><circle cx="9" cy="6" r="2.5"/><path d="M4 12h16"/><circle cx="15" cy="12" r="2.5"/><path d="M4 18h16"/><circle cx="7" cy="18" r="2.5"/></svg>
         <span data-i18n="nav.settings">Settings</span>
@@ -348,6 +352,69 @@
       </div>
     </section>
 
+    <section id="section-api" class="section">
+      <div class="settings-grid">
+
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="api.quickTitle">Quick start</h2></div>
+          <p class="hint mt-0" data-i18n="api.quickHintA">Every call needs an API token as a Bearer header. No CSRF header, no cookie.</p>
+          <div class="field">
+            <span data-i18n="api.baseLabel">Base URL</span>
+            <div class="copy-row">
+              <code class="mono" id="api-base-url">&hellip;</code>
+              <button type="button" class="btn btn-ghost" data-copy="#api-base-url" data-i18n-title="icon.copy" title="Copy">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <span data-i18n="api.headerLabel">Header</span>
+            <div class="copy-row">
+              <code class="mono" id="api-auth-header">Authorization: Bearer zfp_&hellip;</code>
+              <button type="button" class="btn btn-ghost" data-copy="#api-auth-header" data-i18n-title="icon.copy" title="Copy">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <span data-i18n="api.exampleLabel">First request</span>
+            <div class="copy-row">
+              <code class="mono" id="api-example-curl">curl &hellip;</code>
+              <button type="button" class="btn btn-ghost" data-copy="#api-example-curl" data-i18n-title="icon.copy" title="Copy">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+          <p class="hint warn-text hidden" id="api-insecure-warning"></p>
+          <p class="hint"><span data-i18n="api.quickHintB">Paste that token into</span> <code>zfp_&hellip;</code> <span data-i18n="api.quickHintC">and run it — the</span> <a href="https://mrlurix.github.io/zefira-panel/api.html" target="_blank" rel="noopener" data-i18n="api.quickHintDocs">full endpoint reference</a> <span data-i18n="api.quickHintD">is in the docs.</span></p>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="tokens.title">API Tokens</h2></div>
+          <p class="hint mt-0"><span data-i18n="tokens.hintA">Long-lived</span> <code>zfp_…</code> <span data-i18n="tokens.hintB">tokens for bots and dashboards. Send as</span> <code>Authorization: Bearer …</code> <span data-i18n="tokens.hintC">header — no CSRF header needed. Shown once, revoke anytime.</span></p>
+          <div class="field-row">
+            <label class="field"><span data-i18n="tokens.nameLabel">Token name</span><input type="text" id="apitoken-name" maxlength="40" placeholder="telegram-bot"></label>
+            <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block" data-i18n="tokens.createBtn">Create Token</button></div>
+          </div>
+          <p class="hint" id="apitoken-test-result"></p>
+          <ul class="audit-list" id="apitoken-list"></ul>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="api.scopeTitle">Token scopes</h2></div>
+          <p class="hint mt-0" data-i18n="api.scopeHint">A scope is a promise about what the token can do. Give a bot the smaller one.</p>
+          <ul class="audit-list" id="api-scope-list"></ul>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="api.limitsTitle">Limits &amp; rules</h2></div>
+          <ul class="audit-list" id="api-rules-list"></ul>
+        </div>
+
+      </div>
+    </section>
+
+
     <section id="section-update" class="section">      <div class="settings-grid">
 
         <div class="card form-card">
@@ -436,17 +503,11 @@
           <button type="button" id="ai-test-btn" class="btn btn-ghost" data-i18n="ai.testBtn">Test</button>
         </div>
 
-        <div class="card form-card">
-          <div class="card-head"><h2 data-i18n="tokens.title">API Tokens</h2></div>
-          <p class="hint mt-0"><span data-i18n="tokens.hintA">Long-lived</span> <code>zfp_…</code> <span data-i18n="tokens.hintB">tokens for bots and dashboards. Send as</span> <code>Authorization: Bearer …</code> <span data-i18n="tokens.hintC">header — no CSRF header needed. Shown once, revoke anytime.</span></p>
-          <div class="field-row">
-            <label class="field"><span data-i18n="tokens.nameLabel">Token name</span><input type="text" id="apitoken-name" maxlength="40" placeholder="telegram-bot"></label>
-            <div class="field"><span>&nbsp;</span><button type="button" id="apitoken-create-btn" class="btn btn-primary btn-block" data-i18n="tokens.createBtn">Create Token</button></div>
-          </div>
-          <ul class="audit-list" id="apitoken-list"></ul>
-        </div>
-
-        <form id="pw-form" class="card form-card">
+        <!-- The API Tokens card moved to the Developer API section: it is a
+             developer surface, not a setting, and leaving a second copy here
+             would give the page two #apitoken-create-btn elements - $("#…")
+             binds only the first, so one of them would be dead. -->
+        <form id="pw-form" class="card form-card" method="post">
           <div class="card-head"><h2 data-i18n="pw.title">Change Admin Password</h2></div>
           <label class="field"><span data-i18n="pw.current">Current password</span><input type="password" name="current" minlength="8" maxlength="128" required></label>
           <label class="field"><span data-i18n="pw.new1">New password (min 10 chars, letters + digits)</span><input type="password" name="new1" minlength="10" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{10,128}" title="At least 10 characters including a letter and a digit" required></label>
@@ -455,7 +516,7 @@
           <p class="hint" data-i18n="pw.hint">Changing the password invalidates all other active sessions.</p>
         </form>
 
-        <form id="srv-form" class="card form-card">
+        <form id="srv-form" class="card form-card" method="post">
           <div class="card-head"><h2 data-i18n="srv.title">Server / Hosts Settings</h2></div>
           <p class="hint mt-0" data-i18n="srv.hint">These values are embedded into generated configs and subscription links.</p>
           <label class="field"><span data-i18n="srv.domain">Domain or server IP</span><input type="text" name="domain" placeholder="vpn.example.com" spellcheck="false"></label>
@@ -537,7 +598,7 @@
 </div>
 
 <div id="modal-overlay" class="modal-overlay hidden">
-  <form id="add-user-form" class="modal" autocomplete="off">
+  <form id="add-user-form" class="modal" method="post" autocomplete="off">
     <div class="modal-head"><h2 data-i18n="modal.addTitle">Add New User</h2><button type="button" class="icon-btn" id="modal-close">&times;</button></div>
     <div class="tpl-row">
       <select id="tpl-select"><option value="" data-i18n="modal.tplLoad">Load template...</option></select>
@@ -580,7 +641,7 @@
 </div>
 
 <div id="edit-modal" class="modal-overlay hidden">
-  <form id="edit-user-form" class="modal" autocomplete="off">
+  <form id="edit-user-form" class="modal" method="post" autocomplete="off">
     <div class="modal-head"><h2><span data-i18n="modal.editTitle">Edit User</span> <span id="edit-uname"></span></h2><button type="button" class="icon-btn" id="edit-close">&times;</button></div>
     <label class="field"><span data-i18n="modal.note">Note</span><input type="text" name="note" maxlength="200"></label>
     <div class="field-row">

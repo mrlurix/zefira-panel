@@ -55,6 +55,7 @@ from schemas import (
     AiSettingsIn,
     AI_PROVIDERS,
     ApiTokenCreateIn,
+    ApiTokenSelfTestIn,
     AppearanceIn,
     BackupIn,
     BlockedSiteIn,
@@ -825,7 +826,13 @@ def load_appearance() -> dict:
     return out
 
 
-MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "settings")
+# Must stay in step with MENU_IDS in static/app.js. The Developer API section
+# was added to the sidebar without being added here, so _canon_menu_layout
+# stripped it out of every stored layout: Personalize rendered no row for it
+# and the server rejected a layout that mentioned it, pinning the section in
+# place for good. A new section that is not in this tuple can be neither
+# reordered nor hidden.
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings")
 MENU_ALWAYS = ("dashboard", "users", "inbounds", "customize", "settings")
 DASH_BLOCKS = ("usage", "link", "groups", "apps")
 
@@ -2005,10 +2012,28 @@ def api_logout(request: Request, response: Response):
 
 
 @app.get("/api/me")
-def api_me(admin: Admin = Depends(require_admin)):
+def api_me(request: Request, admin: Admin = Depends(require_admin)):
+    # WHICH credential authenticated this call. A bot author debugging "my
+    # token stopped working" otherwise sees only 200/401: not which of their
+    # tokens answered, nor whether the panel is treating it as `bot` and
+    # refusing the endpoint they called. The cookie path sets admin_id only,
+    # so a missing token_id is exactly "this was a browser session".
+    #
+    # Nothing new is disclosed: the name and scope of a token are already
+    # known to whoever is holding it, and a session reveals nothing but its
+    # own type.
+    if getattr(request.state, "token_id", None):
+        auth = {
+            "type": "token",
+            "name": safe_text(request.state.token_name or ""),
+            "scopes": safe_text(request.state.token_scopes or "full"),
+        }
+    else:
+        auth = {"type": "session", "name": "", "scopes": "full"}
     return {
         "username": admin.username,
         "created_at": admin.created_at.isoformat(timespec="seconds") + "Z",
+        "auth": auth,
     }
 
 
@@ -2454,6 +2479,60 @@ def api_tokens_create(data: ApiTokenCreateIn, request: Request, admin: Admin = D
             raise HTTPException(status_code=409, detail="A token with this name already exists")
     log.info("API token created %s [%s] by %s", data.name, scopes, admin.username)
     return out
+
+
+@app.post("/api/api-tokens/self-test")
+def api_token_self_test(data: ApiTokenSelfTestIn, request: Request,
+                        admin: Admin = Depends(require_admin)):
+    """Does this exact token authenticate? Without forging a use.
+
+    The panel needs to tell the operator "this token works" the moment it is
+    minted, and the obvious way - a cookie-less `GET /api/me` with the token in
+    an Authorization header - silently destroys the one signal that makes a
+    token list worth reading: require_admin stamps `last_used_at` on EVERY
+    bearer request, so the panel's own self-test made `null` ("never used")
+    unreachable for every token the UI ever created, and the Check button then
+    reported "just now" for a token nobody had used. That is the field an
+    operator scans for a leaked credential, so forging it is worse than not
+    testing at all.
+
+    So the check happens here instead: the same hash-and-lookup the middleware
+    performs, minus the write. Deliberately NOT an auth-path call.
+
+    The response never carries the token or its hash - only what the caller
+    could already read from the token list.
+    """
+    if not sensitive_limiter.hit(f"tokentest|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    raw = (data.token or "").strip()
+    ok = False
+    info: dict = {}
+    if 8 <= len(raw) <= 200:
+        digest = hashlib.sha256(raw.encode()).hexdigest()
+        with db.s() as s:
+            row = s.scalar(select(ApiToken).where(ApiToken.token_sha == digest))
+            if row is not None:
+                ok = not _token_expired(row)
+                info = {
+                    "name": safe_text(row.name or ""),
+                    "scopes": safe_text(row.scopes or "full"),
+                    "expires_at": (
+                        row.expires_at.isoformat(timespec="seconds") + "Z"
+                        if row.expires_at else None
+                    ),
+                }
+    # The audit row names the token, never the value: this endpoint takes a live
+    # credential in its body, and a log is the last place it should end up.
+    with db.s() as s:
+        audit(s, "APITOKEN_SELFTEST",
+              f"{'ok' if ok else 'failed'} {info.get('name', '(unknown)')} by {admin.username}",
+              client_ip(request), ok=ok)
+        _commit(s)
+    if ok:
+        return {"ok": True, **info}
+    # 200 with ok:false, not 404: a wrong token is an expected answer to the
+    # question, not a missing resource, and the panel renders it as a result.
+    return {"ok": False, "reason": "no live token matches this value"}
 
 
 @app.delete("/api/api-tokens/{token_id}")

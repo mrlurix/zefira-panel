@@ -17,6 +17,19 @@ import jwt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+
+def _nav_section_count():
+    """How many entries a canonical menu_layout must have.
+
+    Read from the template rather than written down: a hardcoded count goes
+    stale on the next section and then reports a product bug that is not there.
+    """
+    import re as _re
+    html = open(os.path.join(HERE, "templates", "panel.html"),
+                encoding="utf-8").read()
+    return len(set(_re.findall(r'data-section="([a-z]+)"', html)))
+
+
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
 PASSWORD = sys.argv[3] if len(sys.argv) > 3 else "YOUR_PASSWORD"
@@ -749,7 +762,12 @@ try:
           stlay == 200 and ml[0].get("id") == "users"
           and all(not (m.get("id") == "settings" and m.get("hidden")) for m in ml)
           and not any(m.get("id") == "nope" for m in ml)
-          and len(ml) == 10, f"got {stlay}")
+          # One entry per sidebar section, read from the template. A hardcoded 10
+      # has to be edited every time a section is added, and the day it is
+      # forgotten it reports "the server dropped a row" - pointing at the
+      # product instead of at the stale literal.
+      and len(ml) == _nav_section_count(),
+      f"got {stlay} len={len(ml)} expected={_nav_section_count()}")
     check("dash layout canonicalized",
           dl.get("order", [])[0] == "apps" and "link" in dl.get("hidden", [])
           and "bogus" not in dl.get("hidden", []), f"got {stlay}")

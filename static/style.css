@@ -460,6 +460,39 @@ td strong { font-weight: 700; letter-spacing: .3px; }
   display: inline-block;
 }
 
+/* A copyable value: the text, then the button. The value is what the operator
+   needs, so it takes the width and the button stays a fixed 31px square like
+   every other icon button in the panel - otherwise a long curl line pushes
+   the button off the card in the Persian layout. */
+.copy-row { display: flex; align-items: center; gap: 8px; }
+.copy-row > code {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  direction: ltr;
+  text-align: left;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.copy-row .btn { flex: 0 0 auto; width: 34px; height: 34px; padding: 0;
+                 display: inline-flex; align-items: center; justify-content: center; }
+.copy-row .btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor;
+                     stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Set when the base URL is plain http, so the operator sees that what they are
+   about to copy puts a full-scope token on the wire in cleartext. The button
+   still works - an outright refusal just teaches people to work around it -
+   but it is no longer a neutral-looking copy icon. */
+.copy-row .btn.warn-btn { color: var(--orange); border-color: rgba(245, 166, 35, .4); }
+.copy-row .btn.warn-btn:hover { border-color: var(--orange);
+                               box-shadow: 0 4px 12px rgba(245, 166, 35, .18); }
+
 .row-btn {
   width: 31px; height: 31px;
   display: inline-grid;

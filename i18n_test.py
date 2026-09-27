@@ -165,5 +165,51 @@ _script_mix(HERE / "static" / "i18n.js",
             re.compile(r"Object\.assign\(Z_STRINGS\.(\w+), \{"), "panel")
 print("language-mix scan: done")
 
+# Every check above is a REGEX over the file, so all of them passed on a
+# dictionary that did not even parse: a changelog value contained `$("…")`,
+# whose unescaped double quotes ended the JS string, and this suite still
+# printed ALL OK. Only a real JS parser sees that, and the only place it is run
+# is `node --check` in the shell - not in the suite that is supposed to be the
+# gate. So gate it here: node if present, otherwise at minimum a structural
+# scan of every literal (an unescaped quote inside a value shows up as an
+# unterminated literal).
+_JS_FILES = [HERE / "docs" / "assets" / "i18n.js", HERE / "static" / "i18n.js"]
+try:
+    import shutil as _sh
+    import subprocess as _sp
+    _node = _sh.which("node")
+except Exception:
+    _node = None
+
+if _node:
+    for _f in _JS_FILES:
+        try:
+            r = _sp.run([_node, "--check", str(_f)], capture_output=True,
+                        text=True, encoding="utf-8", errors="replace")
+            if r.returncode != 0:
+                first = (r.stderr or "").strip().splitlines()
+                msg = next((ln for ln in first if "Error" in ln), first[0] if first else "?")
+                fail(f"{_f.name} does not parse as JavaScript: {msg.strip()[:120]}")
+            else:
+                print(f"js parse ok: {_f.name}")
+        except Exception as exc:
+            fail(f"could not run node --check on {_f.name}: {exc}")
+else:
+    # No node: fall back to a structural check so a missing interpreter still
+    # cannot hide an unterminated literal.
+    for _f in _JS_FILES:
+        _src = _f.read_text(encoding="utf-8")
+        for _m in re.finditer(r'"(?:[^"\\\n]|\\.)*"', _src):
+            pass
+        # A value that opens a quote and never closes before the newline shows
+        # up as a line whose quotes are unbalanced.
+        for _i, _ln in enumerate(_src.splitlines(), 1):
+            _q = len(re.findall(r'(?<!\\)"', _ln))
+            if _q % 2 == 1:
+                fail(f"{_f.name}:{_i} has an unbalanced quote (an unescaped one "
+                     f"inside a value?) - the file may not parse")
+                break
+    print("node not found: used the structural quote check")
+
 print("i18n checks:", "ALL OK" if not fails else f"{len(fails)} FAILURES")
 sys.exit(1 if fails else 0)

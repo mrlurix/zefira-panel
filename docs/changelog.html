@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=18">
+<link rel="stylesheet" href="assets/style.css?v=24">
 </head>
 <body>
 <header class="topbar">
@@ -45,6 +45,14 @@
 <h1><span class="z" data-i18n="chg.titleZ">C</span><span data-i18n="chg.titleRest">hangelog</span></h1>
 <p class="subtitle"><span data-i18n="chg.subA">What changed recently. Full commit-by-commit history lives on</span> <a href="https://github.com/mrlurix/zefira-panel/commits/main">GitHub</a> <span data-i18n="chg.subB">— and the panel itself shows incoming changes under</span> <b data-i18n="chg.updateWord">Update</b> <span data-i18n="chg.subC">before you upgrade.</span></p>
 
+<h2 id="v1150"><span>v1.15.0</span> <span data-i18n="chg.v1150">&#8212; Developer API: a section in the panel, a base URL you can finally see, and a token test that is allowed to fail</span></h2>
+<ul>
+  <li><b data-i18n="chg.v1150a_lead">A section for developers, in the sidebar: </b> <span data-i18n="chg.v1150a">the API was documented on the website and its tokens were buried in Settings, so the two things a developer needs were in different places. <b>Quick start</b> shows the base URL of <i>this</i> deployment — taken from your <code>public_url</code>, because behind a reverse proxy that is the address clients actually reach and the browser's own origin is whatever hostname you happened to be typing — plus the auth header and a copy-pasteable <code>curl</code>. The <b>token scopes</b> card states plainly what <code>full</code> and <code>bot</code> may reach, and <b>limits &amp; rules</b> covers the things bot authors keep getting wrong: that a Bearer token needs no CSRF header, that a scope mismatch answers 403 rather than 404, and that changing the admin password revokes every token.</span></li>
+  <li><b data-i18n="chg.v1150b_lead">A token test that is allowed to fail: </b> <span data-i18n="chg.v1150b">a freshly minted token is now proved against the real API before its secret is handed over. The detail that makes it a test rather than a formality: the request carries <b>no session cookie</b>. The panel tries the Bearer header first and falls through to your cookie, so an ordinary same-origin call answers 200 even for a token that does not work — a check that cannot fail proves nothing, and would have reported every broken token as healthy. It is sent exactly the way a bot sends it, cookie-free.</span></li>
+  <li><b data-i18n="chg.v1150c_lead">GET /api/me now says who is asking: </b> <span data-i18n="chg.v1150c">it returns <code>auth: {type, name, scopes}</code> alongside the username — whether the call came from a browser session or from a token, which of your tokens answered, and with what scope. A bot author debugging <i>“my token stopped working”</i> otherwise sees only 200 or 401: not which credential replied, nor that the panel is treating it as a <code>bot</code> and refusing the endpoint it called. Nothing new is disclosed; the name and scope of a token are already known to whoever is holding it.</span></li>
+  <li><b data-i18n="chg.v1150d_lead">The token card moved, on purpose: </b> <span data-i18n="chg.v1150d">API Tokens is no longer in Settings. A second copy would have left the page with two <code>#apitoken-create-btn</code> elements, and <code>$("…")</code> binds only the first — so one of them would have been a button that looked perfect and did nothing. It also finally shows each token's expiry and marks one that has already expired, since a credential that quietly stops working reads as a broken bot.</span></li>
+  <li><b data-i18n="chg.v1150e_lead">Two audits of the new section, six findings: </b> <span data-i18n="chg.v1150e"><b>the section could not be moved or hidden.</b> "api" was missing from both canonical menu lists, so Personalize rendered no row for it and the server answered <code>422</code> to any layout that mentioned it — it was pinned in place from its first release. <b>the token test forged a use.</b> It asked the API over a Bearer header, and the panel stamps <code>last_used_at</code> on every bearer request, so the panel's own check made <i>never used</i> unreachable for every token the UI ever created — the exact field an operator scans for a leaked credential. A dedicated <code>self-test</code> endpoint does the same hash-and-lookup without the write. <b>plain HTTP got no warning.</b> The quick start hands you a shell line that will carry a full-scope token; over <code>http://</code> that crosses the network in cleartext, and the panel supports plaintext installs, so the card now says so. <b>plus:</b> a sparse saved menu order could invert the whole sidebar, the copy handler could read any element on the page, and a crafted layout that mentioned no earlier section put the new entry at the very top — the exact regression its own comment claimed to fix.</span></li>
+</ul>
 <h2 id="v1143"><span>v1.14.3</span> <span data-i18n="chg.v1143">&#8212; White-hat security round: a service foothold could reach root, a backup could disarm every rate limiter, and a rebound host could take the AI provider key</span></h2>
 <ul>
   <li><b data-i18n="chg.v1143a_lead">The installer could hand a service foothold root: </b> <span data-i18n="chg.v1143a">when install.sh is piped, bash has no script path, so the &#8220;anchor to the script&#8217;s own directory&#8221; rule silently fell back to <code>$PWD</code>. Running <code>sudo bash install.sh</code> from /opt/zefira &#8212; a tree the service account owns &#8212; made root pip install from a requirements.lock that account could rewrite, and <code>--require-hashes</code> trusts the hashes in that same file. A piped install now never uses the working directory, and /opt/zefira is explicitly refused as a source.</span></li>
@@ -302,8 +310,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=18"></script>
-<script src="assets/docs.js?v=18"></script>
-<script src="assets/support-ai.js?v=18"></script>
+<script src="assets/i18n.js?v=24"></script>
+<script src="assets/docs.js?v=24"></script>
+<script src="assets/support-ai.js?v=24"></script>
 </body>
 </html>

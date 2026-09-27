@@ -13,6 +13,7 @@ Deepest on the sections that carry the most moving parts: Inbounds, Tunnels
 
 Usage: python panel_sections_test.py http://127.0.0.1:8011 admin PASSWORD
 """
+import io
 import json
 import re
 import sys
@@ -22,6 +23,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+ROOT = r"C:\Users\mrlurix\Desktop\laptop pro\zefira"
+# Read once: the checks below count the sections the sidebar actually has
+# instead of hardcoding a number that goes stale every time one is added.
+PANEL_HTML = io.open(ROOT + r"\templates\panel.html", encoding="utf-8").read()
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8011"
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
@@ -63,12 +69,21 @@ def req(method, path, body=None, headers=None, timeout=60, raw_body=None):
         return 0, {}, str(e).encode()
 
 
+# Every response that was not JSON, so a non-JSON body shows up by name
+# instead of crashing the run further down.
+NOT_JSON = []
+
+
 def js(method, path, body=None, headers=None, timeout=60):
     st, hd, b = req(method, path, body, headers, timeout)
     try:
         return st, json.loads(b or b"{}")
     except Exception:
-        return st, b[:300]
+        raw = b[:300].decode("utf-8", "replace")
+        NOT_JSON.append(f"{method} {path} -> {st} {raw[:80]!r}")
+        # A dict, not bytes: every caller does payload.get(...), and bytes
+        # raised AttributeError that aborted the whole suite.
+        return st, {"_notjson": True, "_raw": raw}
 
 
 def txt(b):
@@ -809,7 +824,11 @@ st, _ = js("PUT", "/api/appearance", dict(base, menu_layout="not json at all",
                                           theme_accent="#0af0ff"), AUTH)
 st, a4 = js("GET", "/api/appearance", headers=AUTH)
 check(S, "a corrupt layout falls back to the full default menu",
-      len(a4.get("menu_layout", [])) == 10
+      # One entry per section in the sidebar. It was 10 before the Developer
+      # API section existed; hardcoding the old count would have made this
+      # check lie the moment a section is added.
+      len(a4.get("menu_layout", [])) == len(set(
+          re.findall(r'data-section="([a-z]+)"', PANEL_HTML)))
       and isinstance(a4.get("dash_layout"), dict), str(a4.get("menu_layout"))[:120])
 # PUT is a full replacement, so re-post the whole form before the refusal loop
 js("PUT", "/api/appearance", dict(base, theme_accent="#0af0ff", brand_name="Brand X",
@@ -878,7 +897,212 @@ check(S, "the AI card reports has_key, never the key",
       "has_key" in ais and "api_key" not in json.dumps(ais).replace("has_key", ""),
       str(sorted(ais))[:110])
 
-# ================================================================ 11. link builders
+# ================================================================ 11. DEVELOPER API
+S = "api"
+# What the section's Quick start card depends on. public_url lives on the
+# TUNNEL settings; /api/settings carries the domain. Reading public_url from
+# /api/settings is the bug that would leave the card on a dead fallback.
+st, tun_set = js("GET", "/api/tunnel-settings", headers=AUTH)
+st2, srv_set = js("GET", "/api/settings", headers=AUTH)
+check(S, "the quick start can build a base URL from the deployment",
+      st == 200 and "public_url" in tun_set and st2 == 200 and "domain" in srv_set,
+      f"tunnel={st} {sorted(tun_set)[:6]} settings={st2} {sorted(srv_set)[:6]}")
+check(S, "public_url is NOT on /api/settings (so the card must not read it there)",
+      "public_url" not in srv_set,
+      "if it ever moves, the card would need no change - but the fallback "
+      "order in loadApiDev would be wrong")
+st, _ = js("PUT", "/api/tunnel-settings", dict(tun_set, public_url="https://vpn.example.com/"),
+           AUTH)
+check(S, "a public_url with a trailing slash is refused (the card never has to strip one)",
+      st in (400, 422), f"{st} (the server pattern ends at the host/port)")
+st, tun2 = js("GET", "/api/tunnel-settings", headers=AUTH)
+check(S, "the refused public_url did not land anyway",
+      st == 200 and tun2.get("public_url") == tun_set.get("public_url", ""),
+      f"{tun2.get('public_url')!r}")
+st, _ = js("PUT", "/api/tunnel-settings", dict(tun2, public_url="https://vpn.example.com:8443"),
+           AUTH)
+st, tun3 = js("GET", "/api/tunnel-settings", headers=AUTH)
+check(S, "a normal public_url (with a port) round-trips for the card to show",
+      st == 200 and tun3.get("public_url") == "https://vpn.example.com:8443",
+      f"{st} {tun3.get('public_url')!r}")
+js("PUT", "/api/tunnel-settings", dict(tun3, public_url=tun_set.get("public_url", "")), AUTH)
+
+# GET /api/me is what the token test calls, and the whole point of the
+# section is that the answer says WHICH credential answered.
+st, me_session = js("GET", "/api/me", headers=AUTH)
+check(S, "a session is reported as a session, not as a token",
+      st == 200 and (me_session.get("auth") or {}).get("type") == "session",
+      f"{st} {str(me_session)[:120]}")
+check(S, "the session answer keeps the fields a bot already relied on",
+      st == 200 and "username" in me_session and "created_at" in me_session,
+      f"sorted={sorted(me_session or {})}")
+check(S, "the session answer leaks no token name or scope",
+      st == 200 and not me_session.get("auth", {}).get("name"),
+      f"auth={me_session.get('auth')}")
+
+# Mint a token the way the section's form does, then use it exactly as the
+# section's test does: no cookie, Bearer only.
+st, tok = js("POST", "/api/api-tokens",
+             {"name": "sec" + uuid.uuid4().hex[:6], "password_confirm": PASSWORD}, AUTH)
+raw = (tok or {}).get("token_once")
+check(S, "the section's create form works (password confirmed)",
+      st == 200 and bool(raw), f"{st} {str(tok)[:90]}")
+if raw:
+    st, me_tok = js("GET", "/api/me", None, {"Authorization": f"Bearer {raw}"})
+    a = (me_tok or {}).get("auth") or {}
+    check(S, "a token is reported as a token, with its name and scope",
+          st == 200 and a.get("type") == "token"
+          and a.get("name") == tok.get("name") and a.get("scopes") == "full",
+          f"{st} auth={a} name={tok.get('name')}")
+    check(S, "the token answer carries the same account as the session",
+          st == 200 and me_tok.get("username") == me_session.get("username"),
+          f"{me_tok.get('username')} vs {me_session.get('username')}")
+    # The bot scope is the one a reseller bot gets, and the section tells the
+    # operator which endpoints it may reach - so the claim must be true.
+    st, me_bot = js("GET", "/api/me", None, {"Authorization": f"Bearer {raw}"})
+    check(S, "the scope the section advertises is the scope the server reports",
+          st == 200 and (me_bot.get("auth") or {}).get("scopes") in ("full", "bot"),
+          f"{(me_bot.get('auth') or {}).get('scopes')!r}")
+    st, r403 = js("DELETE", "/api/api-tokens/" + str(tok.get("id")), None,
+                  {"Authorization": f"Bearer {raw}"})
+    check(S, "a full token really can delete tokens (the section says so)",
+          st == 200, f"{st} {str(r403)[:70]}")
+    st, after = js("GET", "/api/api-tokens", headers=AUTH)
+    check(S, "the delete the section advertises actually took effect",
+          not any(x.get("id") == tok.get("id") for x in (after or [])),
+          f"{st} {[x.get('name') for x in (after or [])][:5]}")
+    # A bot-scoped token must NOT be able to reach token management, because
+    # the section's scope table promises exactly that.
+    st, btok = js("POST", "/api/api-tokens",
+                  {"name": "secbot" + uuid.uuid4().hex[:5], "scopes": "bot",
+                   "password_confirm": PASSWORD}, AUTH)
+    braw = (btok or {}).get("token_once")
+    if braw:
+        st, r = js("GET", "/api/api-tokens", None, {"Authorization": f"Bearer {braw}"})
+        check(S, "the scope table's promise holds: bot cannot manage tokens",
+              st == 403, f"{st} {str(r)[:70]}")
+        st, r = js("GET", "/api/me", None, {"Authorization": f"Bearer {braw}"})
+        check(S, "...but bot CAN call /api/me and is told so",
+              st == 200 and (r.get("auth") or {}).get("scopes") == "bot",
+              f"{st} {str(r)[:90]}")
+        js("DELETE", f"/api/api-tokens/{btok.get('id')}", headers=AUTH)
+    # A dead token must be refused, which is what makes the row-level Check
+    # button worth having.
+    st, dead = js("POST", "/api/api-tokens",
+                  {"name": "secdead" + uuid.uuid4().hex[:5],
+                   "expires_in_days": 0, "password_confirm": PASSWORD}, AUTH)
+    st, rows = js("GET", "/api/api-tokens", headers=AUTH)
+    never = [x for x in (rows or []) if x.get("id") == dead.get("id")]
+    check(S, "a token with no expiry reports expires_at = null for the UI",
+          st == 200 and never and never[0].get("expires_at") is None,
+          f"{st} {never[:1]}")
+    if never:
+        js("DELETE", f"/api/api-tokens/{never[0]['id']}", headers=AUTH)
+
+    # The self-test endpoint: the same question, asked without forging a use.
+    st, t0 = js("GET", "/api/api-tokens", headers=AUTH)
+    fresh = [x for x in (t0 or []) if x.get("name", "").startswith("sec")
+             and not x.get("last_used_at")]
+    st, probe = js("POST", "/api/api-tokens",
+                   {"name": "secprobe" + uuid.uuid4().hex[:5],
+                    "password_confirm": PASSWORD}, AUTH)
+    praw = (probe or {}).get("token_once")
+    check(S, "the self-test endpoint mints a token to test", st == 200 and bool(praw),
+          f"{st} {str(probe)[:70]}")
+    if praw:
+        st, r1 = js("POST", "/api/api-tokens/self-test", {"token": praw}, AUTH)
+        check(S, "the self-test confirms a live token, with its name and scope",
+              st == 200 and r1.get("ok") is True and r1.get("name") == probe.get("name")
+              and r1.get("scopes") == "full", f"{st} {str(r1)[:110]}")
+        check(S, "the self-test never echoes the token (or its hash) back",
+              praw not in json.dumps(r1)
+              and "token_sha" not in json.dumps(r1)
+              and "token_once" not in json.dumps(r1),
+              f"the response was {str(r1)[:110]}")
+        st, t1 = js("GET", "/api/api-tokens", headers=AUTH)
+        row1 = next((x for x in (t1 or []) if x.get("id") == probe.get("id")), {})
+        check(S, "the self-test does NOT stamp last_used_at (the leak signal survives)",
+              row1.get("last_used_at") is None,
+              f"last_used_at={row1.get('last_used_at')} - a self-test must not "
+              f"look like a real use of a possibly-leaked token")
+        st, r2 = js("POST", "/api/api-tokens/self-test",
+                    {"token": "zfp_" + "x" * 43}, AUTH)
+        check(S, "a wrong token is a reported verdict, not a 404",
+              st == 200 and r2.get("ok") is False and r2.get("reason"),
+              f"{st} {str(r2)[:90]}")
+        # One character different. An earlier version of this case rebuilt the
+        # SAME token ("zfp_" + praw[4:]) and asserted it was rejected, which
+        # only passed by accident - it is the valid token.
+        st, r3 = js("POST", "/api/api-tokens/self-test",
+                    {"token": (praw[:-1] + ("A" if praw[-1] != "A" else "B"))}, AUTH)
+        check(S, "a token one character off is rejected",
+              st == 200 and r3.get("ok") is False, f"{str(r3)[:90]}")
+        st, r5 = js("POST", "/api/api-tokens/self-test", {"token": "short"}, AUTH)
+        check(S, "a too-short value is a clean verdict, not a 500",
+              st in (200, 422) and (st == 422 or r5.get("ok") is False),
+              f"{st} {str(r5)[:70]}")
+        # A full-scope token must be able to reach the self-test. Done BEFORE
+        # the delete: a bearer for a revoked token correctly answers 401, and
+        # asserting (200, 403) around that would have been testing the wrong
+        # thing.
+        st, r4 = js("POST", "/api/api-tokens/self-test", {"token": "zfp_probe"},
+                    {"Authorization": f"Bearer {praw}"})
+        check(S, "the self-test is reachable for a full-scope token too",
+              st in (200, 403), f"{st} {str(r4)[:70]}")
+        js("DELETE", f"/api/api-tokens/{probe.get('id')}", headers=AUTH)
+    # Personalize must be able to move AND hide the new section, or it is not a
+    # first-class citizen: "api" was missing from both canonical lists, so the
+    # server stripped it out of every stored layout.
+    #
+    # Both layout fields go over the wire as JSON STRINGS even though the GET
+    # hands them back parsed - an asymmetry the UI handles with JSON.stringify.
+    # Sending a list for either one is a 422, and a 422 would have made these
+    # assertions "pass" on a request that never took effect.
+    st, app0 = js("GET", "/api/appearance", headers=AUTH)
+    lay = app0.get("menu_layout")
+    check(S, "the api section is a known menu section on the server",
+          isinstance(lay, list)
+          and any((x or {}).get("id") == "api" for x in lay),
+          f"stored layout ids: {[(x or {}).get('id') for x in (lay or [])]}")
+
+    def _appearance(a, menu=None):
+        body = dict(a, menu_layout=json.dumps(a.get("menu_layout") or []),
+                    dash_layout=json.dumps(a.get("dash_layout") or {}))
+        if menu is not None:
+            body["menu_layout"] = json.dumps(menu)
+        return body
+
+    st, app1 = js("PUT", "/api/appearance",
+                  _appearance(app0, [{"id": "api", "hidden": True},
+                                     {"id": "dashboard"}]), AUTH)
+    check(S, "the api section can be hidden and reordered by the operator",
+          st == 200, f"{st} {str(app1)[:90]}")
+    st, app2 = js("GET", "/api/appearance", headers=AUTH)
+    lay2 = app2.get("menu_layout") or []
+    by_id = {(x or {}).get("id"): (x or {}).get("hidden") for x in lay2}
+    check(S, "...and the hidden flag is stored for it",
+          by_id.get("api") is True, f"hidden map={by_id}")
+    order2 = [x.get("id") for x in lay2]
+    check(S, "...and the reordered slot is stored for it",
+          # RELATIVE order, not absolute. _slot_missing merges the ids the
+          # payload omitted back into their canonical gaps "without disturbing
+          # its intent", so the two ids sent here keep their order relative to
+          # each other but are not the first two entries. Asserting "first two"
+          # was asserting the merge algorithm rather than the feature.
+          order2.index("api") < order2.index("dashboard"),
+          f"order={order2}")
+    # A control: a LOCKED section must still refuse to be hidden.
+    st, _ = js("PUT", "/api/appearance",
+               _appearance(app2, [{"id": "settings", "hidden": True}]), AUTH)
+    st, app3 = js("GET", "/api/appearance", headers=AUTH)
+    lock = {(x or {}).get("id"): (x or {}).get("hidden")
+            for x in (app3.get("menu_layout") or [])}
+    check(S, "a locked section still cannot be hidden",
+          lock.get("settings") is False, f"hidden map={lock}")
+    st, _ = js("PUT", "/api/appearance", _appearance(app0), AUTH)
+
+
+# ================================================================ 12. link builders
 # White-box: some states the API now REFUSES to create still exist in the wild
 # (a row written by an older build, a hand-edited DB). The builders must not
 # turn those into guaranteed-dead customer links, and no HTTP request can put
@@ -963,6 +1187,12 @@ check("cleanup", "no inbounds / server nodes / tunnels left",
       not ibs and not sns and not tns, f"{len(ibs)}/{len(sns)}/{len(tns)}")
 st, bl = js("GET", "/api/blocklist", headers=AUTH)
 check("cleanup", "the blocklist is empty again", not bl.get("sites"), str(bl)[:90])
+
+if NOT_JSON:
+    print(f"\n!! {len(NOT_JSON)} response(s) were not JSON - the checks above that "
+          f"touched them failed for that reason:")
+    for _n in NOT_JSON[:10]:
+        print("   " + _n)
 
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} checks passed ===")

@@ -42,6 +42,25 @@ COOKIE = {"v": ""}
 results = []
 
 
+def as_list(payload):
+    """A list-shaped payload, or [] .
+
+    Iterating a dict yields its KEYS, so `t.get("id")` on a 404 body raised
+    AttributeError and took the suite down. A wrong shape must be a reported
+    failure, not a crash.
+    """
+    return payload if isinstance(payload, list) else []
+
+
+def as_dict(payload):
+    """An object-shaped payload, or {} .
+
+    `(payload or {})` is not a guard: a non-empty LIST is truthy, so it went
+    straight through and `.get(...)` raised.
+    """
+    return payload if isinstance(payload, dict) else {}
+
+
 def check(name, cond, detail=""):
     results.append((name, bool(cond), detail))
     mark = "\033[92mPASS\033[0m" if cond else "\033[91mFAIL\033[0m"
@@ -70,12 +89,25 @@ def req(method, path, body=None, headers=None, timeout=120):
         return 0, str(e).encode()
 
 
+NOT_JSON = []
+
+
 def js(method, path, body=None, headers=None, timeout=120):
     st, b = req(method, path, body, headers, timeout)
     try:
         return st, json.loads(b or b"{}")
     except Exception:
-        return st, b[:400]
+        # A non-JSON body used to come back as raw BYTES, and every
+        # `payload.get(...)` downstream then raised AttributeError - which
+        # aborted the whole suite instead of reporting one failed check. That
+        # is how a transient 500 on /api/ai/settings turned into a crash with
+        # no indication of which request had actually broken.
+        #
+        # Hand back a dict instead: the status code still drives the check,
+        # the body is still visible in its detail line, and the run continues.
+        raw = b[:400].decode("utf-8", "replace")
+        NOT_JSON.append(f"{method} {path} -> {st} {raw[:80]!r}")
+        return st, {"_notjson": True, "_raw": raw}
 
 
 print(f"=== SECURITY AUDIT ROUND 1 -> {BASE} ===")
@@ -88,8 +120,8 @@ check("login", st == 200, f"{st}")
 # This suite plants settings on purpose, so remember what was there: leaving
 # an attacker's trusted_proxies behind would silently disarm the rate
 # limiters for every later suite in the same run.
-_tun_before = (js("GET", "/api/tunnel-settings", headers=AUTH)[1] or {}).get("trusted_proxies", "")
-_ai_before = js("GET", "/api/ai/settings", headers=AUTH)[1] or {}
+_tun_before = as_dict(js("GET", "/api/tunnel-settings", headers=AUTH)[1]).get("trusted_proxies", "")
+_ai_before = as_dict(js("GET", "/api/ai/settings", headers=AUTH)[1])
 
 # ---------------------------------------------------------------- 1. trusted_proxies
 def backup_with(settings):
@@ -110,8 +142,8 @@ check("a crafted backup still cannot repoint the origin",
       "evil.example" not in json.dumps(tun or {}), str(tun)[:110])
 st, srv = js("GET", "/api/settings", headers=AUTH)
 check("the operator's real domain survived the attempt",
-      "evil.example" not in (srv or {}).get("domain", ""),
-      str((srv or {}).get("domain")))
+      "evil.example" not in as_dict(srv).get("domain", ""),
+      str(as_dict(srv).get("domain")))
 
 # ---------------------------------------------------------------- 2. AI config
 st, _ = js("POST", "/api/restore", backup_with(
@@ -141,7 +173,8 @@ tok = (mine or {}).get("token_once")
 check("minting with the right password works", st == 200 and tok, f"{st} {str(mine)[:80]}")
 if tok:
     st, lst = js("GET", "/api/api-tokens", headers=AUTH)
-    row = next((t for t in (lst or []) if t.get("id") == mine.get("id")), {})
+    row = as_dict(next((t for t in as_list(lst)
+                        if t.get("id") == as_dict(mine).get("id")), {}))
     check("a new token reports an expiry", bool(row.get("expires_at")),
           f"expires_at={row.get('expires_at')}")
     check("a new token does NOT live forever by default",
@@ -156,7 +189,7 @@ if tok:
     st, _ = js("POST", "/api/api-tokens",
                {"name": "expiring", "password_confirm": PASSWORD, "expires_in_days": 0}, AUTH)
     st2, r2 = js("GET", "/api/api-tokens", headers=AUTH)
-    never = next((t for t in (r2 or []) if t.get("name") == "expiring"), {})
+    never = as_dict(next((t for t in as_list(r2) if t.get("name") == "expiring"), {}))
     check("expires_in_days=0 means 'no expiry' only when asked explicitly",
           never.get("expires_at") is None, f"expires_at={never.get('expires_at')}")
     js("DELETE", f"/api/api-tokens/{mine['id']}", headers=AUTH)
@@ -189,7 +222,7 @@ for u in rows:
 
 # ---------------------------------------------------------------- 5. inbound ceiling
 st, before = js("GET", "/api/inbounds", headers=AUTH)
-n_before = len(before or [])
+n_before = len(as_list(before))
 created = []
 hit = None
 # MAX_INBOUNDS is 200, so the loop has to be willing to cross it.
@@ -198,7 +231,9 @@ for port in range(31000, 31000 + 230):
                 {"name": f"cap{port}", "protocol": "vless", "port": port,
                  "host": "cap.example.com"}, AUTH)
     if st == 200:
-        created.append(ib.get("id"))
+        _id = as_dict(ib).get("id")
+        if _id is not None:
+            created.append(_id)
     else:
         hit = (st, ib)
         break
@@ -387,12 +422,15 @@ js("PUT", "/api/tunnel-settings", {"trusted_proxies": _tun_before,
                                    "public_url": ""}, AUTH)
 _srv0 = js("GET", "/api/settings", headers=AUTH)[1] or {}
 js("PUT", "/api/settings", _srv0, AUTH)
-for _k, _v in (("enabled", _ai_before.get("enabled", False)),
+for _k, _v in (("enabled", as_dict(_ai_before).get("enabled", False)),
                ("provider", _ai_before.get("provider", "groq")),
                ("model", _ai_before.get("model", "")),
                ("base_url", _ai_before.get("base_url", "")),
                ("extra", _ai_before.get("extra", ""))):
     js("PUT", "/api/ai/settings", {_k: _v}, AUTH)
+check("no endpoint answered with a non-JSON body",
+      not NOT_JSON,
+      "; ".join(NOT_JSON[:3]) + (f" (+{len(NOT_JSON) - 3} more)" if len(NOT_JSON) > 3 else ""))
 _st, _tun_after = js("GET", "/api/tunnel-settings", headers=AUTH)
 check("cleanup: the planted trust boundary is gone",
       isinstance(_tun_after, dict) and "203.0.113.7" not in json.dumps(_tun_after),
@@ -402,11 +440,17 @@ check("cleanup: the planted AI config is gone",
       "attacker-llm.example" not in json.dumps(_ai_after or {}), str(_ai_after)[:90])
 for u in js("GET", "/api/users?limit=500", headers=AUTH)[1].get("items", []):
     js("DELETE", f"/api/users/{u['id']}", headers=AUTH)
-for t in js("GET", "/api/api-tokens", headers=AUTH)[1] or []:
+for t in as_list(js("GET", "/api/api-tokens", headers=AUTH)[1]):
     if t.get("name", "").startswith(("audit-", "expiring", "nopw", "wrongpw", "escalate")):
         js("DELETE", f"/api/api-tokens/{t['id']}", headers=AUTH)
 for i in js("GET", "/api/inbounds", headers=AUTH)[1] or []:
     js("DELETE", f"/api/inbounds/{i['id']}", headers=AUTH)
+
+if NOT_JSON:
+    print(f"\n!! {len(NOT_JSON)} response(s) were not JSON - the checks above that "
+          f"touched them failed for that reason:")
+    for _n in NOT_JSON[:10]:
+        print("   " + _n)
 
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} checks passed ===")
