@@ -91,12 +91,18 @@ for fn in sorted(os.listdir(HOUSE) if os.path.isdir(HOUSE) else []):
 # lock would be incomplete - a Linux install would then abort under
 # --require-hashes. Ask PyPI directly for every artifact of those versions and
 # hash the ones a real deployment could pull (wheels + sdist).
+#
+# And do that for EVERY package, not only the ones `pip download` came up
+# empty on. The previous version consulted PyPI only as a fallback, so a
+# package that DID have a local artifact got exactly one hash - the local
+# platform's - and the lock aborted everywhere else. That shipped: 11 of 31
+# entries were uninstallable on Linux, and cffi's recorded hash was the
+# cp314 win_amd64 wheel while the server downloaded the cp312 manylinux one.
+#
+# The asymmetry is the whole point. A MISSING hash aborts the install; an EXTRA
+# hash is inert, because pip picks the artifact that fits the target and looks
+# it up in the set. So the set must be the union, never the intersection.
 from urllib.request import Request as _Req, urlopen as _open
-
-PY_TAGS = {
-    "cp312": "any", "cp313": "any", "abi3": "any", "py3": "any",
-    "pp39": "any", "pp310": "any",
-}
 
 
 def pypi_hashes(project: str, version: str) -> list[str]:
@@ -109,7 +115,6 @@ def pypi_hashes(project: str, version: str) -> list[str]:
     except Exception as exc:
         print(f"  pypi lookup failed for {project}=={version}: {exc}")
         return out
-    base = re.sub(r"[-_.]+", "-", project).lower()
     for entry in meta.get("urls", []):
         fn = entry.get("filename", "")
         if not fn.endswith((".whl", ".tar.gz", ".zip")):
@@ -144,11 +149,12 @@ unhashed = []
 for name, ver in sorted(pins.items()):
     arts = sorted(fn for fn in hashes if name_of.get(fn) == name)
     extras = ("[" + extras_of[name] + "]") if name in extras_of else ""
-    digests = sorted({hashes[fn] for fn in arts})
-    if not digests:
-        # No artifact for THIS interpreter: take every release artifact PyPI
-        # publishes, so a server on another Python still resolves.
-        digests = pypi_hashes(name, ver)
+    # Union, always: what this machine downloaded, PLUS every artifact PyPI
+    # publishes for the release. Local-only is what shipped a lock that
+    # aborted on Linux for 11 of 31 packages.
+    digests = {hashes[fn] for fn in arts}
+    digests.update(pypi_hashes(name, ver))
+    digests = sorted(digests)
     if not digests:
         unhashed.append(name)
         out.append(f"# UNHASHED (no artifact found upstream): {name}=={ver}")
@@ -163,6 +169,7 @@ shutil.rmtree(HOUSE, ignore_errors=True)
 if os.path.exists(REPORT):
     os.remove(REPORT)
 print(f"wrote {LOCK}: {len(pins) - len(unhashed)} hashed, {len(unhashed)} unhashed")
+print("now verify it against PyPI:  python verify_lock_hashes.py")
 for u in unhashed:
     print("  unhashed:", u)
 sys.exit(1 if unhashed else 0)

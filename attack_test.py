@@ -592,6 +592,34 @@ def raw_post_bytes(path, headers, body_chunks=(), read_bytes=4096, timeout=25,
     return data.split(b"\r\n", 1)[0] if data else b""
 
 
+def refused_up_front(path, headers, body_chunks=(), expect=(b"413", b"429", b"411"),
+                     attempts=3, **kw):
+    """Did the server refuse this WITHOUT reading the body? Retry and be honest.
+
+    A 413 is decided from the declared Content-Length, before a single body
+    byte is read, so the answer must arrive up front. On a loaded single-worker
+    server the read can instead come back EMPTY - the connection was accepted
+    and then closed with no response - and the previous version of this check
+    reported that silence as "the guard is missing". It is not: running the
+    probe by hand against the same bytes returns a clean 413 every time.
+
+    So: retry, and when nothing ever comes back say so in those words instead of
+    implying the product failed. A measurement that could not be taken is not a
+    pass, so it still fails - but it fails as a flaky probe.
+    """
+    last = b""
+    for i in range(attempts):
+        last = raw_post_bytes(path, headers, body_chunks, **kw)
+        if last and any(e in last for e in expect):
+            return last, f"on attempt {i + 1}"
+        if last:
+            return last, f"on attempt {i + 1} (answered {last[:30]!r}, not {expect})"
+        time.sleep(0.4)
+    return last, (f"NO RESPONSE after {attempts} attempts - the probe got "
+                  f"nothing back, which is a measurement failure, not proof "
+                  f"that the guard is absent (check the server log)")
+
+
 chunked = raw_post_bytes(
     "/api/restore",
     {"Transfer-Encoding": "chunked", "Content-Type": "application/json",
@@ -610,13 +638,14 @@ chunked_enc = raw_post_bytes(
 check("anonymous chunked encrypted restore is refused too",
       b"411" in chunked_enc or b"429" in chunked_enc, f"status line: {chunked_enc[:40]!r}")
 # A declared oversize length is still a clean 413 without reading the body.
-oversize = raw_post_bytes(
+oversize, oversize_note = refused_up_front(
     "/api/restore",
     {"Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest",
      "Content-Length": str(70 * 1048576)},
-    [b"{}"])
+    [b"{}"], expect=(b"413", b"429"))
 check("oversize declared restore is refused immediately",
-      b"413" in oversize or b"429" in oversize, f"status line: {oversize[:40]!r}")
+      b"413" in oversize or b"429" in oversize,
+      f"status line: {oversize[:40]!r} ({oversize_note})")
 
 # ---- QR: bot-reachable, CPU-bound -> must be budgeted and cached.
 st_qr1, _, qr1 = req("GET", f"/api/users/{uid}/qr", headers=AUTH) if uid else (0, {}, b"")

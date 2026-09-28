@@ -5,6 +5,7 @@ menu has to be interactive-only, and the uninstall path has to work when $0
 is "bash" (which is what it is under a pipe).
 """
 import io
+import os
 import re
 import subprocess
 import sys
@@ -18,6 +19,7 @@ sh = io.open(ROOT + r"\install.sh", encoding="utf-8").read()
 sh_code = "\n".join(ln for ln in sh.splitlines()
                     if not ln.strip().startswith("#"))
 readme = io.open(ROOT + r"\README.md", encoding="utf-8").read()
+_tools_lock = io.open(ROOT + r"\tools_lock.py", encoding="utf-8").read()
 fails = []
 
 
@@ -191,9 +193,89 @@ check("the read-it-first instructions use a private mktemp directory",
       re.search(r"mktemp -d", sh) is not None
       and "/tmp/zefira-inst" not in sh,
       "a predictable /tmp path can be pre-created by another local user")
-check("the version fallback names a tag that exists upstream",
-      re.search(r'cat "\$TARGET/VERSION" 2>/dev/null \|\| echo 1\.14\.2', sh) is not None,
-      "the pipe-install fallback version is stale")
+# The literal is what a pipe install actually uses, so it has to equal VERSION.
+# The previous version of this check restated the number itself
+# (`|| echo 1\.14\.2`), which is why it stayed green for two releases while the
+# one-liner silently installed v1.14.2: a test that hardcodes the value it is
+# checking cannot notice that value going stale.
+_repo_version = io.open(ROOT + os.sep + "VERSION", encoding="utf-8-sig").read().strip()
+_lit = re.search(r'\|\| echo ([\d.]+)\)"', sh)
+check("the installer's hardcoded release equals the VERSION file",
+      _lit is not None and _lit.group(1) == _repo_version,
+      f"install.sh would install v{_lit.group(1) if _lit else '?'} but VERSION "
+      f"says {_repo_version}; under `curl | sudo bash` neither `cat VERSION` nor "
+      f"`cat $TARGET/VERSION` resolves, so the literal is the ONLY value that "
+      f"survives - and a stale one downgrades silently rather than failing")
+# And it must be a version that has an upstream tag, or the clone aborts.
+check("the release the installer names is a plain dotted version",
+      _lit is not None and re.fullmatch(r"\d+\.\d+\.\d+", _lit.group(1)) is not None,
+      f"got {(_lit.group(1) if _lit else None)!r}, want x.y.z so the v-prefixed "
+      f"tag can be built from it")
+# ---- the lock must be installable on the platform it ships to ------------
+# It was not. tools_lock.py hashed whatever `pip download` found ON THE
+# MACHINE THAT GENERATED IT and only asked PyPI when it found nothing, so a
+# package with a wheel for the local interpreter (CPython 3.14 on Windows)
+# got exactly one hash - the local one. 11 of 31 entries were uninstallable
+# on Linux, and the reported failure was cffi: the lock held the cp314
+# win_amd64 digest while the server downloads the cp312 manylinux wheel.
+#
+# This is a real security property, not cosmetics: a hash lock whose hashes do
+# not match the artifacts the target fetches is either a broken install or a
+# lock that verifies nothing.
+_lock = io.open(ROOT + os.sep + "requirements.lock", encoding="utf-8").read()
+_lock_entries = re.findall(
+    r"^([A-Za-z0-9_.\-]+)(\[[^\]]+\])?==(\S+)\s*\\?$", _lock, re.M)
+_lock_hashes = re.findall(r"^\s*--hash=sha256:([0-9a-f]{64})", _lock, re.M)
+check("the lock pins every package with a version", len(_lock_entries) >= 25,
+      f"{len(_lock_entries)} pinned entries")
+check("the lock is not empty and every entry has hashes",
+      len(_lock_hashes) > 0
+      and "# UNHASHED" not in _lock,
+      "an entry with no hash means --require-hashes is theatre")
+# The defect, stated as an invariant that a static check can actually see: a
+# single hash per package IS a single-platform lock. Reducing one entry back to
+# one hash removes ~99 of ~916, so an aggregate "hashes per package" average
+# barely moves and the check passed - which is why the first version of this
+# guard MISSED the very regression it was written for.
+_per_entry = {}
+for _m in re.finditer(
+        r"^([A-Za-z0-9_.\-]+)(\[[^\]]+\])?==(\S+)[^\n]*\n((?:\s*--hash=[^\n]*\n)+)",
+        _lock, re.M):
+    _per_entry[_m.group(1)] = len(re.findall(r"--hash=", _m.group(4)))
+_single = [n for n, c in _per_entry.items() if c <= 1]
+check("no lock entry is pinned to a single artifact",
+      not _single and len(_per_entry) == len(_lock_entries),
+      f"entries with only one hash (a single-platform lock): {_single[:6]}")
+# "More than one" is the invariant, NOT "at least N". A pure-Python package
+# legitimately publishes exactly two artifacts - one wheel, one sdist - and a
+# first version of this check demanded four, so it failed on anyio,
+# annotated-types and every other platform-independent package in the lock.
+check("every lock entry covers at least the wheel and the sdist",
+      _per_entry and min(_per_entry.values()) >= 2,
+      f"thinnest entries: {sorted(_per_entry.items(), key=lambda kv: kv[1])[:4]}")
+check("a package with platform wheels covers more than a pure-Python one",
+      max(_per_entry.values()) >= 20,
+      f"widest entry has {max(_per_entry.values()) if _per_entry else 0} hashes - "
+      f"if nothing does, PyPI coverage is not being collected at all")
+# And the generator must not be able to regress to local-only.
+check("tools_lock.py unions the local artifacts with PyPI's, unconditionally",
+      re.search(r"digests\s*=\s*\{hashes\[fn\]\s*for\s+fn\s+in\s+arts\}", _tools_lock)
+  is not None
+  and re.search(r"digests\.update\(pypi_hashes\(name, ver\)\)", _tools_lock)
+  is not None,
+      "the PyPI lookup must be part of the union, not a fallback for when the "
+      "local download found nothing")
+check("...and no `if not digests:` gate stands between them",
+      re.search(r"if not digests:\s*\n\s*digests = pypi_hashes", _tools_lock) is None,
+      "a conditional PyPI lookup is what produced the local-only lock")
+check("a verifier exists, so the lock can be checked against PyPI",
+      os.path.exists(ROOT + os.sep + "verify_lock_hashes.py"),
+      "without this, a wrong hash is only found by a failed install on a "
+      "machine that is not the one that generated it")
+check("the README/install docs mention the verifier",
+      "verify_lock_hashes" in readme,
+      "regenerating the lock must be followed by verifying it")
+
 check("the README's read-it-first block has the same fix",
       "mktemp -d" in readme
       # Mentioning the old path in prose is fine; USING it is not.

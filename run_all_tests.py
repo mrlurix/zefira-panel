@@ -5,6 +5,7 @@ that the security fixes hold under the live adversarial probes too.
 Usage: .venv\\Scripts\\python run_all_tests.py [admin] [password]
 """
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -33,8 +34,16 @@ SUITES = [
     ("security_audit_test.py", "security audit round 1"),
 ]
 # Suites that need no running panel: static guards over the installer, which
-# is only ever executed on a Linux VPS (never here).
-OFFLINE_SUITES = [("installer_test.py", "installer CLI")]
+# is only ever executed on a Linux VPS (never here), and the docs site.
+OFFLINE_SUITES = [
+    ("installer_test.py", "installer CLI"),
+    ("i18n_test.py", "docs i18n dictionaries"),
+    # Runs the shipped i18n.js and reads the resulting object, so a key that is
+    # missing or empty in one language is a failure. Loading the file caught
+    # six empty translations on its first run, in three languages.
+    ("__NODE__ i18n_dict_check.js", "docs i18n coverage"),
+    ("__NODE__ i18n_render_check.js", "docs i18n renderer safety"),
+]
 
 
 def wait_up(timeout=40):
@@ -93,6 +102,22 @@ def reset_db(when):
 
 
 results = []
+
+# When this harness's output is REDIRECTED to a file, the child's writes go
+# straight to the shared fd while the parent's own stdout stays block-buffered,
+# so the two interleave and the transcript stops being a faithful record. It
+# cost real time here: frontend_bugs_test.py's "130/130 passed" line vanished
+# from the captured log, which made the run look like 902 checks across eight
+# counted suites when it is 1032 across nine, and sent me attributing another
+# suite's count to the wrong file. Unbuffer the parent and the children, so the
+# transcript is ordered and complete.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
+CHILD_ENV = dict(os.environ, PYTHONUNBUFFERED="1")
+
 for script, label in SUITES:
     # Reset BEFORE each suite too: a dirty workdir (leftovers from manual
     # testing) must never decide a suite's result.
@@ -108,7 +133,9 @@ for script, label in SUITES:
         stop(proc)
         sys.exit(1)
     print(f"\n===== {label} ({script}) =====")
-    rc = subprocess.call([PY, script, BASE, ADMIN, PASSWORD], cwd=ROOT)
+    sys.stdout.flush()   # the header must land before the child's first line
+    rc = subprocess.call([PY, script, BASE, ADMIN, PASSWORD], cwd=ROOT,
+                         env=CHILD_ENV)
     results.append((label, rc))
     stop(proc)
     time.sleep(1)
@@ -120,7 +147,21 @@ for script, label in SUITES:
 print("\n===== ALL SUITES =====")
 for script, label in OFFLINE_SUITES:
     print(f"\n===== {label} ({script}) =====")
-    rc = subprocess.call([PY, script], cwd=ROOT)
+    sys.stdout.flush()   # the header must land before the child's first line
+    # "__NODE__ foo.js" runs a harness under node instead of the interpreter.
+    # A missing node is recorded as a FAILURE, not skipped: i18n_test.py already
+    # shells out to `node --check`, so node is a hard requirement of this suite
+    # anyway, and a guard that quietly did not run is worse than no guard.
+    if script.startswith("__NODE__ "):
+        target = script[len("__NODE__ "):]
+        node = shutil.which("node")
+        if not node:
+            print(f"[FAIL] {label}: node is not on PATH, so {target} did not run")
+            results.append((label, 1))
+            continue
+        rc = subprocess.call([node, target], cwd=ROOT)
+    else:
+        rc = subprocess.call([PY, script], cwd=ROOT, env=CHILD_ENV)
     results.append((label, rc))
 
 bad = 0

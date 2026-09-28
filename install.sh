@@ -40,9 +40,18 @@ if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
 fi
 TARGET="/opt/zefira"
 SERVICE="zefira"
-# Single source of truth is the VERSION file; keep the literal as fallback
-# for pipe-installs where no checkout exists yet.
-ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.14.2)"
+# The release this installer ships with. It is NOT a fallback: under the
+# documented one-liner (`curl ... | sudo bash`) it is the only value that
+# survives, because there is no checkout in the CWD and /opt/zefira does not
+# exist yet on a first install - the clone that fills $TARGET happens ~330
+# lines below. A stale literal here therefore does not fail, it silently
+# downgrades: v1.14.2 was reachable, so `curl | sudo bash` kept installing
+# v1.14.2 and skipped v1.14.3's security fixes and all of v1.15.0.
+#
+# So keep it equal to the VERSION file, and let installer_test.py prove it
+# rather than restating the number here (a test that hardcodes the value it
+# is checking can never notice it going stale).
+ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.15.1)"
 
 # Shared by `--uninstall` and by option 6 of the aftercare menu. A function,
 # not `exec bash "$0"`: under the documented one-liner (`curl ... | sudo bash`)

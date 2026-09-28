@@ -129,17 +129,19 @@ decrypt round-trip. Treat the database and unencrypted backups as customer
 credentials: keep `instance/` at `700`, use encrypted backups or full-disk
 encryption, and see [SECURITY.md](SECURITY.md).
 
-There are seven test suites that hit the running panel from the outside. Start
+There are nine test suites that hit the running panel from the outside. Start
 the panel, then run each one (restart the panel between suites):
 
 ```bash
-python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # 120 abuse/defense checks
-python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   #  60 end-to-end flows
-python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # 178 feature-coverage checks
-python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   # 129 live attack probes
-python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS #  46 quota/schema boundary checks
-python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS # 111 operator-path checks
-python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS #  35 front-end regressions
+python security_test.py    http://127.0.0.1:8000 admin YOURPASS   # abuse/defense
+python functional_test.py  http://127.0.0.1:8000 admin YOURPASS   # end-to-end flows
+python feature_test.py     http://127.0.0.1:8000 admin YOURPASS   # feature coverage
+python attack_test.py      http://127.0.0.1:8000 admin YOURPASS   # live attack probes
+python attack_quota_test.py http://127.0.0.1:8000 admin YOURPASS # quota/schema boundaries
+python attack_paths_test.py http://127.0.0.1:8000 admin YOURPASS # operator paths
+python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS # front-end regressions
+python panel_sections_test.py http://127.0.0.1:8000 admin YOURPASS # panel sections
+python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS # security audit
 ```
 
 `feature_test.py` walks all 62 API routes across the 10 panel sections and
@@ -158,12 +160,44 @@ the BackPack tunnel lifecycle, and a full backup/restore round-trip.
 `frontend_bugs_test.py` covers what HTTP tests structurally cannot see — the
 panel and docs front-end logic (a warning that can never be shown, a copy
 button that copies its own label, a list re-rendered from a stale response, a
-stale asset version in a `fetch()` URL). All seven restore the panel to its
+stale asset version in a `fetch()` URL). All nine restore the panel to its
 shipped defaults afterwards, so the suites are
 order-independent and can run against a live panel (or all seven in one go with
-`python run_all_tests.py admin YOURPASS`). A green run prints `120/120`,
-`60/60`, `178/178`, `129/129`, `46/46`, `111/111` and `35/35` - if not, open
-an issue.
+`python run_all_tests.py admin YOURPASS`). A green run ends with
+`13/13 suites passed` - nine live suites plus four that need no server. The
+per-suite counts are deliberately **not** written down here: they move every
+time a check is added, and a copied number that has drifted is worse than no
+number, because it reads as something to compare against. Read them off the run
+itself, which prints `N/N checks passed` per suite.
+
+Three more harnesses need no running panel and `run_all_tests.py` runs them
+too. Each one executes shipped code rather than reading it, because every
+defect below passed a source-level review:
+
+```bash
+python installer_test.py     # the installer's guarantees, as static guards
+node i18n_dict_check.js      # the docs dictionaries, loaded and inspected
+node i18n_render_check.js    # the docs renderer, fed hostile strings
+```
+
+`i18n_dict_check.js` exists because the docs are four languages that must stay
+in step, and nothing was checking that. It loads `docs/assets/i18n.js`, reads
+the object a browser would get, and fails on a key that is missing or empty in
+any language, a value that holds two entries run together, mojibake, a
+`data-i18n` attribute misspelled as something `applyI18n` does not read, and a
+page referencing a key that exists in no language. It reports - but does not
+fail on - a value identical to the English, because that is sometimes correct:
+`GitHub Security Advisories` is GitHub's own feature name, and translating a
+protocol list would make it worse. Its first version demanded a difference
+from English and flagged both.
+
+After editing anything under `docs/`, run `python docs/build_index.py`. It
+rebuilds the search index, gives every heading a stable anchor, and bumps the
+asset cache-bust **itself** via `docs/bump_assets.py`. That last part is not
+cosmetic: the counter lives in fourteen places, and raising it only on the
+twelve pages leaves `docs.js` and `support-ai.js` fetching the previous
+`search-index.json` and `site-knowledge.json` - fresh HTML, stale search
+results, and a support bot answering from last week's knowledge base.
 
 ### Dependencies
 
@@ -178,11 +212,21 @@ pip install --require-hashes --no-deps -r requirements.lock
 Exact top-level pins never pinned the transitive graph - `uvicorn[standard]`
 alone drags in a dozen version ranges - so two installs of the same
 `requirements.txt` could execute different code. Regenerate the lock after
-editing `requirements.txt`:
+editing `requirements.txt`, then verify it:
 
 ```bash
 python tools_lock.py
+python verify_lock_hashes.py
 ```
+
+> **Always run the verifier.** The lock is generated on one machine but
+> installed on another, and a hash that only covers the generating machine's
+> platform aborts the install on the server — or, worse, leaves a lock that
+> verifies nothing. An earlier version of `tools_lock.py` recorded only the
+> artifacts it could download locally, which left 11 of 31 packages
+> uninstallable on Linux. `verify_lock_hashes.py` checks every recorded hash
+> against PyPI and reports any entry whose coverage a Linux install needs is
+> missing. It needs network access; `tools_lock.py` also prints the command.
 
 ### API
 
