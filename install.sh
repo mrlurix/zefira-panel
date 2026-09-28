@@ -258,7 +258,23 @@ if [[ -n "$DOMAIN" ]] && ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid ZEF
 
 # ---------- Step 3/7 · Admin ----------
 step 3 "Admin account" "username + strong password"
-gen_pass() { head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16; }
+# gen_pass emits a password the panel will ACCEPT, not just 16 alphanumerics.
+# The old one-liner drew from 62 symbols, 10 of them digits, so ~6% of
+# installs got a digit-less password: the unattended path then died blaming
+# ZEFIRA_ADMIN_PASSWORD (a variable the operator never set), and the
+# interactive path printed a password the panel silently replaced with a
+# random one - two conflicting "passwords", no message on the operator's side.
+# Loop on the same bar the panel enforces (strong_enough, below); the fallback
+# is practically unreachable but keeps the promise unconditional.
+gen_pass() {
+    local p i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        p=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16)
+        if strong_enough "$p" 2>/dev/null; then printf '%s' "$p"; return 0; fi
+    done
+    p="Z9$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 14)"
+    printf '%s' "$p"
+}
 # The panel strips surrounding whitespace at login, so normalize here too —
 # otherwise a trailing space locks the operator out with no error message.
 trim() { local v="$1"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]]}"}"; printf '%s' "$v"; }
@@ -579,7 +595,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 ENV_TMP="$(mktemp "$TARGET/.env.XXXXXX")"
 chmod 600 "$ENV_TMP"
-if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 16); fi
+if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(gen_pass); fi
 {
     echo "ZEFIRA_ADMIN_USERNAME=$(env_escape "$ADMIN_USER")"
     echo "ZEFIRA_ADMIN_PASSWORD=$(env_escape "$ADMIN_PASS")"

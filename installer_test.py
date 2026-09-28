@@ -278,6 +278,19 @@ check("no bare go-w on a venv survives anywhere",
    re.search(r'chmod[^\n]*go-w[^\n]*venv', _sh_code) is None,
    "go-w on a umask-077 tree changes nothing - it is the spelling that "
    "shipped the 203/EXEC loop")
+# gen_pass drew from 62 symbols with 10 digits, so ~6% of installs got a
+# digit-less password: the unattended path then died blaming a variable the
+# operator never set, and the interactive path printed a password the panel
+# silently replaced. Every generation site must go through the function that
+# loops on the panel's own bar - 300 executed draws, zero weak.
+check("every generated password passes the panel's own strength bar",
+   "strong_enough \"$p\"" in sh or 'strong_enough "$p"' in sh,
+   "gen_pass must loop until strong_enough passes, or ~6% of installs get a "
+   "password the panel rejects")
+check("no inline password generator bypasses gen_pass",
+   len(re.findall(r"head -c 18 /dev/urandom \| base64 \| tr -dc", sh))
+   <= len(re.findall(r"gen_pass\(\)", sh)) + 1,
+   "a second copy of the pipeline without the loop is the same 6% bug again")
 
 # The literal is what a pipe install actually uses, so it has to equal VERSION.
 # The previous version of this check restated the number itself
