@@ -14,6 +14,10 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 ROOT = r"C:\Users\mrlurix\Desktop\laptop pro\zefira"
 BASH = r"C:\Program Files\Git\bin\bash.exe"
 sh = io.open(ROOT + r"\install.sh", encoding="utf-8").read()
+# The shell source with comments removed. install.sh is heavily commented, and
+# guards here have twice been fooled by a comment that quoted the very line they
+# were checking - a pattern that matches prose is not a guard.
+_sh_code = "\n".join(l for l in sh.splitlines() if not l.lstrip().startswith("#"))
 # Comment lines stripped: a guard about code must not be satisfied - or
 # broken - by the comment that explains the code.
 sh_code = "\n".join(ln for ln in sh.splitlines()
@@ -238,6 +242,26 @@ check("the read-it-first instructions use a private mktemp directory",
       re.search(r"mktemp -d", sh) is not None
       and "/tmp/zefira-inst" not in sh,
       "a predictable /tmp path can be pre-created by another local user")
+# A regression I shipped and pushed, so these are permanent.
+# `umask 077` makes every directory root creates mode 700 root-owned, so only a
+# chown of $TARGET ITSELF lets `User=zefira` chdir into it. The .venv fix
+# replaced the blanket `chown -R zefira "$TARGET"` with a `-mindepth 1` find
+# that skipped the directory, and the service then failed every boot with
+# status=200/CHDIR in a systemd restart loop - a dead panel that reported a
+# successful install.
+check("$TARGET itself is chowned to the service account",
+   re.search(r'^chown zefira:zefira "\$TARGET"\s*$', _sh_code, re.M) is not None,
+   "under umask 077 the directory stays root:root 700 and WorkingDirectory="
+   "$TARGET cannot be entered by User=zefira. Matched against _sh_code, not "
+   "sh: an earlier version of this guard matched the COMMENT quoting the same "
+   "line, so a broken installer passed it")
+check("the children walk still excludes .venv, so root keeps the venv",
+   re.search(r'find "\$TARGET" -mindepth 1 -maxdepth 1 ! -name \'\.venv\'', _sh_code)
+   is not None
+   and 'chown -R zefira:zefira "$TARGET"' not in _sh_code,
+   "chowning .venv to the service account hands back the root-executes-it "
+   "escalation; a blanket -R over the tree would undo that guard too")
+
 # The literal is what a pipe install actually uses, so it has to equal VERSION.
 # The previous version of this check restated the number itself
 # (`|| echo 1\.14\.2`), which is why it stayed green for two releases while the

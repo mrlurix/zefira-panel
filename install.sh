@@ -608,6 +608,14 @@ fi
 # User=zefira. The VENV IS NOT: it is what root executes on the next upgrade
 # (see the venv block above), so handing it to the service account would put
 # the escalation straight back. chown it separately, and only if it exists.
+# $TARGET ITSELF has to belong to the service account, and this is not
+# cosmetic. `umask 077` is set at the top of this script, so every directory
+# root creates here is mode 700 and root-owned; only a chown of $TARGET itself
+# makes it traversable by `User=zefira`. A first version of this block used
+# `find "$TARGET" -mindepth 1 ...` to skip .venv, which ALSO skipped $TARGET -
+# and the service then died on boot with `status=200/CHDIR`, looping on
+# systemd's restart policy. `WorkingDirectory=$TARGET` cannot even be entered.
+chown zefira:zefira "$TARGET"
 find "$TARGET" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec chown -R zefira:zefira {} +
 chown -R root:root "$TARGET/.venv" 2>/dev/null || true
 chmod -R go-w "$TARGET/.venv" 2>/dev/null || true
