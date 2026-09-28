@@ -531,7 +531,13 @@ python3 -m venv .venv
 # and not writable by anyone else. A service foothold can remove it, never
 # alter it.
 chown -R root:root .venv 2>/dev/null || true
-chmod go-w .venv 2>/dev/null || true
+# ...but it must stay READABLE and traversable by the service account.
+# `chmod go-w` was the first version and it changed nothing: under `umask 077`
+# the venv is mode 700, so stripping write bits nobody had left a tree root
+# could execute but `User=zefira` could not even ENTER - every boot died with
+# status=203/EXEC "Failed to execute ... Permission denied", in a restart loop.
+# u=rwX,go=rX = directories 755, files 644, executables keep their x.
+chmod -R u=rwX,go=rX .venv 2>/dev/null || true
 # Install from the hash-locked set, not from requirements.txt. Exact
 # top-level pins never pinned the TRANSITIVE graph: `uvicorn[standard]` alone
 # drags in a dozen version ranges, so two installs of the same file could
@@ -618,7 +624,10 @@ fi
 chown zefira:zefira "$TARGET"
 find "$TARGET" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec chown -R zefira:zefira {} +
 chown -R root:root "$TARGET/.venv" 2>/dev/null || true
-chmod -R go-w "$TARGET/.venv" 2>/dev/null || true
+# Same traverse requirement as above: root-owned must not mean root-only, or
+# the service dies with 203/EXEC on the next boot. u=rwX,go=rX, never a bare
+# go-w (which preserves a 700 tree and only looks like a fix).
+chmod -R u=rwX,go=rX "$TARGET/.venv" 2>/dev/null || true
 ok "Tree ownership set (.venv stays root-owned and read-only to the service)"
 # ProtectSystem=strict bind-mounts ReadWritePaths when the namespace is
 # set up — BEFORE the app (which creates instance/ itself) ever runs.

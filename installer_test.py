@@ -261,6 +261,23 @@ check("the children walk still excludes .venv, so root keeps the venv",
    and 'chown -R zefira:zefira "$TARGET"' not in _sh_code,
    "chowning .venv to the service account hands back the root-executes-it "
    "escalation; a blanket -R over the tree would undo that guard too")
+# Root-owned must not mean root-ONLY. Under `umask 077` a fresh venv is mode
+# 700, and the first version of the venv hardening only stripped write bits
+# (`chmod go-w`) - which nobody had - so `User=zefira` could not even ENTER
+# .venv/bin and every boot died with status=203/EXEC "Failed to execute ...
+# Permission denied". The mode check above it (`^[0-5][0-5]$`) passed 700,
+# because it tested "not writable by others" while the failure needed
+# "traversable by the service account". Same family of mistake as the
+# hashes-per-package average: the right property, unchecked.
+check("the root-owned venv stays readable and traversable by the service",
+   re.search(r'chmod -R u=rwX,go=rX (["\']?)\.venv\1', _sh_code) is not None
+   and re.search(r'chmod -R u=rwX,go=rX "\$TARGET/\.venv"', _sh_code) is not None,
+   "dirs 755, files 644, executables keep x. A bare `go-w` preserves a 700 "
+   "tree and only looks like a fix")
+check("no bare go-w on a venv survives anywhere",
+   re.search(r'chmod[^\n]*go-w[^\n]*venv', _sh_code) is None,
+   "go-w on a umask-077 tree changes nothing - it is the spelling that "
+   "shipped the 203/EXEC loop")
 
 # The literal is what a pipe install actually uses, so it has to equal VERSION.
 # The previous version of this check restated the number itself
