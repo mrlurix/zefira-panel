@@ -839,6 +839,91 @@ check("the renderer escapes the ampersand FIRST, so the sink is safe by "
       "a decoded &#60; then reaches innerHTML as a live character reference - "
       "harmless per spec, but the safety would rest on the spec")
 
+# ---- a bug hunt round: six front-end defects, each reproduced first -------
+# Every guard below is the RULE, not the string that happens to satisfy it
+# today, because five guards in this project's history were a restated
+# implementation detail that could not fail: the lock's hashes-per-package
+# average, the installer's hardcoded `echo 1.14.2`, a hand-written attribute
+# list, the README's per-suite counts, and `[[ -t 0 ]] && INTERACTIVE=1`.
+panel_i18n = read("static/i18n.js")
+
+# 1. Every sidebar id needs a menu label in ALL FOUR panel dictionaries.
+#    `menu.api` came in with the Developer API section and went into nav.api and
+#    title.api, but never menu.* - so the Personalize menu layout rendered the
+#    literal string "menu.api" to the operator, in every language. Asserting the
+#    whole class is the point; asserting "menu.api exists" would let the next
+#    section repeat it.
+_menu_ids_m = re.search(r"const MENU_IDS = \[([^\]]*)\]", app)
+_menu_ids = re.findall(r'"([\w-]+)"', _menu_ids_m.group(1)) if _menu_ids_m else []
+_missing_menu = []
+for _id in _menu_ids:
+    for _lang in ("en", "fa", "zh", "ru"):
+        _s = panel_i18n.find("Object.assign(Z_STRINGS.%s, {" % _lang)
+        if _s == -1:
+            continue
+        _e = panel_i18n.find("});", _s)
+        if ('"menu.%s"' % _id) not in panel_i18n[_s:_e]:
+            _missing_menu.append("%s/%s" % (_lang, _id))
+check("every sidebar id has a menu label in all four languages",
+      bool(_menu_ids) and not _missing_menu,
+      f"missing menu labels: {_missing_menu[:8]} - a missing one renders the raw "
+      f"key to the operator, e.g. the literal text 'menu.api'")
+
+# 2. The floating AI button is position:fixed and sits ON TOP of the AI settings
+#    form, so opening the chat must not rewrite the fields underneath it.
+#    loadAi() did exactly that, and a later Save then persisted the OLD values.
+_ai_fab = re.search(r'bind\("#ai-fab"[\s\S]{0,600}?\n\}', app)
+check("opening the AI chat does not rewrite the AI settings form",
+      _ai_fab is not None and "loadAi(false)" in _ai_fab.group(0)
+      and not re.search(r"loadAi\(\s*\)", _ai_fab.group(0)),
+      "the button is visible on the Settings page where those five inputs live; "
+      "a bare loadAi() overwrites all of them with the stored values, so an "
+      "unsaved edit is silently lost and then saved as the OLD one")
+
+# 3. A null/garbage body must not throw AFTER a list was cleared. loadInbounds
+#    and renderApiTokens already carried this guard with a comment; loadAudit
+#    did not, so Security Events could stay permanently blank, silently.
+_audit_fn = re.search(r"async function loadAudit\(\) \{([\s\S]*?)\n\}", app)
+_audit_body = _audit_fn.group(1) if _audit_fn else ""
+check("a non-array body cannot blank a list that was already cleared",
+      bool(_audit_body) and "Array.isArray" in _audit_body
+      and _audit_body.find("Array.isArray") < _audit_body.find('textContent = ""'),
+      "the guard must come BEFORE the clear, or the exception still lands after "
+      "the DOM is emptied")
+
+# 4. `numInput(x) || default` swallows the very NaN the validation loop exists
+#    to catch, because NaN || 1701 is 1701. Four ports did this while the other
+#    four were correctly refused.
+_short = re.findall(r"=\s*numInput\([^)]*\)\s*\|\|\s*\d", app)
+check("no port is silently defaulted in a way that hides an invalid value",
+      not _short,
+      f"`numInput(x) || n` turns a blank field into n, so it never reaches the "
+      f"Number.isFinite check that refuses the other ports; found {len(_short)}")
+
+# 5. Row actions must guard against a double submit AND hand the button back.
+#    Guarding without releasing is worse than the double click it prevents: a
+#    declined confirm leaves the button dead for the whole session.
+_row = re.search(r'bind\("#inbounds-tbody"[\s\S]{0,1800}?\n\}\);', app)
+_row_body = _row.group(0) if _row else ""
+check("the inbound row actions are guarded and the guard is released",
+      "guardBtn(btn)" in _row_body
+      and re.search(r"finally\s*\{\s*btn\.disabled = false", _row_body) is not None,
+      "guardBtn disables the button; without a release the declined-confirm path "
+      "and any failed request leave it permanently dead")
+check("the inbound toggle reads its state from data, not from a CSS class",
+      re.search(r'btn\.dataset\.on === "1"', app) is not None
+      and not re.search(r'btn\.classList\.contains\("warn"\)', app),
+      "the class is only a paint - the users table was fixed for exactly this "
+      "and the comment there says why")
+
+# 6. A copy and a QR are independent actions. One shared generation counter made
+#    the copy return with no toast, no clipboard write and no error.
+check("the subscription-copy path does not share a counter with the QR path",
+      re.search(r"const seq = \+\+qrCopySeq;", app) is not None
+      and not re.search(r"const seq = \+\+qrSeq;[\s\S]{0,400}?subCopied", app),
+      "one qrSeq for both meant clicking a QR while a copy was in flight "
+      "silently discarded the copy - a button that appeared to do nothing")
+
 passed = sum(1 for _, ok, _ in results if ok)
 print(f"\n=== {passed}/{len(results)} passed ===")
 for n, ok, d in results:

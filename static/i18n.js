@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 /* Zefira i18n — runtime dictionary translation, no backend needed.
    Usage in HTML: <span data-i18n="nav.dashboard">Dashboard</span>
      data-i18n-ph="key" for placeholders, data-i18n-title / data-i18n-aria likewise.
@@ -98,7 +98,7 @@ Object.assign(Z_STRINGS.en, {
 "reality.customOpt": "Custom...", "reality.saveBtn": "Save Anti-Censorship Settings",
 "menu.dashboard": "Dashboard", "menu.users": "Users", "menu.inbounds": "Inbounds",
 "menu.tunnels": "Tunnels", "menu.nodes": "Nodes", "menu.reality": "Anti-Censorship",
-"menu.blocker": "Site Blocker", "menu.update": "Update", "menu.customize": "Personalize",
+"menu.blocker": "Site Blocker", "menu.update": "Update", "menu.api": "Developer API", "menu.customize": "Personalize",
 "menu.settings": "Settings", "menu.lockedNote": "Always visible", "menu.show": "Show", "menu.hide": "Hide",
 "dlayout.usage": "Usage ring", "dlayout.link": "Subscription link", "dlayout.groups": "Config groups", "dlayout.apps": "Apps",
 "badge.disabled": "Disabled", "badge.expired": "Expired", "badge.limited": "Limited",
@@ -409,7 +409,7 @@ Object.assign(Z_STRINGS.fa, {
 "reality.customOpt": "سفارشی...", "reality.saveBtn": "ذخیره تنظیمات ضدسانسور",
 "menu.dashboard": "داشبورد", "menu.users": "کاربران", "menu.inbounds": "اینباندها",
 "menu.tunnels": "تانل‌ها", "menu.nodes": "نودها", "menu.reality": "ضدسانسور",
-"menu.blocker": "مسدودساز سایت", "menu.update": "به‌روزرسانی", "menu.customize": "شخصی‌سازی",
+"menu.blocker": "مسدودساز سایت", "menu.update": "به‌روزرسانی", "menu.api": "API توسعه‌دهنده", "menu.customize": "شخصی‌سازی",
 "menu.settings": "تنظیمات", "menu.lockedNote": "همیشه قابل مشاهده", "menu.show": "نمایش", "menu.hide": "مخفی",
 "dlayout.usage": "حلقه مصرف", "dlayout.link": "لینک اشتراک", "dlayout.groups": "گروه‌های کانفیگ", "dlayout.apps": "اپ‌ها",
 "badge.disabled": "غیرفعال", "badge.expired": "منقضی", "badge.limited": "تمام‌حجم",
@@ -722,7 +722,7 @@ Object.assign(Z_STRINGS.zh, {
 "reality.customOpt": "自定义...", "reality.saveBtn": "保存反审查设置",
 "menu.dashboard": "仪表盘", "menu.users": "用户", "menu.inbounds": "入站",
 "menu.tunnels": "隧道", "menu.nodes": "节点", "menu.reality": "反审查",
-"menu.blocker": "网站拦截", "menu.update": "更新", "menu.customize": "个性化",
+"menu.blocker": "网站拦截", "menu.update": "更新", "menu.api": "开发者 API", "menu.customize": "个性化",
 "menu.settings": "设置", "menu.lockedNote": "始终可见", "menu.show": "显示", "menu.hide": "隐藏",
 "dlayout.usage": "用量环", "dlayout.link": "订阅链接", "dlayout.groups": "配置分组", "dlayout.apps": "应用",
 "badge.disabled": "已禁用", "badge.expired": "已过期", "badge.limited": "流量尽",
@@ -927,7 +927,7 @@ Object.assign(Z_STRINGS.ru, {
 "reality.customOpt": "Свой...", "reality.saveBtn": "Сохранить настройки антицензуры",
 "menu.dashboard": "Дашборд", "menu.users": "Пользователи", "menu.inbounds": "Инбаунды",
 "menu.tunnels": "Туннели", "menu.nodes": "Ноды", "menu.reality": "Антицензура",
-"menu.blocker": "Блокировка сайтов", "menu.update": "Обновление", "menu.customize": "Персонализация",
+"menu.blocker": "Блокировка сайтов", "menu.update": "Обновление", "menu.api": "API для разработчиков", "menu.customize": "Персонализация",
 "menu.settings": "Настройки", "menu.lockedNote": "Всегда видимы", "menu.show": "Показать", "menu.hide": "Скрыть",
 "dlayout.usage": "Кольцо трафика", "dlayout.link": "Ссылка подписки", "dlayout.groups": "Группы конфигов", "dlayout.apps": "Приложения",
 "badge.disabled": "Отключён", "badge.expired": "Истёк", "badge.limited": "Лимит",

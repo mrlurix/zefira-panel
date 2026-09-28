@@ -567,6 +567,8 @@ let currentQrUrl = "";
 // Monotonic counter for QR/copy actions: only the newest request may write
 // the modal, the image, or the clipboard.
 let qrSeq = 0;
+// Separate from qrSeq: a copy and a QR are independent actions.
+let qrCopySeq = 0;
 bind("#qr-copy-btn", "click", async () => {
   if (!currentQrUrl) return;
   if (await copyText(currentQrUrl)) toast(t("msg.linkCopied"));
@@ -794,11 +796,15 @@ bind("#users-table", "click", async (e) => {
       // Fetch the server-built URL (respects custom SUBSCRIPTION_PATH);
       // a location.origin + "/sub/" guess 404s for renamed paths.
       try {
-        const seq = ++qrSeq;
+        // Its OWN counter, not qrSeq. Sharing one slot meant clicking a QR
+        // while a copy was in flight made the copy return here with no
+        // toast, no clipboard write and no error - a button that looked
+        // broken. One action must not silently discard another.
+        const seq = ++qrCopySeq;
         const d = await api(`/api/users/${id}/qr`);
         // A slower earlier request used to overwrite the newer action
         // (copy A, click B, then A's answer lands: B's URL on screen).
-        if (seq !== qrSeq) return;
+        if (seq !== qrCopySeq) return;
         if (await copyText(d.url)) toast(t("msg.subCopied"));
         else toast(t("msg.copyFailed"), false);
       } catch (err) { if (err.message !== "auth") toast(err.message, false); }
@@ -1273,13 +1279,18 @@ async function saveAllSettings() {
   body.hy2_port = numInput(f.hy2_port.value);
   body.wg_port = numInput(f.wg_port.value);
   body.ovpn_port = numInput(f.ovpn_port.value);
-  body.l2tp_port = numInput(f.l2tp_port.value) || 1701;
-  body.cisco_port = numInput(f.cisco_port.value) || 443;
-  body.socks5_port = numInput(f.socks5_port.value) || 1080;
+  // No `|| default` here: numInput("") is NaN, and NaN || 1701 is 1701, so
+  // a blank field silently persisted a port instead of reaching the
+  // Number.isFinite check below that refuses the other four. The form's own
+  // submit button has `required`, but #save-reality-btn is type="button"
+  // and sits outside the form, so this path had no validation at all.
+  body.l2tp_port = numInput(f.l2tp_port.value);
+  body.cisco_port = numInput(f.cisco_port.value);
+  body.socks5_port = numInput(f.socks5_port.value);
   body.dns = f.dns.value.trim() || "1.1.1.1";
   body.ovpn_proto = f.ovpn_proto.value;
   body.wg_pub = f.wg_pub.value.trim();
-  body.reality_port = numInput(document.querySelector('[name="reality_port"]').value) || 443;
+  body.reality_port = numInput(document.querySelector('[name="reality_port"]').value);
   body.reality_sni = document.querySelector('[name="reality_sni"]').value.trim() || "www.yahoo.com,www.samsung.com,www.microsoft.com";
   body.obfuscated_host = f.obfuscated_host.value.trim();
   body.per_user_subdomain = f.per_user_subdomain.checked;
@@ -1603,6 +1614,10 @@ function inboundRow(ib) {
   const tglBtn = iconBtn(ib.enabled ? t("icon.disable") : t("icon.enableObj"), ICONS.toggleOff, ib.enabled ? "warn" : "good");
   tglBtn.dataset.act = "ib-toggle";
   tglBtn.dataset.id = ib.id;
+  // The handler needs the CURRENT state to invert. It used to read
+  // classList.contains("warn"), which is only a paint - the users table was
+  // fixed for exactly this and documented why.
+  tglBtn.dataset.on = ib.enabled ? "1" : "0";
   const delBtn = iconBtn(t("icon.delete"), ICONS.trash, "bad");
   delBtn.dataset.act = "ib-del";
   delBtn.dataset.id = ib.id;
@@ -1667,9 +1682,12 @@ bind("#ib-add-btn", "click", async (e) => {
 bind("#inbounds-tbody", "click", async (e) => {
   const btn = e.target.closest(".row-btn");
   if (!btn) return;
+  // No double submit: without this a double click on Delete sent two
+  // DELETEs and the second 404 painted a red error over the success.
+  if (!guardBtn(btn)) return;
   try {
     if (btn.dataset.act === "ib-toggle") {
-      const on = btn.classList.contains("warn");
+      const on = btn.dataset.on === "1";
       await api("/api/inbounds/" + btn.dataset.id, { method: "PATCH", body: { enabled: !on } });
       toast(on ? t("msg.ibDisabled") : t("msg.ibEnabled"));
     } else if (btn.dataset.act === "ib-del") {
@@ -1679,6 +1697,10 @@ bind("#inbounds-tbody", "click", async (e) => {
     }
     loadInbounds();
   } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  // Always hand the button back. Without this the declined-confirm path and
+  // any failed request left it disabled for the rest of the session - a worse
+  // defect than the double click the guard prevents.
+  finally { btn.disabled = false; }
 });
 
 // ---- Server nodes ----
@@ -2142,16 +2164,23 @@ function aiAddMsg(text, cls) {
   box.scrollTop = box.scrollHeight;
   return el;
 }
-async function loadAi() {
+// `writeForm` is false for the floating chat button. The button is fixed to
+// the viewport and sits ON TOP of this very form, so opening the chat used
+// to rewrite all five fields with the stored values - and a later Save then
+// persisted the OLD ones, silently losing whatever the operator typed.
+// Refreshing the badge is all the chat needs.
+async function loadAi(writeForm = true) {
   const token = nextSeq("ai");
   try {
     const a = await api("/api/ai/settings");
     if (!isCurrent("ai", token)) return;   // a newer save/load won
+    if (writeForm) {
     $("#ai-enabled").checked = !!a.enabled;
     $("#ai-provider").value = a.provider || "groq";
     $("#ai-base").value = a.base_url || "";
     $("#ai-model").value = a.model || "";
     $("#ai-extra").value = a.extra || "";
+    }
     const badge = $("#ai-badge");
     if (badge) {
       const ready = a.enabled && a.has_key && a.model;
@@ -2191,8 +2220,9 @@ bind("#ai-test-btn", "click", async () => {
 bind("#ai-fab", "click", () => {
   $("#ai-chat").classList.toggle("hidden");
   if (!$("#ai-chat").classList.contains("hidden")) {
-    // Badge may be stale (saved/disabled in another tab): refresh on open.
-    loadAi();
+    // Badge may be stale (saved/disabled in another tab): refresh on open -
+    // but NOT the form underneath, which the operator may be editing.
+    loadAi(false);
     if (!$("#ai-msgs").children.length) {
       aiAddMsg(t("ai.greeting"), "bot");
     }
@@ -2763,7 +2793,11 @@ bind("#restore-btn", "click", async () => {
 
 async function loadAudit() {
   try {
-    const rows = await api("/api/audit");
+    // A null/garbage body must not throw AFTER the list was cleared, or
+    // Security Events stays permanently blank with the empty catch below
+    // saying nothing. loadInbounds and renderApiTokens already guard this.
+    const body = await api("/api/audit");
+    const rows = Array.isArray(body) ? body : [];
     const ul = $("#audit-list");
     ul.textContent = "";
     if (!rows.length) {
