@@ -8,15 +8,16 @@
 #  Or read it first (recommended - it runs as root):
 #     d="$(mktemp -d)"
 #     curl -fsSL -o "$d/install.sh" \
-#       https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.2/install.sh
+#       https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh
 #     less "$d/install.sh"
 #     sudo bash "$d/install.sh"
 #     rm -rf "$d"
 #
 #  Source selection: this installer's OWN directory is used when it sits next
-#  to main.py + requirements.txt; otherwise it clones ZEFIRA_INSTALL_REF
-#  (defaults to the `main` branch - set it to a tag or commit SHA for a
-#  reproducible install).
+#  to main.py + requirements.txt; otherwise it clones ZEFIRA_INSTALL_REF,
+#  which defaults to the release tag this installer was cut for, so the
+#  one-liner is reproducible. Set ZEFIRA_INSTALL_REF to a different tag or a
+#  commit SHA, and ZEFIRA_EXPECTED_SHA to require one exact commit.
 #
 #  Non-interactive (pipe): uses defaults, no prompts
 #  Uninstall: sudo bash install.sh --uninstall
@@ -40,18 +41,34 @@ if [[ "$REPO_URL" != "https://github.com/mrlurix/zefira-panel.git" ]]; then
 fi
 TARGET="/opt/zefira"
 SERVICE="zefira"
-# The release this installer ships with. It is NOT a fallback: under the
-# documented one-liner (`curl ... | sudo bash`) it is the only value that
-# survives, because there is no checkout in the CWD and /opt/zefira does not
-# exist yet on a first install - the clone that fills $TARGET happens ~330
-# lines below. A stale literal here therefore does not fail, it silently
-# downgrades: v1.14.2 was reachable, so `curl | sudo bash` kept installing
-# v1.14.2 and skipped v1.14.3's security fixes and all of v1.15.0.
+# --- begin version-resolution (version_resolution_test.sh slices this block) ---
+# The release this installer ships with. Keep it equal to the VERSION file and
+# let installer_test.py prove it rather than restating the number here.
+ZEFIRA_PINNED="1.15.2"
+
+# Which release do we install? The two ways of answering that disagree, and the
+# disagreement is the whole bug.
 #
-# So keep it equal to the VERSION file, and let installer_test.py prove it
-# rather than restating the number here (a test that hardcodes the value it
-# is checking can never notice it going stale).
-ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo 1.15.1)"
+#   `cat "$TARGET/VERSION"` is only meaningful when this script is being run
+#   FROM a checkout next to main.py - then the VERSION beside us is the release
+#   we are installing.
+#
+#   Under the documented one-liner (`curl ... | sudo bash`) it is NOT a
+#   fallback, it is the WRONG ANSWER on exactly the machine that needs an
+#   upgrade. There is no checkout in the CWD, so the first `cat` fails; but on
+#   a server that already has Zefira installed, the second one SUCCEEDS and
+#   returns the version we are about to REPLACE. `curl | sudo bash` then
+#   re-clones the old tag, prints a success message, and upgrades nothing.
+#   A wrong version is a bug you can see; this is a no-op that looks like a
+#   successful install.
+#
+# So while piped, the only value that may decide is this script's own pin.
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]:-/nonexistent}" ]]; then
+    ZEFIRA_VERSION="$(cat VERSION 2>/dev/null || cat "$TARGET/VERSION" 2>/dev/null || echo "$ZEFIRA_PINNED")"
+else
+    ZEFIRA_VERSION="$ZEFIRA_PINNED"
+fi
+# --- end version-resolution ---
 
 # Shared by `--uninstall` and by option 6 of the aftercare menu. A function,
 # not `exec bash "$0"`: under the documented one-liner (`curl ... | sudo bash`)
@@ -90,8 +107,46 @@ if [[ $EUID -ne 0 ]]; then echo "[!] Run as root (sudo)."; exit 1; fi
 # mode-644 .env readable by every local account.
 umask 077
 
+# --- begin interactivity (installer_interactive_test.sh slices this block) ---
 INTERACTIVE=0
-[[ -t 0 ]] && INTERACTIVE=1
+TTY_PATH=""
+# `[[ -t 0 ]]` is the wrong test, and it is why every question below was
+# unreachable from the documented one-liner. Under `curl ... | sudo bash`
+# stdin is the PIPE CARRYING THIS SCRIPT, so it is never a terminal: the test
+# is always false, INTERACTIVE is always 0, and port, database, admin account,
+# subscription path, Telegram and SSL are all silently taken from defaults.
+# The installer asked for a port and a database and then ignored the operator.
+#
+# The terminal the human is actually sitting at is /dev/tty, and it is
+# unaffected by the pipe. So: use it when it is really there, and fall back to
+# defaults when it is not - under systemd, cron, `docker build`, or a CI job
+# there is no controlling terminal, and those must keep working unattended.
+# The `(: < /dev/tty)` probe actually OPENS it, which -r/-w do not: a session
+# with no controlling terminal can have the node present but unopenable, and
+# that is the case that must not hang.
+if [[ -z "${ZEFIRA_NONINTERACTIVE:-}" ]] && (: < /dev/tty) 2>/dev/null; then
+    TTY_PATH="/dev/tty"
+    INTERACTIVE=1
+fi
+if [[ $INTERACTIVE -eq 1 ]]; then
+    echo "[*] Answer the prompts below, or press Enter to take each default."
+    echo "[*] Unattended? ZEFIRA_NONINTERACTIVE=1 takes every default instead."
+else
+    echo "[*] No terminal detected - installing with defaults (no prompts)."
+fi
+
+# Every prompt reads from $TTY_PATH, never from stdin. With the script arriving
+# on stdin, a bare `read` would consume the remaining lines of install.sh
+# itself and then block forever, so this is a correctness requirement and not
+# just a nicety.
+tty_read() {
+    if [[ -n "$TTY_PATH" ]]; then
+        read -r "$@" < "$TTY_PATH"
+    else
+        read -r "$@"
+    fi
+}
+# --- end interactivity ---
 
 # ---------- banner ----------
 # figlet-block art, so the wordmark reads as solid glyphs the way the BackPack
@@ -118,7 +173,7 @@ step()  { printf ' %s%2s)%s %s%-16s%s %s%s%s\n' "$C_RED" "$1" "$C_RST" "$C_BLD" 
 ask() {
     local prompt="$1" def="$2" var
     if [[ $INTERACTIVE -eq 0 ]]; then echo "$def"; return; fi
-    read -rp "$prompt [$def]: " var; echo "${var:-$def}"
+    tty_read -rp "$prompt [$def]: " var; echo "${var:-$def}"
 }
 # NOTE: every read below uses -r so backslashes survive verbatim. Without it,
 # a password like My\Pass1 would silently lose the backslash and the operator
@@ -126,7 +181,7 @@ ask() {
 ask_secret() {
     local prompt="$1" var
     if [[ $INTERACTIVE -eq 0 ]]; then echo ""; return; fi
-    read -r -sp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
+    tty_read -r -sp "$prompt (empty=random): " var; echo >&2; printf "%s" "$var"
 }
 # The value arrives on STDIN, never as argv: any local user can read another
 # process's command line (`ps`, /proc/*/cmdline) while it runs.
@@ -166,7 +221,7 @@ fi
 step 2 "Domain (for links and SSL)" "empty = server IP, no SSL"
 DOMAIN=""
 if [[ $INTERACTIVE -eq 1 ]]; then
-    read -rp "Domain (empty = use server IP, no SSL) []: " DOMAIN
+    tty_read -rp "Domain (empty = use server IP, no SSL) []: " DOMAIN
     DOMAIN=$(echo "$DOMAIN" | xargs)
     if [[ -n "$DOMAIN" ]] && ! is_valid_domain "$DOMAIN"; then echo "[!] Invalid domain: $DOMAIN"; exit 1; fi
 else
@@ -198,7 +253,7 @@ if [[ $INTERACTIVE -eq 1 ]]; then
             ADMIN_PASS=""
             continue
         fi
-        read -rsp "Confirm password: " CONFIRM; echo
+        tty_read -rsp "Confirm password: " CONFIRM; echo
         CONFIRM=$(trim "$CONFIRM")
         if [[ "$ADMIN_PASS" != "$CONFIRM" ]]; then echo "[!] Passwords do not match — try again"; ADMIN_PASS=""; continue; fi
         break
@@ -270,9 +325,9 @@ if ! is_valid_username "$ADMIN_USER"; then echo "[!] Invalid admin username"; ex
 step 6 "Telegram notifications (optional)" "bot token + chat ID"
 TG_TOKEN=""; TG_CHAT=""
 if [[ $INTERACTIVE -eq 1 ]]; then
-    read -rp "Telegram bot token (empty to skip) []: " TG_TOKEN
+    tty_read -rp "Telegram bot token (empty to skip) []: " TG_TOKEN
     if [[ -n "$TG_TOKEN" ]]; then
-        read -rp "Telegram chat ID []: " TG_CHAT
+        tty_read -rp "Telegram chat ID []: " TG_CHAT
         # Same patterns the panel enforces, so a typo fails here instead of
         # as a silent "no notifications" after install.
         if ! [[ "$TG_TOKEN" =~ ^[0-9]{1,15}:[A-Za-z0-9_-]{1,100}$ ]]; then
@@ -292,11 +347,11 @@ SETUP_NGINX="n"; USE_SSL="n"; EMAIL=""
 if [[ -z "$DOMAIN" ]]; then
     echo "No domain given — skipping Nginx and SSL (panel will run on http://SERVER_IP:$PORT)."
 elif [[ $INTERACTIVE -eq 1 ]]; then
-    read -rp "Setup Nginx reverse proxy for $DOMAIN ? [y/N]: " SETUP_NGINX
+    tty_read -rp "Setup Nginx reverse proxy for $DOMAIN ? [y/N]: " SETUP_NGINX
     if [[ "$SETUP_NGINX" == [yY]* ]]; then
         EMAIL=$(ask "Email for Let's Encrypt" "admin@$DOMAIN")
         if ! is_valid_email "$EMAIL"; then echo "[!] Invalid email: $EMAIL"; exit 1; fi
-        read -rp "Issue SSL certificate now? (needs port 80 free) [y/N]: " USE_SSL
+        tty_read -rp "Issue SSL certificate now? (needs port 80 free) [y/N]: " USE_SSL
     fi
 else
     SETUP_NGINX="${ZEFIRA_SETUP_NGINX:-n}"
@@ -759,7 +814,7 @@ post_menu() {
         printf '%sSelect an option:%s ' "$C_BLD" "$C_RST"
         # read -e so the arrow keys work; `|| true` because EOF (Ctrl+D)
         # returns non-zero and `set -e` would kill the installer's last step.
-        read -e -r choice || { echo; return 0; }
+        tty_read -e -r choice || { echo; return 0; }
         case "${choice// /}" in
             1) echo "$URL" ;;
             2) grep -E '^ZEFIRA_ADMIN_(USERNAME|PASSWORD)=' "$ENV_FILE" 2>/dev/null \
@@ -773,7 +828,7 @@ post_menu() {
                else fail "restart failed - see option 4"; fi ;;
             6) warn "uninstalling: type 'yes' to confirm"
                local yes
-               printf 'Type yes to remove Zefira: ' ; read -r yes || { echo; return 0; }
+               printf 'Type yes to remove Zefira: ' ; tty_read -r yes || { echo; return 0; }
                if [[ "$yes" == "yes" ]]; then
                    do_uninstall
                else

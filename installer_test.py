@@ -36,6 +36,21 @@ r = subprocess.run([BASH, "-c", "cd '/c/Users/mrlurix/Desktop/laptop pro/zefira'
                    capture_output=True, text=True)
 check("install.sh parses under bash", r.returncode == 0, r.stderr.strip()[:120])
 
+# The version-resolution block is EXERCISED, not read. A static check can
+# compare the pinned literal against VERSION, but it cannot see the defect
+# that actually shipped: `cat "$TARGET/VERSION"` looks like a harmless fallback
+# and is the wrong answer on every server that already has Zefira installed,
+# because it returns the version being replaced - so `curl | sudo bash` clones
+# the old tag, reports success, and upgrades nothing.
+_r = subprocess.run([BASH, "version_resolution_test.sh"], capture_output=True,
+                    text=True, cwd=ROOT)
+check("the one-liner installs the pinned release, not the one it replaces",
+      _r.returncode == 0,
+      (_r.stdout or "")[-300:] or (_r.stderr or "")[-300:])
+
+_i = subprocess.run([BASH, "installer_interactive_test.sh"], capture_output=True,
+                    text=True, cwd=ROOT)
+
 # ---- 2. the blocky wordmark ---------------------------------------------
 art = re.search(r"ZEFIRA_ART=\(\n(.*?)\n\)", sh, re.S)
 check("the banner carries a block-art wordmark array", art is not None)
@@ -93,16 +108,33 @@ check("an unknown answer warns and re-prompts instead of exiting",
 check("the menu is interactive-only (a piped install has no TTY)",
       re.search(r"post_menu\(\)\s*\{\s*\n\s*\[\[ \$INTERACTIVE -eq 1 \]\] \|\| return 0", sh)
       is not None)
+# Both EOF guards care that Ctrl+D returns rather than spins or crashes,
+# not which reader is spelled, so they accept either: tty_read routes the
+# read to the terminal and still returns non-zero at EOF, which is what
+# the `|| { echo; return 0; }` guard is there for.
 check("EOF on the prompt returns instead of spinning",
-      re.search(r"read -e -r choice \|\| \{ echo; return 0; \}", sh) is not None)
+      re.search(r"(?:tty_)?read -e -r choice \|\| \{ echo; return 0; \}", sh) is not None)
 check("the uninstall confirmation also survives EOF",
-      re.search(r"printf 'Type yes to remove Zefira: ' ; read -r yes \|\| \{ echo; return 0; \}",
+      re.search(r"printf 'Type yes to remove Zefira: ' ; (?:tty_)?read -r yes \|\| \{ echo; return 0; \}",
                 sh) is not None)
 check("the documented one-liner is untouched",
       "curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.sh | sudo bash"
       in sh)
-check("non-interactive installs still skip the wizard",
-      "[[ -t 0 ]] && INTERACTIVE=1" in sh)
+check("non-interactive installs still skip the wizard, and interactive ones do not",
+   # The old check asserted the literal text "[[ -t 0 ]] && INTERACTIVE=1".
+   # That tests the mechanism, not the behaviour, and it is the fifth time in
+   # this repo that a restated implementation detail stood in for a guarantee
+   # - the same shape as the hardcoded `|| echo 1.14.2` and the hand-written
+   # data-i18n allowlist. It stayed green for the whole life of the bug it was
+   # guarding: under `curl | sudo bash` stdin is the pipe carrying install.sh,
+   # so `-t 0` is never true, INTERACTIVE is always 0, and the operator is
+   # never asked for a port, a database or an admin account.
+   #
+   # installer_interactive_test.sh RUNS the gate and the reads instead: it
+   # proves a prompt takes its answer from the terminal while stdin is carrying
+   # script text, and that a session with no tty still falls back to defaults.
+   _i.returncode == 0,
+   (_i.stdout or "")[-320:] or (_i.stderr or "")[-320:])
 
 # ---- 5b. the source-discovery escalation -------------------------------
 # Under the documented pipe BASH_SOURCE[0] is EMPTY, so `dirname ""` is "."
@@ -199,13 +231,15 @@ check("the read-it-first instructions use a private mktemp directory",
 # one-liner silently installed v1.14.2: a test that hardcodes the value it is
 # checking cannot notice that value going stale.
 _repo_version = io.open(ROOT + os.sep + "VERSION", encoding="utf-8-sig").read().strip()
-_lit = re.search(r'\|\| echo ([\d.]+)\)"', sh)
+# Read the pin where it now lives. It is a named variable rather than an inline
+# `|| echo <n>`, because the piped path must not be able to reach the installed
+# tree at all - see version_resolution_test.sh, which runs that path.
+_lit = re.search(r'^ZEFIRA_PINNED="([\d.]+)"', sh, re.M)
 check("the installer's hardcoded release equals the VERSION file",
       _lit is not None and _lit.group(1) == _repo_version,
-      f"install.sh would install v{_lit.group(1) if _lit else '?'} but VERSION "
-      f"says {_repo_version}; under `curl | sudo bash` neither `cat VERSION` nor "
-      f"`cat $TARGET/VERSION` resolves, so the literal is the ONLY value that "
-      f"survives - and a stale one downgrades silently rather than failing")
+      f"install.sh is pinned to v{_lit.group(1) if _lit else '?'} but VERSION "
+      f"says {_repo_version}; the pin is the ONLY value a piped install can use, "
+      f"so if it drifts the one-liner silently installs a different release")
 # And it must be a version that has an upstream tag, or the clone aborts.
 check("the release the installer names is a plain dotted version",
       _lit is not None and re.fullmatch(r"\d+\.\d+\.\d+", _lit.group(1)) is not None,
