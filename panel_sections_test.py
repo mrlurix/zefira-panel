@@ -17,6 +17,7 @@ import io
 import json
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -757,14 +758,38 @@ check(S, "an apply without the reviewed SHA is refused with an explanation",
 st, r = js("POST", "/api/update/apply", {"password_confirm": PASSWORD,
                                         "expected_sha": "zz" * 20}, AUTH)
 check(S, "a malformed SHA is refused", st in (400, 422), f"{st} {str(r)[:70]}")
+# A well-formed but UNKNOWN sha. Note what this does and does not prove: the
+# endpoint only checks the SHAPE of expected_sha and then hands off to a thread
+# (`return {"ok": True, "started": True}`), so the actual comparison happens in
+# _do_update after `ls-remote`. The previous version of this check demanded a
+# 4xx from the endpoint, which cannot happen for a well-formed SHA - so it was
+# a FAILURE for the right product and the wrong reason, and it could never tell
+# "the guard rejected it" from "the guard does not exist".
+#
+# What IS assertable here: the apply is accepted only as a start, and the
+# reported version does not move. The thread's own refusal is observed through
+# /api/update/status, which is where _do_update records it.
 st, r = js("POST", "/api/update/apply", {"password_confirm": PASSWORD,
                                         "expected_sha": "a" * 40}, AUTH)
-check(S, "a well-formed but unknown SHA is refused, never reported as applied",
-      st in (400, 404, 409, 422) and r.get("ok") is not True, f"{st} {str(r)[:90]}")
-st, after = js("GET", "/api/update/status", headers=AUTH)
+check(S, "an unknown SHA is at most ACCEPTED as a start, never as an applied update",
+      st in (200, 400, 404, 409, 422)
+      and not (st == 200 and isinstance(r, dict) and r.get("applied") is True),
+      f"{st} {str(r)[:90]}")
+# Give the worker a moment, then confirm nothing moved. Polling rather than a
+# fixed sleep: a machine under load can take longer, and a fixed short wait
+# turns a slow-but-correct run into a flake.
+_deadline = time.time() + 12
+_moved = None
+while time.time() < _deadline:
+    _s2, after = js("GET", "/api/update/status", headers=AUTH)
+    if isinstance(after, dict) and after.get("current") != stt.get("current"):
+        _moved = (after.get("current"), stt.get("current"))
+        break
+    time.sleep(0.5)
 check(S, "a refused apply left the reported version alone",
-      isinstance(after, dict) and after.get("current") == stt.get("current"),
-      f"{st} {after.get('current')} vs {stt.get('current')}")
+      _moved is None,
+      f"version moved to {_moved[0]!r} from {_moved[1]!r} - the worker did not "
+      f"refuse an unknown SHA" if _moved else "")
 st, r = js("POST", "/api/update/apply", {}, AUTH)
 check(S, "an apply with no password at all is refused", st in (400, 422), f"{st}")
 
