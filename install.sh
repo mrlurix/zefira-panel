@@ -212,10 +212,37 @@ if [[ ! "$PORT" =~ ^[0-9]{1,5}$ ]]; then
 fi
 PORT=$(echo "$PORT" | tr -cd '0-9')
 if ((PORT < 1 || PORT > 65535)); then echo "[!] Invalid port: $PORT"; exit 1; fi
+# --- begin port preflight (installer_answers_test.sh slices this) ---
 # Preflight: uvicorn will die with a cryptic bind error otherwise.
-if command -v ss >/dev/null && ss -ltn 2>/dev/null | grep -q ":$PORT[[:space:]]"; then
-    echo "[!] Port $PORT is already in use. Stop that process or choose another port."; exit 1
+#
+# This used to `exit 1` on ANY listener, which meant the documented upgrade
+# (`curl ... | sudo bash` on a server that is already running) could never
+# work: the service holds $PORT, the service is not stopped until ~600 lines
+# later, so the installer always aborted on its own installation. The check is
+# only about somebody ELSE holding the port.
+if command -v ss >/dev/null 2>&1; then
+    if ss -ltnp 2>/dev/null | grep -q ":$PORT[[:space:]]"; then
+        # Whose listener is it? If it is the service we are about to replace,
+        # this is an upgrade, not a conflict.
+        holder="$(ss -ltnp 2>/dev/null | grep ":$PORT[[:space:]]" | head -1)"
+        if printf '%s' "$holder" | grep -q "$SERVICE"; then
+            echo "[*] Port $PORT is held by $SERVICE itself - stopping it for the upgrade"
+            systemctl stop "$SERVICE" 2>/dev/null || true
+            for _w in 1 2 3 4 5 6 7 8 9 10; do
+                ss -ltn 2>/dev/null | grep -q ":$PORT[[:space:]]" || break
+                sleep 1
+            done
+            if ss -ltn 2>/dev/null | grep -q ":$PORT[[:space:]]"; then
+                echo "[!] $SERVICE did not release port $PORT. Stop it and re-run."; exit 1
+            fi
+        else
+            echo "[!] Port $PORT is already in use by another process:"
+            printf '    %s\n' "$holder"
+            echo "    Stop it, or choose another port."; exit 1
+        fi
+    fi
 fi
+# --- end port preflight ---
 
 # ---------- Step 2/7 · Domain ----------
 step 2 "Domain (for links and SSL)" "empty = server IP, no SSL"
@@ -344,20 +371,35 @@ fi
 # ---------- Step 7/7 · Nginx + SSL certificate ----------
 step 7 "Nginx reverse proxy + SSL certificate" "needs a domain, port 80 free"
 SETUP_NGINX="n"; USE_SSL="n"; EMAIL=""
+# --- begin nginx/ssl answers (installer_answers_test.sh slices this) ---
 if [[ -z "$DOMAIN" ]]; then
     echo "No domain given — skipping Nginx and SSL (panel will run on http://SERVER_IP:$PORT)."
 elif [[ $INTERACTIVE -eq 1 ]]; then
     tty_read -rp "Setup Nginx reverse proxy for $DOMAIN ? [y/N]: " SETUP_NGINX
-    if [[ "$SETUP_NGINX" == [yY]* ]]; then
+    # Reduce every spelling of "yes" to a single character, ONCE, right here.
+    # The question below accepted `[yY]*` while the four places that act on the
+    # answer all test `[yY]`, so typing "yes" - the obvious thing to type at a
+    # [y/N] prompt - asked for nginx and then silently did none of it: no
+    # vhost, the bind left on 0.0.0.0, the panel port opened in the firewall,
+    # and a URL printed that resolves to nothing. Not a warning: the installer
+    # looked like it had set nginx up.
+    SETUP_NGINX="${SETUP_NGINX:0:1}"
+    if [[ "$SETUP_NGINX" == [yY] ]]; then
         EMAIL=$(ask "Email for Let's Encrypt" "admin@$DOMAIN")
         if ! is_valid_email "$EMAIL"; then echo "[!] Invalid email: $EMAIL"; exit 1; fi
         tty_read -rp "Issue SSL certificate now? (needs port 80 free) [y/N]: " USE_SSL
+        # Same split, same fix, for the SSL question.
+        USE_SSL="${USE_SSL:0:1}"
+    else
+        USE_SSL="n"
     fi
 else
-    SETUP_NGINX="${ZEFIRA_SETUP_NGINX:-n}"
-    USE_SSL="${ZEFIRA_USE_SSL:-n}"
+    # The unattended path accepted the same spellings, so normalise there too.
+    SETUP_NGINX="${ZEFIRA_SETUP_NGINX:0:1}"; SETUP_NGINX="${SETUP_NGINX:-n}"
+    USE_SSL="${ZEFIRA_USE_SSL:0:1}";         USE_SSL="${USE_SSL:-n}"
     EMAIL="${ZEFIRA_SSL_EMAIL:-}"
 fi
+# --- end nginx/ssl answers ---
 
 # ---------- System packages ----------
 echo "==> [1/6] Installing system packages..."

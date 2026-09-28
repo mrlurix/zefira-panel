@@ -51,6 +51,19 @@ check("the one-liner installs the pinned release, not the one it replaces",
 _i = subprocess.run([BASH, "installer_interactive_test.sh"], capture_output=True,
                     text=True, cwd=ROOT)
 
+# Two answers that silently did nothing, checked by RUNNING the logic. Both
+# look correct in the source: the nginx question tested `[yY]*` while the four
+# places acting on the answer tested `[yY]`, so typing "yes" asked for nginx and
+# then did none of it; and the port preflight exited 1 on ANY listener while
+# the service was not stopped for ~600 more lines, so `curl | sudo bash` on a
+# running server always aborted on the panel's own installation.
+_a = subprocess.run([BASH, "installer_answers_test.sh"], capture_output=True,
+                    text=True, cwd=ROOT)
+check("a 'yes' at the nginx prompt actually enables nginx, and a foreign port"
+      " is distinguished from our own service",
+      _a.returncode == 0,
+      (_a.stdout or "")[-320:] or (_a.stderr or "")[-320:])
+
 # ---- 2. the blocky wordmark ---------------------------------------------
 art = re.search(r"ZEFIRA_ART=\(\n(.*?)\n\)", sh, re.S)
 check("the banner carries a block-art wordmark array", art is not None)
