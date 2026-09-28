@@ -325,6 +325,31 @@ check("no 5xx from any PATCH boundary input", not pcrash, "; ".join(pcrash[:4]))
 # An empty patch must be refused, not a fake success.
 st_empty, _, _ = req("PATCH", f"/api/users/{puid}", "{}", AUTH)
 check("empty patch is refused", st_empty == 422, f"{st_empty}")
+# Conflicting intents without the absolute field used to pass with a 200 while
+# the handler silently dropped one operation (the audit logged both). The
+# validator only fired when the absolute field was present, so add+set,
+# add+reset and extend+set sailed through. Each of these must be a 422.
+_conflicts = [
+    {"add_volume_gb": 5, "set_volume_gb": 50},
+    {"add_used_gb": 1, "reset_used": True},
+    {"used_gb": 5, "reset_used": True},
+    {"extend_days": 30, "set_expires_at": "2030-01-01T00:00"},
+    {"extend_days": 30, "expires_at": "2030-01-01T00:00"},
+]
+_bad_accept = []
+for _body in _conflicts:
+    _st, _, _ = req("PATCH", f"/api/users/{puid}", json.dumps(_body), AUTH)
+    if _st != 422:
+        _bad_accept.append(f"{_body} -> {_st}")
+check("conflicting patch intents are refused even without the absolute field",
+      not _bad_accept, "; ".join(_bad_accept[:3]))
+# And the positive side: a lone top-up must actually land on the row.
+_before = row(puid).get("volume_gb")
+_st, _, _ = req("PATCH", f"/api/users/{puid}", json.dumps({"add_volume_gb": 2}), AUTH)
+_after = row(puid).get("volume_gb")
+check("a lone top-up is applied to the row",
+      _st == 200 and abs((_after or 0) - (_before or 0) - 2) < 1e-6,
+      f"st={_st} before={_before} after={_after}")
 # The user must still be servable after the whole fuzz run.
 st_srv, _, _ = req("GET", f"/sub/{pu.get('token')}", ua=VP_UA)
 check("user still serves after the PATCH fuzz", st_srv == 200, f"{st_srv}")

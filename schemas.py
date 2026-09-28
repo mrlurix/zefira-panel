@@ -124,19 +124,35 @@ class UserPatchIn(BaseModel):
 
     @model_validator(mode="after")
     def _no_duplicate_intent(self):
+        # Intent groups, not pairs. The previous version listed
+        # (absolute, prefixed) pairs and only fired when the ABSOLUTE field was
+        # present, so {"add_volume_gb": 5, "set_volume_gb": 50} passed
+        # validation with a 200 and the handler then applied the top-up and
+        # overwrote it with the set - the audit logged "vol+5, vol=50" while
+        # only 50 survived. Same for {"add_used_gb": 1, "reset_used": true}
+        # (the +1 discarded, the row zeroed) and {"extend_days": 30,
+        # "set_expires_at": ...} (the extension silently overwritten).
+        # Any two members of one group is a 422, whichever two they are.
+        groups = (
+            ("volume_gb", "set_volume_gb", "add_volume_gb"),
+            ("used_gb", "add_used_gb"),
+            ("expires_at", "set_expires_at", "extend_days"),
+            ("note", "set_note"),
+            ("device_limit", "set_device_limit"),
+            ("days", "extend_days"),
+        )
         dupes = [
-            absolute
-            for absolute, prefixed in (
-                ("used_gb", "add_used_gb"),
-                ("volume_gb", "set_volume_gb"),
-                ("volume_gb", "add_volume_gb"),
-                ("expires_at", "set_expires_at"),
-                ("note", "set_note"),
-                ("device_limit", "set_device_limit"),
-                ("days", "extend_days"),
-            )
-            if getattr(self, absolute) is not None and getattr(self, prefixed) is not None
+            g[0]
+            for g in groups
+            if sum(1 for f in g if getattr(self, f) is not None) >= 2
         ]
+        # reset_used is a flag, not a value: `False` is a real answer, so it
+        # cannot join the None-count above. Combined with either used-field it
+        # zeroes what the other just set - same silent drop, same 422.
+        if self.reset_used and (
+            self.used_gb is not None or self.add_used_gb is not None
+        ):
+            dupes.append("used_gb")
         if dupes:
             raise ValueError(
                 "send either the absolute field or its add/set variant, not both: "
