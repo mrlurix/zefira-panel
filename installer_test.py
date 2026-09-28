@@ -128,6 +128,65 @@ check("a clone can be pinned to an exact commit, and a mismatch aborts",
       and 'CLONE_SHA" != "$ZEFIRA_EXPECTED_SHA"' in sh
       and "nothing was installed" in sh,
       "no expected-commit check")
+# ---- the banner art must actually read as the product name --------------
+# The art had drifted into a mixture of 7-, 8- and 9-wide glyphs whose columns
+# no longer lined up, so the letters did not read as ZEFIRA at all. It is now
+# generated from one font table, and these checks assert the LETTERS - which
+# every earlier version of this test did not: it only counted cells, so a
+# correctly-spaced picture of the wrong word passed.
+_art = re.search(r"ZEFIRA_ART=\(\n(.*?)\n\)", sh, re.S)
+_rows = ([ln.strip()[1:-1] for ln in _art.group(1).splitlines() if ln.strip()]
+         if _art else [])
+check("the banner art is present", bool(_rows), "ZEFIRA_ART not found in install.sh")
+check("the banner spells the product name: zefira", len(_rows) == 5,
+      f"expected 5 rows for a 5-row font, found {len(_rows)}")
+check("every art row is the same width, so the columns line up",
+      len({len(r) for r in _rows}) == 1,
+      f"row widths {sorted({len(r) for r in _rows})}")
+# Split each row on the single-space gaps between 5-wide glyphs and rebuild the
+# letter each column spells. This reads the NAME, which is what was wrong.
+_GLYPHS = {
+    "Z": ["█████", "    █", "   █ ", "  █  ", "█████"],
+    "E": ["█████", "█    ", "████ ", "█    ", "█████"],
+    "F": ["█████", "█    ", "████ ", "█    ", "█    "],
+    "I": ["█████", "  █  ", "  █  ", "  █  ", "█████"],
+    "R": ["█████", "█   █", "█████", "█   █", "█   █"],
+    "A": [" ███ ", "█   █", "█████", "█   █", "█   █"],
+}
+_WANT = "ZEFIRA"
+
+
+def _read_letters(rows):
+    """Which letter does each column of glyphs spell?"""
+    if not rows or len({len(r) for r in rows}) != 1:
+        return None
+    w = len(rows[0])
+    letters = []
+    for start in range(0, w, 6):          # 5-wide glyph + 1-space gap
+        chunk = [r[start:start + 5] for r in rows]
+        if any(len(c) != 5 for c in chunk):
+            return None
+        found = [ch for ch, g in _GLYPHS.items() if g == chunk]
+        letters.append(found[0] if len(found) == 1 else "?")
+    return "".join(letters)
+
+
+_read = _read_letters(_rows) if _rows else None
+check("each column of the art spells the right letter",
+      _read == _WANT, f"the art reads {_read!r}, expected {_WANT!r}")
+check("the letters are separated by exactly one space, never zero or two",
+      len(_rows) == 5 and len(_rows[0]) == 5 * len(_WANT) + (len(_WANT) - 1),
+      f"width {len(_rows[0]) if _rows else 0} for {len(_WANT)} letters "
+      f"(5 cells + 1 gap each)")
+_named = re.findall(r'\$\{C_BLD\}([A-Za-z0-9_.-]+)\$\{C_RST\}', sh)
+check("the banner names the product under the art",
+      any(n.lower() == "zefira" for n in _named),
+      f"the name under the art is {_named}, expected zefira "
+      f"(checked case-insensitively - a first version of this check demanded "
+      f"both 'Zefira' and 'zefira' literally, which is not a thing)")
+check("the art uses no escape sequences that bash would print literally",
+      "\\x" not in (_art.group(1) if _art else "") and "\\033" not in sh.split("ZEFIRA_ART=(")[1][:400],
+      "in double quotes \\x is not an escape, so it would print as text")
 check("the read-it-first instructions use a private mktemp directory",
       re.search(r"mktemp -d", sh) is not None
       and "/tmp/zefira-inst" not in sh,
