@@ -494,7 +494,44 @@ cd "$TARGET"
 
 # ---------- Python env ----------
 echo "==> [3/6] Python environment..."
+
+# The venv is the one thing in $TARGET that ROOT EXECUTES, and $TARGET is
+# zefira-owned and stays writable at runtime (ReadWritePaths). `copy_tree`
+# excludes .venv, and `python3 -m venv` REUSES an existing one - ensurepip
+# reports pip "already satisfied" and does not replace it. So on every upgrade
+# the tree is already zefira-owned when the next line runs `.venv/bin/pip` as
+# root: its shebang points at an interpreter inside a zefira-writable tree, and
+# so does every `.pth` file, `sitecustomize.py` and the vendored pip itself.
+# Any RCE in the panel is therefore one `curl | sudo bash` away from ROOT.
+#
+# The script already refuses to take the SOURCE tree from $TARGET for exactly
+# this reason (see the source-discovery block above). The venv was the half it
+# missed.
+#
+# Fix: only ever execute a venv that is root-owned and not group/other
+# writable; anything else is discarded and rebuilt. `zefira` can still delete
+# the directory - it lives in a writable parent - but deleting is harmless,
+# because the line below recreates it from the trusted system python3.
+if [[ -d .venv ]]; then
+    _venv_owner="$(stat -c '%U' .venv 2>/dev/null || echo unknown)"
+    _venv_mode="$(stat -c '%a' .venv 2>/dev/null || echo 999)"
+    # Both trailing octal digits matter, not just the last one: for a
+    # DIRECTORY the second-to-last is the group's bits. A first version checked
+    # only "${mode: -1}", so 775 (group-writable) passed as trustworthy - and
+    # group-writable is enough to swap sitecustomize.py. Require no write bit
+    # for group or other at all.
+    if [[ "$_venv_owner" != "root" || ! "${_venv_mode: -2}" =~ ^[0-5][0-5]$ ]]; then
+        warn "existing .venv is owner=$_venv_owner mode=$_venv_mode - discarding it"
+        warn "  (a venv ROOT executes must not be writable by the service account)"
+        rm -rf .venv
+    fi
+fi
 python3 -m venv .venv
+# Belt and braces: the interpreter that is about to run as root is root-owned
+# and not writable by anyone else. A service foothold can remove it, never
+# alter it.
+chown -R root:root .venv 2>/dev/null || true
+chmod go-w .venv 2>/dev/null || true
 # Install from the hash-locked set, not from requirements.txt. Exact
 # top-level pins never pinned the TRANSITIVE graph: `uvicorn[standard]` alone
 # drags in a dozen version ranges, so two installs of the same file could
@@ -567,7 +604,14 @@ if ! id zefira >/dev/null 2>&1; then
     useradd --system --home-dir "$TARGET" --no-create-home --shell /usr/sbin/nologin zefira
     ok "Created system user 'zefira'"
 fi
-chown -R zefira:zefira "$TARGET"
+# The application tree is the service account's - that is the whole point of
+# User=zefira. The VENV IS NOT: it is what root executes on the next upgrade
+# (see the venv block above), so handing it to the service account would put
+# the escalation straight back. chown it separately, and only if it exists.
+find "$TARGET" -mindepth 1 -maxdepth 1 ! -name '.venv' -exec chown -R zefira:zefira {} +
+chown -R root:root "$TARGET/.venv" 2>/dev/null || true
+chmod -R go-w "$TARGET/.venv" 2>/dev/null || true
+ok "Tree ownership set (.venv stays root-owned and read-only to the service)"
 # ProtectSystem=strict bind-mounts ReadWritePaths when the namespace is
 # set up — BEFORE the app (which creates instance/ itself) ever runs.
 # A missing dir = 226/NAMESPACE and a dead service, so create it here.

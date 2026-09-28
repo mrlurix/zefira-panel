@@ -149,6 +149,38 @@ _restore_buffer_slot = threading.BoundedSemaphore(1)
 # copy, so without this an anonymous client can pile up memory and occupy
 # every worker with requests that are all going to end in 401/403.
 _api_buffer_slots = threading.BoundedSemaphore(32)
+# The semaphore above bounds the PROCESS; it does not bound a single source.
+# 32 stalled anonymous POSTs - a header block and then silence, no body bytes at
+# all - held every slot for the 15 s read deadline, and every mutating route
+# then answered 503, `POST /api/login` included. This bounds one host.
+#
+# 16, not 4: this is defence in depth behind the CSRF hoist (which refuses the
+# UNAUTHENTICATED stall outright, and is the actual fix), so it only has to stop
+# one credential from taking every slot. A first version used 4 and
+# `attack_quota_test.py` caught it - six legitimate concurrent POSTs from one
+# address are what the panel itself does during a bulk operation, and three of
+# them came back 429. A cap that breaks real use is not a cap, it is a new bug.
+_PREAUTH_MAX_PER_IP = 16
+_preauth_inflight: dict[str, int] = {}
+_preauth_lock = threading.Lock()
+
+
+def _preauth_enter(key: str) -> bool:
+    with _preauth_lock:
+        n = _preauth_inflight.get(key, 0)
+        if n >= _PREAUTH_MAX_PER_IP:
+            return False
+        _preauth_inflight[key] = n + 1
+        return True
+
+
+def _preauth_exit(key: str) -> None:
+    with _preauth_lock:
+        n = _preauth_inflight.get(key, 0) - 1
+        if n > 0:
+            _preauth_inflight[key] = n
+        else:
+            _preauth_inflight.pop(key, None)
 # Telegram notifications: a small fixed pool with a bounded queue. One thread
 # per notification let an unauthenticated flood (failed logins -> lockout
 # alerts, rotating IPs) create unbounded threads and outbound requests.
@@ -1593,9 +1625,44 @@ async def csrf_and_size_middleware(request: Request, call_next):
     # exit path (early return, exception, normal completion) releases it once.
     restore_slot_held = False
     api_slot_held = False
+    # Per-IP pre-read budget. Released by _release_restore_slot() like the
+    # others, so a 4xx/413/408 return cannot leak an in-flight slot - a leaked
+    # one would lock the panel out of its own API after four bad requests from
+    # a single address.
+    preauth_held = False
+    preauth_key = ""
+
+    # CSRF FIRST, before a single body byte is read.
+    #
+    # This check reads only headers and the path - it never touches the body -
+    # so it costs nothing here, and putting it first is the difference between
+    # "an anonymous client can occupy a buffer slot" and "it cannot". It used to
+    # run ~60 lines LATER, after the pre-read, which meant:
+    #
+    #   * 32 stalled anonymous POSTs (a header block, then silence - zero body
+    #     bytes) held every one of the 32 slots for the 15 s read deadline, and
+    #     every mutating route then answered 503, `POST /api/login` included;
+    #   * one stalled anonymous `POST /api/restore` held the single global
+    #     restore slot for 60 s at a time, forever, so the operator's only
+    #     disaster-recovery path was unavailable on demand.
+    #
+    # Both are pre-auth, so neither needed any credential. Now the request is
+    # refused before it can take a slot unless it carries a custom
+    # `Authorization` header - which a browser cannot send cross-origin without
+    # a CORS preflight the panel never answers - or the `X-Requested-With` the
+    # panel's own UI always sends.
+    if request.url.path.startswith("/api") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        _auth_h = request.headers.get("authorization", "")
+        _bearer = _auth_h[:7].lower() == "bearer " and len(_auth_h) > 7
+        if not _bearer and request.headers.get("x-requested-with") != "XMLHttpRequest":
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
 
     def _release_restore_slot() -> None:
-        nonlocal restore_slot_held, api_slot_held
+        nonlocal restore_slot_held, api_slot_held, preauth_held, preauth_key
+        if preauth_held:
+            preauth_held = False
+            if preauth_key:
+                _preauth_exit(preauth_key)
         if restore_slot_held:
             restore_slot_held = False
             try:
@@ -1648,7 +1715,16 @@ async def csrf_and_size_middleware(request: Request, call_next):
                 return JSONResponse(
                     {"detail": "Content-Length required"}, status_code=411
                 )
+            preauth_key = f"preauth|{client_ip(request)}"
+            if not _preauth_enter(preauth_key):
+                return JSONResponse(
+                    {"detail": "Too many concurrent uploads, retry shortly"},
+                    status_code=429,
+                )
+            preauth_held = True
             if not _api_buffer_slots.acquire(blocking=False):
+                _preauth_exit(preauth_key)
+                preauth_held = False
                 return JSONResponse(
                     {"detail": "Server busy, retry shortly"}, status_code=503
                 )
@@ -1747,15 +1823,6 @@ async def csrf_and_size_middleware(request: Request, call_next):
             # The restore slot was taken before the read; a failure here would
             # otherwise leak it and block every later restore until restart.
             _release_restore_slot()
-    if request.url.path.startswith("/api") and request.method not in {"GET", "HEAD", "OPTIONS"}:
-        # Custom Authorization headers cannot be sent cross-origin without a
-        # CORS preflight (which this panel never passes), so a present Bearer
-        # credential proves a non-browser client: CSRF does not apply to it.
-        auth_h = request.headers.get("authorization", "")
-        bearer = auth_h[:7].lower() == "bearer " and len(auth_h) > 7
-        if not bearer and request.headers.get("x-requested-with") != "XMLHttpRequest":
-            _release_restore_slot()
-            return JSONResponse({"detail": "forbidden"}, status_code=403)
     # Restore isolation: a restore wipes users while merging the rest, so a
     # write landing mid-restore is silently wiped (or half-merged). Reject
     # mutating API calls while the restore lock is held. A backup is a read,
