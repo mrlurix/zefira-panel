@@ -16,6 +16,7 @@ Usage: python panel_sections_test.py http://127.0.0.1:8011 admin PASSWORD
 import io
 import json
 import re
+import socket
 import sys
 import time
 import urllib.error
@@ -1159,6 +1160,49 @@ try:
           v.get("domain") == "10.9.9.9" and v.get("_is_inbound_variant") is True
           and protocols._effective_host("s", v) == "10.9.9.9",
           f"{v.get('domain')} / {protocols._effective_host('s', v)}")
+    # A per-user prefix is a DNS label: on an IP literal "<hash>.<ip>" is not
+    # an address and resolves nowhere, while the panel reported healthy and
+    # served 200s. Verified by resolving the emitted string, not by reading it.
+    _ip_srv = {"domain": "", "obfuscated_host": "203.0.113.7",
+               "per_user_subdomain": "1"}
+    _ip_host = protocols._effective_host("s3cr3t", _ip_srv)
+    try:
+        socket.getaddrinfo(_ip_host, 443)
+        _ip_resolves = True
+    except socket.gaierror:
+        _ip_resolves = False
+    check(S, "a per-user prefix is never glued onto an IP literal",
+          _ip_host == "203.0.113.7" and _ip_resolves,
+          f"emitted { _ip_host!r} (resolves={_ip_resolves}) - every link and "
+          f"config would fail at DNS")
+    # ...while a real hostname keeps its prefix (the feature still works).
+    _hn_host = protocols._effective_host(
+        "s3cr3t", {"domain": "", "obfuscated_host": "relay.example.com",
+                   "per_user_subdomain": "1"})
+    check(S, "a hostname keeps its per-user prefix",
+          _hn_host != "relay.example.com"
+          and _hn_host.endswith(".relay.example.com"),
+          f"emitted {_hn_host!r}")
+    # A hand-edited or migrated row with a NULL created_at must degrade one
+    # row, never 500 the whole list endpoint. Three serialisers lacked the
+    # guard their six siblings carry; verified by constructing the row, not by
+    # reading the source.
+    try:
+        from database import ApiToken as _AT, BlockedSite as _BS, TunnelNode as _TN
+        _null_rows = [
+            _AT(id=1, admin_id=1, name="t", prefix="ab", token_sha="x" * 64,
+                scopes="full", created_at=None),
+            _BS(id=1, domain="x.com", category="ads", enabled=True,
+                created_at=None),
+            _TN(id=1, name="n", iran_ip="1.2.3.4", kharej_ip="5.6.7.8",
+                tunnel_port=443, token_enc="x", created_at=None),
+        ]
+        _null_ok = all(r.to_dict().get("created_at") is None for r in _null_rows)
+        _null_err = ""
+    except Exception as e:  # noqa: BLE001 - the guard itself must not crash
+        _null_ok, _null_err = False, f"{type(e).__name__}: {e}"
+    check(S, "a NULL created_at degrades one row instead of 500ing the list",
+          _null_ok, _null_err[:120])
     try:
         protocols._variant_srv({"domain": "panel.example.com"},
                                {"port": 8443, "host": "", "node_id": 4,

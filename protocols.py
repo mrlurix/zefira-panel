@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import io
+import ipaddress
 import json
 import re
 import secrets as pysecrets
@@ -105,13 +106,41 @@ def pem_block_is_exact(pem: str, label: str) -> bool:
     return bool(m) and m.group("label") == label
 
 
+def _maybe_prefix(secret: str, base: str) -> str:
+    """Prepend the per-user label, but only where a label can live.
+
+    A per-user prefix is a DNS label: on an IP literal, "abc123.203.0.113.7"
+    is not an address and resolves nowhere, so every emitted link and config
+    fails at DNS while the panel reports healthy. On the "localhost" fallback
+    a prefix is equally unresolvable. Both cases return the base unchanged -
+    an address the client can actually dial beats a "consistent" one it
+    cannot.
+    """
+    try:
+        ipaddress.ip_address(base)
+        return base
+    except ValueError:
+        pass
+    if base == "localhost":
+        return base
+    prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
+    candidate = f"{prefix}.{base}"
+    return candidate if _HOST_RE.match(candidate) else base
+
+
 def _effective_host(secret: str, srv: dict) -> str:
+    # The per-user prefix applies wherever the old code applied it - but never
+    # to an IP literal or the localhost fallback (see _maybe_prefix). The main
+    # endpoint WITHOUT obfuscated_host deliberately stays bare even when the
+    # checkbox is on: prefixing it here would break deployments that enabled
+    # the checkbox without wildcard DNS on the main domain, whose main links
+    # work today. A prefixed IP, by contrast, resolves for nobody, so refusing
+    # to emit one cannot break a working setup.
     if srv.get("_is_inbound_variant"):
         base = _safe_host(srv.get("domain"), "localhost")
         per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
         if per_user:
-            prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
-            return _safe_host(f"{prefix}.{base}", base)
+            return _maybe_prefix(secret, base)
         return base
     obf = (srv.get("obfuscated_host") or "").strip()
     if not obf:
@@ -128,11 +157,9 @@ def _effective_host(secret: str, srv: dict) -> str:
     obf = obf.strip().strip("/")
     if not obf:
         return _safe_host(srv.get("domain"), "localhost")
+    base = _safe_host(obf, _safe_host(srv.get("domain"), "localhost"))
     per_user = str(srv.get("per_user_subdomain", "0")).lower() in ("1", "true", "yes", "on")
-    if per_user:
-        prefix = hashlib.sha256(secret.encode()).hexdigest()[:8]
-        return _safe_host(f"{prefix}.{obf}", _safe_host(srv.get("domain"), "localhost"))
-    return _safe_host(obf, _safe_host(srv.get("domain"), "localhost"))
+    return _maybe_prefix(secret, base) if per_user else base
 
 
 def _cdn_sni(srv: dict) -> str | None:

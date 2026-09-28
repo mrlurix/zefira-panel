@@ -292,7 +292,12 @@ class BlockedSite(Base):
             "domain": safe_text(self.domain),
             "category": safe_text(self.category),
             "enabled": self.enabled,
-            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            # A hand-edited or migrated row with a NULL created_at raised
+            # AttributeError here and took out the whole list endpoint with a
+            # 500. The sibling serialisers guard this; this one did not.
+            "created_at": (
+                self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
+            ),
         }
 
 
@@ -326,7 +331,11 @@ class TunnelNode(Base):
             "last_check": (
                 self.last_check.isoformat(timespec="seconds") + "Z" if self.last_check else None
             ),
-            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            # Same NULL guard as last_check above: a NULL created_at 500'd the
+            # whole /api/nodes list instead of degrading one row.
+            "created_at": (
+                self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
+            ),
         }
 
 
@@ -383,7 +392,12 @@ class ApiToken(Base):
             "name": safe_text(self.name),
             "prefix": safe_text(self.prefix),
             "scopes": self.scopes or "full",
-            "created_at": self.created_at.isoformat(timespec="seconds") + "Z",
+            # Same NULL guard as expires_at/last_used_at below: to_backup_dict
+            # in this same class already uses `self.created_at or utcnow()`,
+            # so the unguarded to_dict was an oversight, not a policy.
+            "created_at": (
+                self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
+            ),
             "expires_at": (
                 self.expires_at.isoformat(timespec="seconds") + "Z" if self.expires_at else None
             ),
