@@ -5,15 +5,21 @@ that the security fixes hold under the live adversarial probes too.
 Usage: .venv\\Scripts\\python run_all_tests.py [admin] [password]
 """
 import os
+import re
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+# Per-run panel logs, outside the repo so a failing run never leaves untracked
+# files in the tree the pre-push gate inspects.
+LOG_DIR = os.path.join(tempfile.gettempdir(), "zefira-suite-logs")
+os.makedirs(LOG_DIR, exist_ok=True)
 ADMIN = sys.argv[1] if len(sys.argv) > 1 else "admin"
 PASSWORD = sys.argv[2] if len(sys.argv) > 2 else "YOUR_PASSWORD"
 HOST, PORT = "127.0.0.1", "8011"
@@ -127,14 +133,23 @@ for script, label in SUITES:
     # Reset BEFORE each suite too: a dirty workdir (leftovers from manual
     # testing) must never decide a suite's result.
     reset_db(f"before {label}")
+    # The panel's own output used to go to DEVNULL. A suite that failed with
+    # `status 0` on one endpoint - which is what a crashed or wedged worker
+    # looks like from the client side - left nothing behind to explain it, and
+    # the only honest answer was "could not reproduce". Keep the log, and print
+    # its tail when the suite fails, so a server-side fault is attributable to
+    # a traceback instead of guessed at.
+    log_path = os.path.join(LOG_DIR, re.sub(r"[^A-Za-z0-9_.-]", "_", script) + ".log")
+    log_fh = open(log_path, "wb")
     proc = subprocess.Popen(
         [PY, "-m", "uvicorn", "main:app", "--host", HOST, "--port", str(PORT),
          "--no-server-header", "--no-proxy-headers", "--no-access-log"],
-        cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        cwd=ROOT, stdout=log_fh, stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
     )
     if not wait_up():
         print(f"[FAIL] {label}: server did not start")
+        log_fh.close()
         stop(proc)
         sys.exit(1)
     print(f"\n===== {label} ({script}) =====")
@@ -143,6 +158,24 @@ for script, label in SUITES:
                          env=CHILD_ENV)
     results.append((label, rc))
     stop(proc)
+    log_fh.close()
+    if rc != 0:
+        # Only on failure: a 40-line traceback in a passing transcript is noise
+        # that trains people to skip the output.
+        try:
+            with open(log_path, "rb") as fh:
+                tail = fh.read()[-6000:].decode("utf-8", "replace")
+        except OSError:
+            tail = ""
+        interesting = [ln for ln in tail.splitlines()
+                       if ln.strip() and "Traceback" in ln or "Error" in ln
+                       or "Exception" in ln or "CRITICAL" in ln]
+        if interesting:
+            print(f"----- panel log for {label} ({log_path}) -----")
+            for ln in interesting[-25:]:
+                print("  " + ln[:160])
+        else:
+            print(f"----- panel log for {label}: no traceback in {log_path} -----")
     time.sleep(1)
     # Each suite gets a clean slate: rows the previous one intentionally left
     # (password-change token revocations, restored admins…) must not decide

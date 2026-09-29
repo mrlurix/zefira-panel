@@ -312,6 +312,68 @@ check("the release the installer names is a plain dotted version",
       _lit is not None and re.fullmatch(r"\d+\.\d+\.\d+", _lit.group(1)) is not None,
       f"got {(_lit.group(1) if _lit else None)!r}, want x.y.z so the v-prefixed "
       f"tag can be built from it")
+
+# The two checks above are two literals agreeing with each other. They stayed
+# green while the pin named a release that no longer contained the code: v1.15.2
+# predates the pre-auth DoS budget, the PATCH intent guard and the IP-prefix
+# fix, so a FRESH one-liner install would have run today's installer over
+# yesterday's application - the fixes would never reach a new server, and the
+# one-liner would report success. The pin's whole purpose is reproducibility,
+# and a pin that lags the fixes it was meant to ship reproduces the vulnerability.
+#
+# So the pin is compared against the CODE, not against another literal: the
+# product files inside the named tag must be byte-identical to this tree's.
+_PRODUCT_FILES = ("main.py", "protocols.py", "schemas.py", "database.py",
+                  "security.py", "config.py", "static/app.js",
+                  "templates/panel.html", "install.sh")
+_pin = _lit.group(1) if _lit else ""
+_tag = f"v{_pin}"
+
+
+def _git(*args):
+    try:
+        r = subprocess.run(["git"] + list(args), cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
+        return r.returncode == 0, (r.stdout or "").strip()
+    except (OSError, subprocess.SubprocessError):
+        return False, ""
+
+
+_tag_ok, _tag_sha = _git("rev-parse", "--verify", f"{_tag}^{{commit}}")
+check(f"the pinned release {_tag} exists as a tag the clone can fetch",
+      _tag_ok,
+      f"no such tag. The one-liner runs `git clone --branch {_tag}`; with no "
+      f"tag of that name the clone fails and the install dies at the last step")
+# Compare blob ids, never bytes. The working tree is CRLF and the blob is LF,
+# so a byte comparison reports EVERY file as different and the check becomes a
+# permanent lie. `git hash-object --path <p>` runs the same clean filter the
+# index uses, so an unchanged file's id matches its id in the tag.
+_drifting = []
+if _tag_ok:
+    for f in _PRODUCT_FILES:
+        _, ls = _git("ls-tree", _tag, "--", f)
+        parts = ls.split()
+        if len(parts) < 3:
+            _drifting.append(f"{f} (absent from the tag)")
+            continue
+        rc, live = _git("hash-object", "--path", f, "--", f)
+        if rc != 0:
+            _drifting.append(f"{f} (unreadable)")
+            continue
+        if parts[2] != live:
+            _drifting.append(f)
+if not _tag_ok:
+    _drift_detail = (f"tag {_tag} does not exist yet, so there is nothing to "
+                     f"compare. Commit first, then tag the release.")
+else:
+    _drift_detail = (
+        f"differs in {len(_drifting)} file(s): {', '.join(_drifting[:4])}. The "
+        f"installer clones the tag, so anything committed after it is NOT "
+        f"installed - the fix is in the repository and missing from every fresh "
+        f"install. Bump VERSION and ZEFIRA_PINNED together and tag the release.")
+check(f"the pinned release {_tag} ships this tree's code, not older code",
+      _tag_ok and not _drifting, _drift_detail)
 # ---- the lock must be installable on the platform it ships to ------------
 # It was not. tools_lock.py hashed whatever `pip download` found ON THE
 # MACHINE THAT GENERATED IT and only asked PyPI when it found nothing, so a
