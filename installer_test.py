@@ -4,6 +4,7 @@ The one-liner (`curl ... | sudo bash`) must never block, so the aftercare
 menu has to be interactive-only, and the uninstall path has to work when $0
 is "bash" (which is what it is under a pipe).
 """
+import hashlib
 import io
 import os
 import re
@@ -345,10 +346,25 @@ check(f"the pinned release {_tag} exists as a tag the clone can fetch",
       _tag_ok,
       f"no such tag. The one-liner runs `git clone --branch {_tag}`; with no "
       f"tag of that name the clone fails and the install dies at the last step")
-# Compare blob ids, never bytes. The working tree is CRLF and the blob is LF,
-# so a byte comparison reports EVERY file as different and the check becomes a
-# permanent lie. `git hash-object --path <p>` runs the same clean filter the
-# index uses, so an unchanged file's id matches its id in the tag.
+# Compare blob ids, never bytes. The working tree is CRLF (core.autocrlf=true)
+# and the stored blob is LF, so a byte comparison reports EVERY file as
+# different and the check becomes a permanent lie. The id is computed here
+# instead of shelling out to `git hash-object` once per file: nine subprocesses
+# is nine chances to fail for reasons that have nothing to do with the code
+# under test. A blob id is sha1("blob <len>\0" + content) with the checkin
+# filter applied, which for this repository is exactly CRLF -> LF.
+_ok_crlf, _crlf = _git("config", "--get", "core.autocrlf")
+_AUTOCRLF = bool(_ok_crlf) and _crlf.strip().lower() == "true"
+
+
+def _blob_id(rel):
+    with io.open(ROOT + os.sep + rel.replace("/", os.sep), "rb") as fh:
+        raw = fh.read()
+    if _AUTOCRLF:
+        raw = raw.replace(b"\r\n", b"\n")
+    return hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest()
+
+
 _drifting = []
 if _tag_ok:
     for f in _PRODUCT_FILES:
@@ -357,9 +373,10 @@ if _tag_ok:
         if len(parts) < 3:
             _drifting.append(f"{f} (absent from the tag)")
             continue
-        rc, live = _git("hash-object", "--path", f, "--", f)
-        if rc != 0:
-            _drifting.append(f"{f} (unreadable)")
+        try:
+            live = _blob_id(f)
+        except OSError as exc:
+            _drifting.append(f"{f} (unreadable: {exc.strerror})")
             continue
         if parts[2] != live:
             _drifting.append(f)
