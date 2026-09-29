@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleUsers">Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=34">
 </head>
 <body>
 <header class="topbar">
@@ -44,6 +44,21 @@
 
 <h1><span data-i18n="usr.titleA">Users</span> <span class="z">&amp;</span> <span data-i18n="usr.titleB">Plans</span></h1>
 <p class="subtitle" data-i18n="usr.subtitle">Everything about selling and managing accounts.</p>
+
+<h2 id="panel-dashboard" data-i18n="usr.dashTitle">Panel dashboard</h2>
+<p data-i18n="usr.dashIntro">The screen you land on after signing in. Counters first, then the machine, then the accounts you created last.</p>
+<table>
+<tr><th data-i18n="usr.dashThCard">Card</th><th data-i18n="usr.dashThMeans">What it counts</th></tr>
+<tr><td data-i18n="usr.dashC1">Total users</td><td data-i18n="usr.dashC1d">Every account on the panel, whatever state it is in</td></tr>
+<tr><td data-i18n="usr.dashC2">Active</td><td data-i18n="usr.dashC2d">Enabled and not past its expiry date. The small line underneath adds the three groups that are <i>not</i> in that number: expiring within 7 days, not started yet, and out of volume</td></tr>
+<tr><td data-i18n="usr.dashC3">Expired</td><td data-i18n="usr.dashC3d">Still enabled, but the date has passed. They serve a dashboard and no configs</td></tr>
+<tr><td data-i18n="usr.dashC4">Disabled</td><td data-i18n="usr.dashC4d">Switched off by you. Nothing resolves for them at all</td></tr>
+<tr><td data-i18n="usr.dashC5">Total sold volume</td><td data-i18n="usr.dashC5d">Sum of every plan you sold, with the gigabytes consumed underneath</td></tr>
+</table>
+<h3 data-i18n="usr.dashSysT" id="system-status">System status</h3>
+<p data-i18n="usr.dashSys">CPU, memory and disk bars plus the uptime. The card disappears on hosts where the panel cannot read those numbers — that is the server saying no, not a bug to chase.</p>
+<h3 data-i18n="usr.dashRecentT" id="latest-users">Latest users</h3>
+<p data-i18n="usr.dashRecent">The five newest accounts with their protocols, volume, expiry and status. <b data-i18n="usr.dashRecentA">View all</b><span data-i18n="usr.dashRecentB"> jumps to the full list with the search box and CSV export.</span></p>
 
 <h2 id="creating-a-user" data-i18n="usr.creating">Creating a user</h2>
 <ol>
@@ -135,8 +150,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=30"></script>
-<script src="assets/docs.js?v=30"></script>
-<script src="assets/support-ai.js?v=30"></script>
+<script src="assets/i18n.js?v=34"></script>
+<script src="assets/docs.js?v=34"></script>
+<script src="assets/support-ai.js?v=34"></script>
 </body>
 </html>

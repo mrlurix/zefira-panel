@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleConfig">Configuration — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=34">
 </head>
 <body>
 <header class="topbar">
@@ -70,6 +70,31 @@
 <h2 id="panel-settings" data-i18n="cfg.panelSettings">Panel settings</h2>
 <p><b data-i18n="cfg.settingsPath">Settings → Server / Hosts</b> <span data-i18n="cfg.settingsText">edits domain, ports, DNS, WireGuard public key, REALITY SNI list, obfuscation and CDN options live (no restart).</span> <b data-i18n="cfg.l2tpLine">L2TP/IPsec, Cisco AnyConnect and SOCKS5 each have their own port field; their credentials are generated per user (L2TP also gets a per-user IPsec PSK) and delivered as config text files plus dashboard cards — SOCKS5 additionally ships as</b> <code>socks5://</code> <span data-i18n="cfg.l2tpLine2">links and a Clash proxy.</span> <b data-i18n="cfg.tunnelPath">Settings → Tunnel</b> <span data-i18n="cfg.tunnelText">sets the public URL and trusted proxies — the latter decides whose</span> <code>X-Forwarded-For</code> <span data-i18n="cfg.tunnelText2">is believed for rate limiting and audit logs.</span></p>
 
+<h3 id="setting-keys" data-i18n="cfg.keysTitle">Every server setting, by its stored name</h3>
+<p data-i18n="cfg.keysIntro">The same values are readable and writable through <code>GET</code>/<code>PUT /api/settings</code>, and they are what a backup or a hand-edited row contains. Use these names, not the labels on the page.</p>
+<table>
+<tr><th data-i18n="cfg.thKey">Key</th><th data-i18n="cfg.thDefault">Default</th><th data-i18n="cfg.thChanges">What it changes</th></tr>
+<tr><td><code>domain</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kDomain">Public host baked into every link and config</td></tr>
+<tr><td><code>sub_port</code></td><td><code>443</code></td><td data-i18n="cfg.kSubPort">Port written into VLESS / VMess / Trojan / Shadowsocks links</td></tr>
+<tr><td><code>hy2_port</code></td><td><code>8443</code></td><td data-i18n="cfg.kHy2Port">Port written into Hysteria2 links</td></tr>
+<tr><td><code>wg_port</code></td><td><code>51820</code></td><td data-i18n="cfg.kWgPort">WireGuard endpoint port</td></tr>
+<tr><td><code>wg_pub</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kWgPub">Your WireGuard public key; without it the panel keeps the one it generated</td></tr>
+<tr><td><code>dns</code></td><td><code>1.1.1.1</code></td><td data-i18n="cfg.kDns">Resolver pushed into WireGuard configs</td></tr>
+<tr><td><code>ovpn_port</code> / <code>ovpn_proto</code></td><td><code>1194</code> / <code>udp</code></td><td data-i18n="cfg.kOvpn">OpenVPN endpoint, and whether it is UDP or TCP</td></tr>
+<tr><td><code>l2tp_port</code></td><td><code>1701</code></td><td data-i18n="cfg.kL2tp">L2TP/IPsec port (credentials are generated per user)</td></tr>
+<tr><td><code>cisco_port</code></td><td><code>443</code></td><td data-i18n="cfg.kCisco">Cisco AnyConnect port</td></tr>
+<tr><td><code>socks5_port</code></td><td><code>1080</code></td><td data-i18n="cfg.kSocks">SOCKS5 port, also emitted as <code>socks5://</code> links and a Clash proxy</td></tr>
+<tr><td><code>reality_port</code></td><td><code>443</code></td><td data-i18n="cfg.kRealityPort">REALITY listener port</td></tr>
+<tr><td><code>reality_sni</code></td><td><code>www.yahoo.com,www.samsung.com,www.microsoft.com</code></td><td data-i18n="cfg.kRealitySni">Comma-separated SNI list, rotated across the generated links</td></tr>
+<tr><td><code>reality_pub</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kRealityPub">REALITY public key; the matching private key is stored encrypted and reveal is audit-logged</td></tr>
+<tr><td><code>obfuscated_host</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kObf">Decoy host that replaces your domain inside the configs (leave empty to use the real domain)</td></tr>
+<tr><td><code>per_user_subdomain</code></td><td><code>0</code></td><td data-i18n="cfg.kPerUser">Prefixes a per-user hash so two customers' configs are not correlatable. Needs a wildcard DNS record, and it is skipped on IP literals — a prefixed IP resolves nowhere</td></tr>
+<tr><td><code>cdn_enabled</code></td><td><code>0</code></td><td data-i18n="cfg.kCdnOn">Turns on CDN SNI spoofing</td></tr>
+<tr><td><code>cdn_sni</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kCdnSni">The CDN domain shown as TLS SNI while traffic still goes to your obfuscated host</td></tr>
+<tr><td><code>block_direct_ip</code></td><td><code>0</code></td><td data-i18n="cfg.kBlockIp">Answers <code>403</code> to panel and API requests that arrive on a raw IP. Turn it on only once the domain works — while testing it locks you out of your own panel</td></tr>
+</table>
+<div class="callout warn"><span data-i18n="cfg.keysWarn">Ports are not opened for you.</span> <span data-i18n="cfg.keysWarn2">Every port in this table needs a firewall rule, and behind nginx the client-facing ones need a</span> <code>stream</code> <span data-i18n="cfg.keysWarn3">or TCP/UDP pass in your vhost — the nginx site the installer writes proxies the panel port only.</span></div>
+
 <h2 id="https-ssl" data-i18n="cfg.httpsTitle">HTTPS / SSL</h2>
 <ul>
   <li><b data-i18n="cfg.duringInstall">During install</b><span data-i18n="cfg.duringInstallT"> (step 7): Nginx reverse proxy + Let's Encrypt with auto-renew cron.</span></li>
@@ -90,8 +115,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=30"></script>
-<script src="assets/docs.js?v=30"></script>
-<script src="assets/support-ai.js?v=30"></script>
+<script src="assets/i18n.js?v=34"></script>
+<script src="assets/docs.js?v=34"></script>
+<script src="assets/support-ai.js?v=34"></script>
 </body>
 </html>

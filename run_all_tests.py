@@ -38,6 +38,11 @@ SUITES = [
 OFFLINE_SUITES = [
     ("installer_test.py", "installer CLI"),
     ("i18n_test.py", "docs i18n dictionaries"),
+    # Reads the route table out of main.py, the sidebar out of app.js and the
+    # setting keys out of protocols.py, then requires a real mention in the
+    # real HTML. Written because the docs covered every feature in prose and
+    # still shipped five endpoints and seventeen setting names nowhere.
+    ("docs_coverage_test.py", "docs cover the panel"),
     # Runs the shipped i18n.js and reads the resulting object, so a key that is
     # missing or empty in one language is a failure. Loading the file caught
     # six empty translations on its first run, in three languages.
