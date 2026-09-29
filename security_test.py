@@ -215,17 +215,45 @@ for i in range(14):
         {"X-Requested-With": "XMLHttpRequest", "X-Forwarded-For": "10.99.77.7"},
     )
     xff_codes.append(stx)
-check("identical spoofed XFF gets throttled (no bypass)", 429 in xff_codes, f"codes={set(xff_codes)}")
+check("a client claiming one address gets throttled", 429 in xff_codes, f"codes={set(xff_codes)}")
 
+# The rotation case, the way nginx actually sends it.
+#
+# This used to send a bare `X-Forwarded-For: 10.99.<i>.7` and pass for a reason
+# that had nothing to do with what it names: trusted_proxies was empty, so the
+# header was ignored outright and every request landed on the same 127.0.0.1
+# key. Rotating a header the panel never reads cannot buy a fresh budget - of
+# course not. The test never exercised the anti-spoofing walk at all.
+#
+# It does now, which is why it fails if the walk breaks. install.sh sets
+# $proxy_add_x_forwarded_for, so a remote client's own header is kept as the
+# LEFTMOST entry and the address nginx appended sits at the RIGHT. client_ip()
+# walks right-to-left and returns the first hop it does not trust, so the
+# rotating prefix is discarded and every one of these requests is charged to
+# 198.51.100.200 - one key, one budget, no escape. Getting the direction of
+# that walk wrong is exactly the bug this now catches.
+#
+# 14 requests, not 6: the per-(ip|user) budget is 8, so a count below that
+# would pass whether or not the requests shared a key at all. With the walk
+# inverted each one gets its own bucket and all 14 answer 401 - no 429, red.
 rot_codes = []
-for i in range(6):
+for i in range(14):
     str_, _, _ = req(
         "POST", "/api/login",
         json.dumps({"username": ADMIN, "password": "WrongPass12345"}),
-        {"X-Requested-With": "XMLHttpRequest", "X-Forwarded-For": f"10.99.{i}.7"},
+        {"X-Requested-With": "XMLHttpRequest",
+         "X-Forwarded-For": f"10.99.{i}.7, 198.51.100.200"},
     )
     rot_codes.append(str_)
-check("rotating XFF still throttled after lockout", all(c in (401, 429) for c in rot_codes) and 429 in rot_codes, f"codes={set(rot_codes)}")
+check("rotating the client-supplied prefix still hits one budget",
+      all(c in (401, 429) for c in rot_codes) and 429 in rot_codes,
+      f"codes={set(rot_codes)}")
+
+# And the converse, which is the property that would actually be a bypass: a
+# client that appends its OWN address to the right is believed, because that is
+# indistinguishable from what a correctly configured proxy does. This is why
+# the panel only trusts a peer it was told about - see proxy_trust_test.py for
+# the remote case, which cannot be reproduced over a loopback socket.
 
 # ---- 6. Path traversal ----
 trav = ["/static/../main.py", "/static/..%2fmain.py", "/static/%2e%2e/main.py", "/static/....//main.py"]

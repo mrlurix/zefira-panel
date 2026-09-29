@@ -49,6 +49,13 @@ OFFLINE_SUITES = [
     # missing when every fresh install handed the customer a port-less link and
     # the customer got nginx's 404.
     ("dashboard_link_test.py", "customer dashboard link"),
+    # client_ip() and request_scheme() disagreed on what a trusted peer is, so
+    # a panel behind a local reverse proxy believed the scheme but not the
+    # address - every visitor collapsed onto one rate-limit key and a flood
+    # locked the operator out of login. DB-free; trusted_networks() is stubbed
+    # to the EMPTY case, because stubbing it to a loopback network makes the
+    # configured and unconfigured cases identical and hides the whole defect.
+    ("proxy_trust_test.py", "proxy trust + client IP"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the

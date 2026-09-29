@@ -23,6 +23,7 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 LOCK = "requirements.lock"
+REQS = "requirements.txt"
 UA = {"User-Agent": "zefira-lock-verify"}
 
 
@@ -110,9 +111,83 @@ def main():
     for i in incomplete[:12]:
         print("  " + i)
 
+    absent = missing_extras()
+    print(f"declared dependencies the lock does not contain at all: {len(absent)}")
+    for a in absent[:12]:
+        print("  " + a)
+
     if fix and not offline:
         return rewrite(entries)
-    return 1 if (bogus or incomplete) else 0
+    return 1 if (bogus or incomplete or absent) else 0
+
+
+def missing_extras():
+    """Requirements the lock does not contain AT ALL.
+
+    Every other check in this file walks the LOCK's own entries, so a
+    distribution that is missing from the lock entirely is invisible to it: a
+    package with no entry has no hashes to be wrong. That is exactly how
+    `uvloop` survived. `requirements.txt` asks for `uvicorn[standard]`, whose
+    metadata lists uvloop for every platform that is not win32/cygwin/PyPy, and
+    the lock - resolved on Windows - had every win32 marker and no non-win32
+    one. `pip install --no-deps` then never installed it, so the server ran
+    uvicorn on the pure-Python event loop, silently.
+
+    So this asks the other direction: read what requirements.txt DECLARES,
+    ask PyPI what each extra pulls in on Linux, and require every one of those
+    to be a line in the lock.
+    """
+    locked = {name.lower().replace("_", "-") for name, _e, _v, _h in parse(LOCK)}
+    problems = []
+    for name, extras, ver in declared():
+        if not extras:
+            continue
+        for extra in re.findall(r"[^\[\],]+", extras.strip("[]")):
+            for dep in extra_members(name, ver, extra.strip()):
+                if dep not in locked:
+                    problems.append(
+                        f"{name}[{extra.strip()}] needs {dep} on Linux, but the lock "
+                        f"has no entry for it - it can never be installed with "
+                        f"--no-deps, so the extra is silently not in effect")
+    return problems
+
+
+def declared():
+    """-> [(name, extras, version)] from requirements.txt, comments stripped."""
+    out = []
+    for line in io_lines(REQS):
+        s = line.split("#", 1)[0].strip()
+        m = re.match(r"^([A-Za-z0-9_.\-]+)(\[[^\]]+\])?==(\S+)$", s)
+        if m:
+            out.append((m.group(1), m.group(2) or "", m.group(3)))
+    return out
+
+
+def extra_members(name, version, extra):
+    """Distributions one extra of a release requires on a Linux CPython box."""
+    url = f"https://pypi.org/pypi/{name}/{version}/json"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
+                                    timeout=45) as r:
+            meta = json.loads(r.read().decode())
+    except Exception:
+        return []
+    want = extra.lower()
+    found = set()
+    for req in meta.get("info", {}).get("requires_dist") or []:
+        norm = req.replace("'", '"')
+        if f'extra == "{want}"' not in norm:
+            continue
+        # A marker that is false on Linux excludes the dependency entirely.
+        if 'sys_platform == "win32"' in norm or 'sys_platform == "cygwin"' in norm:
+            continue
+        if 'platform_python_implementation == "PyPy"' in norm:
+            continue
+        dep = req.split(";")[0].strip()
+        nm = re.match(r"^([A-Za-z0-9_.\-]+)", dep)
+        if nm:
+            found.add(nm.group(1).lower().replace("_", "-"))
+    return sorted(found)
 
 
 def rewrite(entries):

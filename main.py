@@ -1015,7 +1015,7 @@ def request_scheme(request: Request) -> str:
         peer = ipaddress.ip_address(request.client.host) if request.client else None
     except ValueError:
         peer = None
-    if peer is not None and (peer.is_loopback or any(peer in n for n in trusted_networks())):
+    if _peer_is_trusted(peer):
         xfp = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
         if xfp == "https":
             return "https"
@@ -1872,6 +1872,30 @@ def actor(admin: Admin, request: Request) -> str:
     return f"{admin.username} via token {name}" if name else admin.username
 
 
+def _peer_is_trusted(peer) -> bool:
+    """Is this direct peer a proxy whose headers we may believe?
+
+    Loopback counts as trusted, and request_scheme() has always treated it that
+    way. The two functions disagreed: a panel behind a LOCAL reverse proxy that
+    the operator never listed believed X-Forwarded-Proto from it (so cookies got
+    Secure) but not X-Forwarded-For (so every visitor looked like 127.0.0.1).
+    That second half is a denial of service, not a cosmetic mismatch: with one
+    shared key, 16 wrong passwords from an anonymous client fill the per-IP
+    login bucket, and it is only cleared BY a successful login - the very
+    request now being refused. Verified against a running panel: the correct
+    password returned 429 with trusted_proxies empty and 200 with 127.0.0.1 set.
+
+    A local peer cannot be impersonated from off-host (connecting to the panel
+    requires being on the host, where an attacker can read the database
+    directly anyway), so honouring its forwarding headers costs nothing.
+    """
+    if peer is None:
+        return False
+    if peer.is_loopback:
+        return True
+    return any(peer in n for n in trusted_networks())
+
+
 def client_ip(request: Request) -> str:
     sock_host = request.client.host if request.client else "?"
     try:
@@ -1879,7 +1903,7 @@ def client_ip(request: Request) -> str:
     except ValueError:
         return sock_host
     nets = trusted_networks()
-    if any(sock_ip in n for n in nets):
+    if sock_ip.is_loopback or any(sock_ip in n for n in nets):
         xff = request.headers.get("x-forwarded-for", "")
         for candidate in reversed([c.strip() for c in xff.split(",") if c.strip()]):
             try:
