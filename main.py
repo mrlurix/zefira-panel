@@ -1039,20 +1039,33 @@ def public_base_url(request: Request) -> str:
     port = request.url.port
     default_port = (scheme == "https" and port == 443) or (scheme == "http" and port == 80)
     dom = (cached_setting("domain") or "").strip().lower()
+    guessed = False
     if not dom:
         # Fresh DB: the operator's ZEFIRA_DOMAIN (or the detected server IP in
         # IP mode) is the real hostname. It used to be skipped here, so every
         # subscription link/QR was built from the request's Host header.
-        from config import DOMAIN as _ENV_DOMAIN
+        from config import DOMAIN as _ENV_DOMAIN, DOMAIN_IS_GUESS as _DOMAIN_GUESS
         dom = (_ENV_DOMAIN or "").strip().lower()
+        # A GUESSED domain is the "operator pressed Enter at the domain
+        # prompt" case: no nginx, no TLS, and the panel answers on an explicit
+        # port (8000). Returning scheme+host here - the rule written for a real
+        # configured domain - silently dropped that port, so the panel handed
+        # the customer http://IP/sub/<token>. Port 80 is not the panel; on a
+        # fresh Ubuntu box that is nginx's default site, which answers 404 for
+        # every path. The customer link was dead from the moment it was copied,
+        # with nothing in the panel to show for it.
+        guessed = bool(_DOMAIN_GUESS)
     if dom and re.fullmatch(r"[a-z0-9.-]{1,253}", dom):
         # A CONFIGURED identity is canonical: scheme + host only. Inheriting
         # the request's port let a caller send `Host: panel.example.com:8443`
         # and every generated subscription link / QR / one-tap import then
         # pointed at that other port while keeping the real hostname - the
         # customer hands their bearer token to whatever listens there.
-        # Direct-port installs have no configured domain, so they keep using
-        # the request port in the fallback below.
+        # A GUESSED identity is not configured: the install has no domain and
+        # no reverse proxy, so the port is the only thing that identifies the
+        # panel and it has to survive.
+        if guessed:
+            return f"{scheme}://{dom}" + ("" if default_port or not port else f":{port}")
         return f"{scheme}://{dom}"
     # Host fallback (IP/direct installs with no domain configured). The header
     # is attacker-controlled, so it is only honoured when it actually looks

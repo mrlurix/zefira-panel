@@ -43,6 +43,12 @@ SUITES = [
 # is only ever executed on a Linux VPS (never here), and the docs site.
 OFFLINE_SUITES = [
     ("installer_test.py", "installer CLI"),
+    # Runs public_base_url() against a genuinely fresh database with
+    # ZEFIRA_DOMAIN= (what install.sh writes when the operator pressed Enter at
+    # the domain prompt). No server, no suite state. This is the check that was
+    # missing when every fresh install handed the customer a port-less link and
+    # the customer got nginx's 404.
+    ("dashboard_link_test.py", "customer dashboard link"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the

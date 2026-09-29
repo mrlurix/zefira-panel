@@ -119,6 +119,13 @@ def _detect_outbound_ipv4() -> str:
 
 
 _raw_domain = os.environ.get("ZEFIRA_DOMAIN")
+# True when DOMAIN is the address WE guessed, not something the operator typed.
+# public_base_url() needs to know: a guessed IP is a fallback for an install
+# with no domain, and such an install serves on an explicit port (8000), so the
+# port has to stay in the generated links. Treating the guess like a configured
+# domain dropped it - every customer link became http://IP/sub/<token>, which is
+# port 80, i.e. whatever answers there instead of the panel.
+DOMAIN_IS_GUESS = False
 if _raw_domain is None:
     # Unset: keep the documented placeholder default.
     DOMAIN = "zefira.example.com"
@@ -126,6 +133,7 @@ else:
     # Explicitly empty (IP mode): resolve the server's own address instead of
     # shipping every link to the placeholder domain.
     DOMAIN = _raw_domain.strip() or _detect_outbound_ipv4()
+    DOMAIN_IS_GUESS = not _raw_domain.strip()
 SUB_PORT = os.environ.get("ZEFIRA_SUB_PORT", "443")
 WG_PORT = os.environ.get("ZEFIRA_WG_PORT", "51820")
 HY2_PORT = os.environ.get("ZEFIRA_HY2_PORT", "8443")
