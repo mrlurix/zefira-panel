@@ -351,7 +351,30 @@ if umix.get("id"):
     check("mixed link+file subscription is Base64",
           st == 200 and "://" not in txt[:200] and dec != "", f"{st} {txt[:60]!r}")
     check("decoded bundle carries the share links", "vless://" in dec and "trojan://" in dec, dec[:80])
-    check("decoded bundle labels the file-based config", "### WireGuard ###" in dec, dec[-120:])
+    # The feed used to carry the file-based config as well, under a
+    # "### WireGuard ###" header, on the stated belief that clients skip that
+    # section. A client skips the ONE line starting with '#'; the rest of the
+    # .conf is not a URI and not a comment. Measured on this same plan: 35
+    # lines of which 34 an importer could not parse, with the working links
+    # among them - and a client that aborts on the first bad line would import
+    # nothing at all. The feed is links only now; the config has its own
+    # channel, asserted immediately below.
+    _schemes = ("vless://", "vmess://", "trojan://", "ss://", "hysteria2://",
+                "hy2://", "socks5://", "wireguard://", "wg://", "openvpn://",
+                "l2tp://", "cisco://")
+    _lines = [l for l in dec.splitlines() if l.strip()]
+    _junk = [l for l in _lines if not l.lower().startswith(_schemes)]
+    check("no line in the feed is something a link importer cannot parse",
+          not _junk,
+          f"{len(_junk)} of {len(_lines)} line(s) unparseable, first {_junk[0][:48]!r}"
+          if _junk else "")
+    check("no section header leaked into the feed", "###" not in dec,
+          dec[-100:] if "###" in dec else "")
+    st2, _, cfg = req("GET", f"/api/users/{umix['id']}/config", headers=AUTH)
+    check("the WireGuard config still reaches the customer as a file",
+          st2 == 200 and ((cfg[:2] == b"PK" and b".conf" in cfg)
+                          or b"PrivateKey" in cfg),
+          f"{st2} {cfg[:16]!r}")
 
 st, uhy = js("POST", "/api/users", {
     "username": "hy" + uuid.uuid4().hex[:8], "protocols": ["hysteria2"],

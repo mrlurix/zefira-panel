@@ -1126,20 +1126,24 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
             link = _socks5_link(u.get("username", ""), sec, srv)
             if link:
                 links.append(link)
-    only_links = bool(links) and not extras
-    if only_links:
-        encoded = base64.b64encode("\n".join(links).encode()).decode()
-        return encoded, "text/plain"
-    # Mixed bundle (links + file-based configs) was returned as PLAIN TEXT.
-    # v2rayNG/Clash-style importers expect the whole document to be Base64 and
-    # silently imported zero nodes from it. Encode the whole bundle: clients
-    # that only understand share links skip the "### ... ###" sections, and
-    # the config/ZIP download still carries the files themselves.
-    parts = []
-    if links:
-        parts.append("\n".join(links))
-    parts.extend(extras)
-    body = ("\n\n".join(parts) + "\n").encode()
+    # SHARE LINKS ONLY. This used to append the file-based config sections
+    # ("### OpenVPN ###" + a 90-line .ovpn) to the feed, on the stated belief
+    # that clients "skip the ### sections". A client skips the one line that
+    # starts with '#'; the other 90 are not URIs and are not comments.
+    # Measured: vless+openvpn produced 92 lines of which 91 were unparseable,
+    # with the customer's single working link buried among them.
+    #
+    # The panel already documents the opposite - main.py's own error for a
+    # link-less plan says "WireGuard/OpenVPN/L2TP/Cisco plans are served as
+    # config files, not link lists" - and the config keeps its own channels:
+    # the dashboard card (user_links) and the file/ZIP download (build_files).
+    #
+    # `extras` is still built above: that path mints nothing, but leaving it
+    # alone keeps the generation and its ValueError/OSError handling exactly
+    # as it was. A plan with no link at all yields an empty body, and the
+    # caller answers 422 with the message quoted above - the branch that was
+    # already written for precisely this case.
+    body = ("\n".join(links) + "\n").encode()
     return base64.b64encode(body).decode(), "text/plain"
 
 

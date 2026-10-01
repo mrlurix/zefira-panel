@@ -130,7 +130,79 @@ for proto, build in BUILDERS.items():
           f"emitted {link.split('#', 1)[1][:30]!r}")
 
 print()
-print("=== 4. the schema layer is what keeps '#' out in the first place ===")
+print("=== 4. the subscription body carries share links and nothing else ===")
+# A customer's subscription feed is consumed by a link importer, one entry per
+# line. It used to carry the file-based config sections too ("### OpenVPN ###"
+# plus a 90-line .ovpn), on the belief that clients "skip the ### sections" -
+# a client skips the ONE line starting with '#'; the rest are not URIs.
+# Measured before the fix: vless+openvpn served 92 lines, 91 of them unparseable,
+# with the customer's single working link among them.
+#
+# Nothing consumes those sections: subscription_body() has one caller (the /sub
+# route), the dashboard is rendered from user_links() and the file download from
+# build_files(). The panel's own error for a link-less plan already promised the
+# opposite - "WireGuard/OpenVPN/L2TP/Cisco plans are served as config files, not
+# link lists".
+import base64 as _b64
+
+# What a link importer can actually parse. Defined here rather than imported:
+# this file is the one place that asserts it, and a shared constant would let
+# the assertion drift with whatever the code emits.
+URI_SCHEMES = ("vless://", "vmess://", "trojan://", "ss://", "hysteria2://",
+               "hy2://", "socks5://", "wireguard://", "wg://",
+               "openvpn://", "l2tp://", "cisco://")
+
+SRV2 = dict(SRV)
+SRV2["wg_pub"] = "kR4mZQ8vGq2sT1pLxN7bYcW3eH6jF9dA0uI5oP8sT3vX6zY1cE4gH7jK0lM="
+USER_D = {"username": "subbody", "id": 1, "protocols": ["vless"],
+          "volume_gb": 5.0, "used_gb": 0.0, "is_active": True, "note": "",
+          "device_limit": None, "start_on_first_use": False,
+          "pending_start": False, "created_at": None, "expires_at": None,
+          "last_fetch_at": None, "last_fetch_ip": None}
+
+# The file-config builders need the instance CA, which does not exist in an
+# offline run - they raise, the existing `except (ValueError, OSError)` skips
+# them, and `extras` comes back EMPTY. The first version of this guard was
+# therefore blind: reverting subscription_body() to the mixed-bundle form still
+# passed, because the guard could not make the bug happen. It stubs the
+# builders instead, so the config sections are always present and the check is
+# about the BODY, not about whether this machine happens to have a CA.
+_FAKE_OVPN = ("client\ndev tun\nproto udp\nremote panel.example.com 1194\n"
+              "resolv-retry infinite\nremote-cert-tls server\nverify-x509-name vpn\n"
+              "<ca>\n-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n"
+              "</ca>\nremote-random\npull\npush\n")
+_FAKE_WG = "[Interface]\nPrivateKey = kR4mZQ8vGq2sT1pLxN7bYcW3eH6jF9dA0uI5oP8sT3vX6zY1cE4gH7jK0lM=\nAddress = 10.7.0.7/32\nDNS = 1.1.1.1\n[Peer]\nPublicKey = pK3x\n"
+_ovpn_real, _wg_real = P._ovpn_config, P._wg_config
+P._ovpn_config = lambda u, srv, sec: _FAKE_OVPN
+P._wg_config = lambda u, srv, sec: _FAKE_WG
+for plan, expect_at_least in ((["vless"], 1), (["vless", "openvpn"], 1),
+                              (["vmess", "trojan"], 2), (["vless", "reality"], 1),
+                              (["vless", "openvpn", "wireguard", "l2tp", "cisco"], 1)):
+    u = dict(USER_D, protocols=list(plan),
+             secret_map={p: (SEC if p not in ("openvpn", "wireguard") else "pw")
+                         for p in plan})
+    body, ct = P.subscription_body(u, SRV2, [])
+    check(f"{'+'.join(plan)}: the body is base64 text", ct == "text/plain", f"ct={ct!r}")
+    try:
+        # subscription_body returns str (b64encode(...).decode()), so pad as str.
+        decoded = _b64.b64decode(body + "===").decode("utf-8", "replace")
+    except Exception as exc:                                   # noqa: BLE001
+        check(f"{'+'.join(plan)}: the body decodes", False, str(exc)[:70])
+        continue
+    lines = [l for l in decoded.splitlines() if l.strip()]
+    junk = [l for l in lines if not l.lower().startswith(URI_SCHEMES)]
+    check(f"{'+'.join(plan)}: every line is a share link", not junk,
+          f"{len(junk)} of {len(lines)} line(s) a link importer cannot parse, "
+          f"first: {junk[0][:44]!r}" if junk else "")
+    check(f"{'+'.join(plan)}: no '###' section header leaked into the feed",
+          "###" not in decoded)
+    check(f"{'+'.join(plan)}: the plan still produces its links",
+          len(lines) >= expect_at_least, f"{len(lines)} line(s)")
+
+P._ovpn_config, P._wg_config = _ovpn_real, _wg_real
+
+print()
+print("=== 5. the schema layer is what keeps '#' out in the first place ===")
 for cand in ("a#b", "a b", "a\nb", "مشتری"):
     try:
         InboundIn(name=cand, protocol="vless", port=8443)
