@@ -62,9 +62,35 @@ for k in missing_js:
 print(f"JS keys used: {len(used_js)}")
 
 # dynamic t("menu."+id) / t("dlayout."+id) / t("event."+code): ids must be covered
+#
+# menu. and dlayout. are read OUT of app.js, not restated here. The previous
+# version carried a hand-copied list, and it had already gone stale: the
+# Developer API section is in MENU_IDS in app.js, so the sidebar renders
+# t("menu.api") on every panel load, but "api" was missing from the list below
+# and nothing noticed. A missing fa/zh/ru translation for a sidebar entry is
+# invisible to every other check here, so a hand-kept copy of the id list is
+# exactly the wrong place to keep it - the code already knows the answer.
+_appjs = (HERE / "static" / "app.js").read_text(encoding="utf-8")
+_m = re.search(r"const MENU_IDS = \[(.*?)\]", _appjs, re.S)
+if not _m:
+    fail("could not read MENU_IDS out of static/app.js")
+    _menu_ids = []
+else:
+    _menu_ids = re.findall(r'"([\w-]+)"', _m.group(1))
+_m = re.search(r"const DASH_IDS = \[(.*?)\]", _appjs, re.S)
+if not _m:
+    fail("could not read DASH_IDS out of static/app.js")
+    _dash_ids = []
+else:
+    _dash_ids = re.findall(r'"([\w-]+)"', _m.group(1))
+if not _menu_ids or not _dash_ids:
+    fail("reading the id lists out of app.js produced nothing - the check "
+         "below would pass vacuously")
+print(f"menu sections read from app.js: {len(_menu_ids)}  dashboard cards: {len(_dash_ids)}")
+
 for prefix, ids in (
-    ("menu.", ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "settings"]),
-    ("dlayout.", ["usage", "link", "groups", "apps"]),
+    ("menu.", _menu_ids),
+    ("dlayout.", _dash_ids),
     ("event.", ["LOGIN_OK", "LOGIN_FAIL", "RATE_LIMIT", "USER_CREATE", "USER_PATCH", "USER_DELETE",
                 "USER_RESET", "TOKEN_RESET", "USAGE_RESET", "PW_CHANGE", "SETTINGS_UPDATE", "BACKUP_DL",
                 "RESTORE", "RESTORE_FAIL", "REALITY_GENERATE", "REALITY_REVEAL", "TEMPLATE_SAVE",

@@ -339,13 +339,15 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
         # SIP002 mandates URL-safe base64 without padding (strict clients
         # misparse the +/= of standard base64).
         userinfo = base64.urlsafe_b64encode(f"aes-256-gcm:{secret}".encode()).decode().rstrip("=")
-        return f"ss://{userinfo}@{host}:{srv['sub_port']}#{username}"
+        # Encoded like vless/trojan above: a remark carrying '#' splits the
+        # link into a second fragment and the client reads a truncated name.
+        return f"ss://{userinfo}@{host}:{srv['sub_port']}#{_q(username, safe='')}"
     if protocol == "hysteria2":
         # The spec's grammar has the slash before the query ("host:port/?..."):
         # importers that split on "/?" lost the port and SNI.
         return (
             f"hysteria2://{secret}@{host}:{srv['hy2_port']}/"
-            f"?sni={sni}&insecure=0#{username}"
+            f"?sni={sni}&insecure=0#{_q(username, safe='')}"
         )
     return None
 
@@ -385,7 +387,7 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
     sni = _reality_sni(srv, index)
     sni = _q(sni, safe="")
     sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
-    name = username
+    name = _q(username, safe="")
     return (
         f"vless://{secret}@{host}:{srv['reality_port']}?"
         f"encryption=none&security=reality&pbk={pub}&sid={sid}"

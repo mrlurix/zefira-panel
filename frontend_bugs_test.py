@@ -779,10 +779,25 @@ _remaining = re.findall(r'^\s*\$\("(#[\w-]+)"\)\.addEventListener\(', app, re.M)
 check("no top-level binding can still abort the ones after it",
       not _remaining,
       f"still unguarded: {_remaining[:5]}")
-check("the hand-guarded optional chains are gone (bind covers them now)",
-      len(re.findall(r'addEventListener\(', app)) ==
-      len([1 for m in re.finditer(r'(?:^|\W)addEventListener\(', app)]),
-      "a mixed convention invites the next binding to be the unguarded one")
+# Not "every binding goes through bind": nine of them legitimately do not,
+# on receivers that are already resolved (btn, overlay, document, ...). Not a
+# tautology either - the previous version compared two counts of the same
+# pattern, which differ only when a call is glued to an identifier, and that
+# never happens (measured 10 == 10, zero such occurrences). This is the general
+# form of what the two neighbouring checks test in specific spellings: an
+# addEventListener whose RECEIVER came from a selector lookup is the one that
+# aborts the rest of the script when the id is renamed.
+_lookup_receivers = []
+for _m in re.finditer(r'([A-Za-z0-9_$.\[\]()\s]{0,70}?)\.addEventListener\(', app):
+    _recv = _m.group(1).strip()
+    if ("$(" in _recv or "getElementById" in _recv
+            or "querySelector" in _recv or "querySelectorAll" in _recv):
+        _lookup_receivers.append(
+            f"line {app[:_m.start()].count(chr(10)) + 1}: {app[app.rfind(chr(10), 0, _m.start()) + 1:app.find(chr(10), _m.start())].strip()[:70]}")
+check("no addEventListener is attached to a selector lookup",
+      not _lookup_receivers,
+      f"{len(_lookup_receivers)} unguarded binding(s); use bind(): "
+      + "; ".join(_lookup_receivers[:3]))
 _optional = re.findall(r'(?:\$\("(#[\w-]+)"\)|getElementById\("([\w-]+)"\))'
                        r'\?\.addEventListener\(', app)
 check("no binding is left with its own ad-hoc null guard",

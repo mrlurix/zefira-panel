@@ -56,6 +56,10 @@ OFFLINE_SUITES = [
     # to the EMPTY case, because stubbing it to a loopback network makes the
     # configured and unconfigured cases identical and hides the whole defect.
     ("proxy_trust_test.py", "proxy trust + client IP"),
+    # ss/hysteria2/REALITY interpolated the remark raw while vless/trojan
+    # percent-encoded it, so a name carrying "#" split the link into three
+    # fragments and the client showed "a". Runs the real builders, offline.
+    ("link_encoding_test.py", "share-link remark encoding"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the

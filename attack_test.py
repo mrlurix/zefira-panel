@@ -339,13 +339,29 @@ unauth_paths = [
 # 401/403 = auth gate; 405 = route exists but that method is not routed
 # (FastAPI answers before dependencies, and no data is returned).
 leaks = []
+transport = []
 for m, p in unauth_paths:
     body = json.dumps({"password_confirm": PASSWORD}) if m in ("POST", "PUT") else (
         json.dumps({"messages": [{"role": "user", "content": "hi"}]}) if p.endswith("/ai/chat") else "{}")
     st, _, b = req(m, p, body if m in ("POST", "PUT") else None)
+    if st == 0:
+        # 0 is req()'s catch-all for "no HTTP response at all". Retry once: a
+        # reset connection is not evidence about the panel, and reporting it as
+        # a leak turns an environment hiccup into an apparent auth bypass.
+        st, _, b = req(m, p, body if m in ("POST", "PUT") else None)
+        if st == 0:
+            transport.append(f"{m} {p}: {b[:80].decode('utf-8', 'replace')}")
+            continue
     if st not in (401, 403, 405):
         leaks.append(f"{m} {p}={st}")
-check("every admin endpoint refuses unauthenticated access", not leaks, ", ".join(leaks[:6]))
+# A transport failure is reported as its own thing. It must not be allowed to
+# pass silently either - a request that never reached the panel has not been
+# shown to be refused.
+check("every admin endpoint refuses unauthenticated access",
+      not leaks and not transport,
+      ("leaks: " + ", ".join(leaks[:6])) if leaks
+      else ("unreachable (no HTTP response at all, so nothing was shown to be "
+            "refused): " + "; ".join(transport[:3])) if transport else "")
 
 # GET /api/appearance is public by design (the login page needs the brand).
 # Assert it can only ever expose display values, never a secret.
@@ -682,23 +698,42 @@ check("implausible Host cannot bloat the subscription link",
 # be inherited, or `Host: panel.example:8443` sends every customer's bearer
 # token to whatever listens on 8443 while the link still shows the real name.
 st_cfg, s_before = js("GET", "/api/settings", headers=AUTH)
-if st_cfg == 200 and (s_before.get("domain") or s_before.get("public_url")):
-    # Check the customer's own page rather than the admin QR endpoint: the QR
-    # route has a 30/min budget that the earlier QR tests already spend.
-    st_u, uu = js("POST", "/api/users", {
-        "username": "port" + uuid.uuid4().hex[:8], "protocols": ["vless"],
-        "volume_gb": 5, "days": 5}, AUTH)
-    if uu.get("token"):
-        st_p, _, pb = raw_request("GET", f"/sub/{uu['token']}", b"",
-                                  {"User-Agent": "Mozilla/5.0"},
-                                  f"{(s_before.get('domain') or 'panel.example.com')}:8443")
-        check("a request port is not inherited by the configured domain",
-              st_p == 200 and b":8443" not in pb, pb[:200])
-        js("DELETE", f"/api/users/{uu['id']}", headers=AUTH)
-    else:
-        check("a request port is not inherited by the configured domain", True)
+# ARRANGE the precondition instead of skipping when it is absent. This block
+# had two `else: check(..., True)` arms: if the settings read failed, or the
+# created user came back without a token, it reported a PASS for a property it
+# never looked at. A guard that cannot fail is worse than no guard - it is the
+# reason a regression here would go unnoticed.
+_probe_domain = "portprobe.example.com"
+_staged = False
+if st_cfg == 200 and not (s_before.get("domain") or s_before.get("public_url")):
+    # Nothing configured: give it a domain, so there is something for the
+    # "a configured identity wins over the request port" rule to protect.
+    _st, _r = js("PUT", "/api/settings",
+                 dict(s_before or {}, domain=_probe_domain), AUTH)
+    _staged = _st == 200
+_srv_now = js("GET", "/api/settings", headers=AUTH)[1] or {}
+_dom = _srv_now.get("domain") or _srv_now.get("public_url") or _probe_domain
+# The customer's own page rather than the admin QR endpoint: the QR route has a
+# 30/min budget that the earlier QR tests already spend.
+_st_u, _u = js("POST", "/api/users", {
+    "username": "port" + uuid.uuid4().hex[:8], "protocols": ["vless"],
+    "volume_gb": 5, "days": 5}, AUTH)
+_uu = _u if (isinstance(_u, dict) and _u.get("token")) else None
+if _uu is not None:
+    st_p, _, pb = raw_request("GET", f"/sub/{_uu['token']}", b"",
+                              {"User-Agent": "Mozilla/5.0"}, f"{_dom}:8443")
+    check("a request port is not inherited by the configured domain",
+          st_p == 200 and b":8443" not in pb,
+          f"host={_dom}:8443 status={st_p} body={pb[:150]!r}")
+    js("DELETE", f"/api/users/{_uu['id']}", headers=AUTH)
 else:
-    check("a request port is not inherited by the configured domain", True)
+    check("a request port is not inherited by the configured domain", False,
+          f"could not create the probe user (status {_st_u}, body {str(_u)[:90]})")
+if _staged:
+    # Leave the install exactly as the suite found it.
+    js("PUT", "/api/settings",
+       dict(s_before or {}, domain=(s_before or {}).get("domain", ""),
+            public_url=(s_before or {}).get("public_url", "")), AUTH)
 
 # block_direct_ip promises "deny raw-IP access". It only denied PUBLIC
 # literals, so 127.0.0.1 / 10.0.0.1 and the numeric spellings walked through.
