@@ -309,6 +309,33 @@ check("the installer's hardcoded release equals the VERSION file",
       f"says {_repo_version}; the pin is the ONLY value a piped install can use, "
       f"so if it drifts the one-liner silently installs a different release")
 # And it must be a version that has an upstream tag, or the clone aborts.
+# Every location block that proxies to the panel needs a read timeout sized to
+# what the panel actually does. nginx's default is 60s and install.sh wrote none
+# of them. Measured: a restore that re-provisions 200 OpenVPN users mints a
+# 2048-bit RSA key per row and takes 159.9s, so the connection was cut while the
+# panel kept working and the operator never learned whether the restore had
+# succeeded. At ~0.8s per row, 60s is crossed at about 75 OpenVPN users.
+#
+# Derived from the file, not from a count restated here: find each
+# `location ... {` block, keep the ones containing proxy_pass, and require a
+# read timeout in each. A block that only returns a redirect is not one.
+# The label comes out of the MATCH, not from a second search inside the body:
+# the first version did re.search(r'location ...', b) and raised AttributeError
+# the moment a block was missing its timeout - so the fault it was written to
+# catch surfaced as a traceback, and a proof script that only looked for the
+# failing check's text reported the guard as "not proven". A check must FAIL,
+# not crash.
+_blocks = re.findall(r'location ([^\{]*)\{((?:[^\}]|\n(?!\s*\}))*?)\}', _sh_code, re.S)
+_proxying = [(lbl, body) for lbl, body in _blocks if "proxy_pass" in body]
+_no_timeout = [lbl.strip() for lbl, body in _proxying if "proxy_read_timeout" not in body]
+check("every nginx location that proxies to the panel sets a read timeout",
+      bool(_proxying) and not _no_timeout,
+      f"{len(_proxying)} proxying block(s), {len(_no_timeout)} without "
+      f"proxy_read_timeout: {_no_timeout[:3]}. nginx's default is 60s; a restore "
+      f"that mints 200 OpenVPN keys measured 159.9s, so the operator's "
+      f"connection is dropped while the panel carries on and they never learn "
+      f"whether the restore worked.")
+
 check("the release the installer names is a plain dotted version",
       _lit is not None and re.fullmatch(r"\d+\.\d+\.\d+", _lit.group(1)) is not None,
       f"got {(_lit.group(1) if _lit else None)!r}, want x.y.z so the v-prefixed "

@@ -90,6 +90,11 @@ def req(method, path, body=None, headers=None, timeout=120):
 
 
 NOT_JSON = []
+# Requests that never got an HTTP response at all (reset, refused,
+# timeout). Kept apart from NOT_JSON: "the body was not JSON" and
+# "there was no body" are different failures, and merging them makes
+# a slow restore look like a broken API.
+NOT_REACHED = []
 
 
 def js(method, path, body=None, headers=None, timeout=120):
@@ -106,7 +111,10 @@ def js(method, path, body=None, headers=None, timeout=120):
         # Hand back a dict instead: the status code still drives the check,
         # the body is still visible in its detail line, and the run continues.
         raw = b[:400].decode("utf-8", "replace")
-        NOT_JSON.append(f"{method} {path} -> {st} {raw[:80]!r}")
+        if st == 0:
+            NOT_REACHED.append(f"{method} {path} -> no response: {raw[:80]!r}")
+        else:
+            NOT_JSON.append(f"{method} {path} -> {st} {raw[:80]!r}")
         return st, {"_notjson": True, "_raw": raw}
 
 
@@ -431,6 +439,13 @@ for _k, _v in (("enabled", as_dict(_ai_before).get("enabled", False)),
 check("no endpoint answered with a non-JSON body",
       not NOT_JSON,
       "; ".join(NOT_JSON[:3]) + (f" (+{len(NOT_JSON) - 3} more)" if len(NOT_JSON) > 3 else ""))
+check("no request went unanswered (a timeout is not a response)",
+      not NOT_REACHED,
+      ("; ".join(NOT_REACHED[:3])
+       + (f" (+{len(NOT_REACHED) - 3} more)" if len(NOT_REACHED) > 3 else ""))
+      + " | a restore over the OpenVPN mint budget is SLOW BY DESIGN - measured "
+        "159.9s for 240 rows - so any call here that re-posts /api/restore needs "
+        "a timeout above that, not the default")
 _st, _tun_after = js("GET", "/api/tunnel-settings", headers=AUTH)
 check("cleanup: the planted trust boundary is gone",
       isinstance(_tun_after, dict) and "203.0.113.7" not in json.dumps(_tun_after),

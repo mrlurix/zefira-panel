@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.6"
+ZEFIRA_PINNED="1.15.7"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
@@ -795,6 +795,13 @@ server {
     server_name $DOMAIN;
     access_log off;
     location / {
+        # A restore that re-provisions OpenVPN users mints a 2048-bit RSA key
+        # per row; 200 of them measured 159.9s. nginx's DEFAULT read timeout is
+        # 60s, so without this the operator's connection is cut while the panel
+        # carries on, and they never learn whether the restore worked - their
+        # next click gets "Restore in progress".
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
         proxy_pass http://127.0.0.1:$PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -847,6 +854,13 @@ server {
     ssl_certificate_key $SSL_KEY;
     ssl_protocols TLSv1.2 TLSv1.3;
     location / {
+        # A restore that re-provisions OpenVPN users mints a 2048-bit RSA key
+        # per row; 200 of them measured 159.9s. nginx's DEFAULT read timeout is
+        # 60s, so without this the operator's connection is cut while the panel
+        # carries on, and they never learn whether the restore worked - their
+        # next click gets "Restore in progress".
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
         proxy_pass http://127.0.0.1:$PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
