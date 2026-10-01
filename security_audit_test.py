@@ -200,6 +200,24 @@ if tok:
     never = as_dict(next((t for t in as_list(r2) if t.get("name") == "expiring"), {}))
     check("expires_in_days=0 means 'no expiry' only when asked explicitly",
           never.get("expires_at") is None, f"expires_at={never.get('expires_at')}")
+    # ...and nothing else may BECOME 0. The field was the only plain `int`
+    # among 27 StrictInt ones, and the coercion pointed the wrong way: `false`
+    # is 0, and 0 means "no expiry" (main.py sets expires_at=None for it), so a
+    # boolean produced a full-scope token that NEVER expires. Measured on the
+    # running panel before the fix: false -> 200 with expires_at=None.
+    # The sibling StrictInt `days` refused all of these with 422.
+    for _bad, _label in ((False, "false"), (True, "true"),
+                         ("180", 'the string "180"'), (1.0, "the float 1.0")):
+        _nm = "coercion" + str(_label).replace(" ", "").replace('"', "")
+        _pre = len(as_list(js("GET", "/api/api-tokens", None, AUTH)[1]))
+        _st, _ = js("POST", "/api/api-tokens",
+                    {"name": _nm, "password_confirm": PASSWORD,
+                     "expires_in_days": _bad}, AUTH)
+        _post = len(as_list(js("GET", "/api/api-tokens", None, AUTH)[1]))
+        check(f"expires_in_days refuses {_label}",
+              _st == 422 and _post == _pre,
+              f"HTTP {_st}; token count {_pre} -> {_post} "
+              f"(a refused request that still minted one would read as clean here)")
     js("DELETE", f"/api/api-tokens/{mine['id']}", headers=AUTH)
     js("DELETE", f"/api/api-tokens/{never.get('id')}", headers=AUTH)
 

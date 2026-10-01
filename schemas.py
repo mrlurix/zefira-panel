@@ -378,7 +378,18 @@ class ApiTokenCreateIn(RestoreConfirmIn):
     # 0 = no expiry, which has to be the operator's explicit choice. The
     # default is a bounded life: an integration token still present six
     # months later is indistinguishable from one that leaked.
-    expires_in_days: int = Field(default=180, ge=0, le=3650)
+    #
+    # StrictInt, matching the other 27 numeric fields here. As a plain `int`
+    # this was the laxest input in the file, and it laxpiness pointed the wrong
+    # way: `false` was accepted and, because 0 means "no expiry" (main.py:2542
+    # sets expires_at=None for 0), the weakest possible lifetime - a token that
+    # NEVER expires - was reachable from a boolean. Measured before the fix:
+    #     expires_in_days=false -> 200, expires_at=None
+    #     expires_in_days=true  -> 200, expires_at=+1 day
+    #     expires_in_days="180" -> 200, expires_at=+180 days
+    # The sibling StrictInt `days` refuses all three with 422, so the operator
+    # already expects strictness here and only this field disagreed.
+    expires_in_days: StrictInt = Field(default=180, ge=0, le=3650)
 
 
 class ApiTokenSelfTestIn(BaseModel):

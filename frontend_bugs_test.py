@@ -329,7 +329,7 @@ check("the server really does require the confirm password",
       re.search(r"class ApiTokenCreateIn\(RestoreConfirmIn\):", _schemas) is not None,
       "the UI and the schema disagree")
 check("a new token's lifetime is bounded by default",
-      re.search(r"expires_in_days: int = Field\(default=(?!0)\d+", _schemas) is not None,
+      re.search(r"expires_in_days: (?:Strict)?[Ii]nt = Field\(default=(?!0)\d+", _schemas) is not None,
       "no default expiry: an integration token lives forever")
 # A token that silently stops working reads as a broken bot, so the expiry has
 # to be on the row - and an already-dead one has to look different from a live

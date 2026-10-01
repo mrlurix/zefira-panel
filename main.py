@@ -3558,6 +3558,66 @@ def _external_db_snapshot(stamp: str) -> str | None:
         return None
 
 
+# Runtime state an upstream commit must not be able to overwrite. Live secrets
+# are exactly: instance/ (secret.key, ca.key, ca.crt, zefira.db - see config.py,
+# protocols.py and main.py), .env at the repo root, and the virtualenv.
+#
+# This guard was one tuple fed to str.startswith, and it did the exact opposite
+# of its job on every release:
+#
+#     forbidden = ("instance/", ".env", ".venv/", "*.db", "*.pem", "*.key")
+#     if not p or p in ("instance", ".env", ".venv"):
+#         continue
+#     if p.startswith(forbidden) or p == ".env" or p.endswith((".db-wal", ".db-shm")):
+#         intrusions.append(p)
+#
+#   1. It refused EVERY update. ".env" was applied as a prefix, and every release
+#      since v1.0.0 ships a `.env.example` template, so the guard always found an
+#      "intrusion" and _do_update raised "refusing to update: .env.example".
+#      Measured against real trees: v1.15.2 and v1.15.8 both flag it.
+#   2. It blocked nothing it was meant to block. The skip above fires first, so
+#      the `p == ".env"` test was unreachable - .env itself was never refused.
+#      The only paths it did refuse were under instance/ or .venv/.
+#   3. Three of the six entries could not match anything. str.startswith does
+#      literal prefix matching and never interprets a glob, so "*.db" only ever
+#      matched a file literally named *.db. cert.pem, server.key and backup.db
+#      passed straight through.
+#
+# The three intents that were conflated in one tuple are now separate, and each
+# is a kind of match that means what it says.
+RUNTIME_DIR_PREFIXES = ("instance/", ".venv/")
+# The same directories without the trailing slash. `ls-tree -r` recurses and so
+# lists files only, but a non-recursive listing would show them.
+RUNTIME_DIRS = ("instance", ".venv")
+# .env is ONE file, matched exactly - not a prefix. See defect 1 above: the
+# prefix is what broke every update. A template beside the real file is not the
+# real file, and an operator's live .env is protected by this exact match.
+RUNTIME_FILE_EXACT = (".env",)
+# What the dead globs were trying to express (defect 3). Suffix matching is the
+# intent they stated: a database or key/cert committed anywhere in the tree.
+RUNTIME_SECRET_SUFFIXES = (".db", ".db-wal", ".db-shm", ".pem", ".key")
+
+
+def _runtime_intrusions(tree_paths) -> list:
+    """Paths in an incoming tree that would clobber live runtime state.
+
+    Kept separate from _do_update so it can be exercised against a real
+    `git ls-tree` listing: the alternative was a guard whose only test would
+    have to run `git reset --hard` on the operator's worktree, which is why
+    this one had no test at all until now.
+    """
+    bad = []
+    for path in tree_paths:
+        p = path.strip()
+        if not p:
+            continue
+        if p in RUNTIME_DIRS or p in RUNTIME_FILE_EXACT:
+            bad.append(p)
+        elif p.startswith(RUNTIME_DIR_PREFIXES) or p.endswith(RUNTIME_SECRET_SUFFIXES):
+            bad.append(p)
+    return bad
+
+
 def _snapshot_runtime_state() -> str | None:
     """Copy the live secrets/database aside before `git reset --hard`.
 
@@ -3953,16 +4013,7 @@ def _do_update(admin_name: str, ip: str, expected_sha: str = "") -> None:
         ok, out = _git("ls-tree", "-r", "--name-only", advertised_sha, timeout=30)
         if not ok:
             raise RuntimeError(out)
-        forbidden = (
-            "instance/", ".env", ".venv/", "*.db", "*.pem", "*.key",
-        )
-        intrusions = []
-        for line in (out or "").splitlines():
-            p = line.strip()
-            if not p or p in ("instance", ".env", ".venv"):
-                continue
-            if p.startswith(forbidden) or p == ".env" or p.endswith((".db-wal", ".db-shm")):
-                intrusions.append(p)
+        intrusions = _runtime_intrusions((out or "").splitlines())
         if intrusions:
             raise RuntimeError(
                 "upstream commit adds runtime state that would overwrite this "

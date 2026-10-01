@@ -60,6 +60,11 @@ OFFLINE_SUITES = [
     # percent-encoded it, so a name carrying "#" split the link into three
     # fragments and the client showed "a". Runs the real builders, offline.
     ("link_encoding_test.py", "share-link remark encoding"),
+    # The updater's runtime-intrusion guard, over a real `git ls-tree`. It used
+    # to feed globs ("*.db") to str.startswith, which matches nothing, and to
+    # apply ".env" as a prefix - which flagged the shipped .env.example and so
+    # refused EVERY update, on every release since v1.0.0. No test covered it.
+    ("update_guard_test.py", "updater intrusion guard"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the
