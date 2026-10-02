@@ -32,6 +32,17 @@ PANEL = (os.environ.get("ZEFIRA_URL") or _missing_env("ZEFIRA_URL")).rstrip("/")
 ZEFIRA_TOKEN = os.environ.get("ZEFIRA_API_TOKEN") or _missing_env("ZEFIRA_API_TOKEN")
 if not PANEL.startswith(("http://", "https://")):
     raise SystemExit("ZEFIRA_URL must start with http:// or https://")
+# Every request carries ZEFIRA_API_TOKEN in the Authorization header, and every
+# created customer's subscription token goes back over the same link. Over
+# plain http both are readable by anyone on the path, forever, because the token
+# does not expire on its own. Refuse by default; an operator who really is on
+# http (a LAN, a tunnel) has to say so.
+if PANEL.startswith("http://") and not os.environ.get("ZEFIRA_ALLOW_HTTP"):
+    raise SystemExit(
+        "ZEFIRA_URL is http://, which would send your API token and every "
+        "customer's subscription link in cleartext. Use https://, or set "
+        "ZEFIRA_ALLOW_HTTP=1 only if this really is a trusted private network."
+    )
 SUB_BASE = os.environ.get("ZEFIRA_SUB_BASE", PANEL + "/sub").rstrip("/")
 HEADERS = {"Authorization": f"Bearer {ZEFIRA_TOKEN}", "Content-Type": "application/json"}
 
@@ -147,13 +158,27 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         await q.answer(text=PRIVATE_ONLY, show_alert=True)
         return
     await q.answer()
+    # A callback can arrive with no message to reply to (an inline-mode callback,
+    # or one whose message was deleted). Every path below replies through
+    # q.message, so resolve the target once and bail out here rather than
+    # raising AttributeError somewhere further down.
+    reply_to = q.message
+    if reply_to is None:
+        return
     try:
         idx = int(q.data.split(":", 1)[1])
+        # `q.data` is attacker-controllable: anyone who can press a crafted
+        # inline button sends whatever string they like. `PLANS[-1]` is a VALID
+        # index - it silently returns the LAST plan - so the existing
+        # IndexError guard never fired for a negative index and a crafted
+        # callback bought a different plan than the one displayed.
+        if not 0 <= idx < len(PLANS):
+            raise IndexError(idx)
         label, vol, days = PLANS[idx]
     except (IndexError, ValueError):
         # Stale inline button (bot restarted with a different plan list):
         # answer instead of leaving the spinner hanging forever.
-        await q.message.reply_text("Plan list changed — send /buy again.")
+        await reply_to.reply_text("Plan list changed — send /buy again.")
         return
     name = uname(q.from_user.id)
     st, data = api("POST", "/api/users", {
@@ -161,13 +186,13 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "note": f"telegram:{q.from_user.id}",
     })
     if st == 409:
-        await q.message.reply_text("You already have an account. Use /my.")
+        await reply_to.reply_text("You already have an account. Use /my.")
         return
     if st != 200 or not data.get("token"):
         log.warning("create failed %s %s", st, data)
-        await q.message.reply_text(panel_msg(st))
+        await reply_to.reply_text(panel_msg(st))
         return
-    await q.message.reply_text(
+    await reply_to.reply_text(
         f"Done! {md(label)}\n\nSubscription (tap to copy):\n"
         f"`{md(SUB_BASE)}/{md(data['token'])}`\n\n"
         f"Paste it into v2rayNG / Streisand / Clash.",

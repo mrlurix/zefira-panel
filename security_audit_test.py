@@ -198,6 +198,30 @@ if tok:
                {"name": "expiring", "password_confirm": PASSWORD, "expires_in_days": 0}, AUTH)
     st2, r2 = js("GET", "/api/api-tokens", headers=AUTH)
     never = as_dict(next((t for t in as_list(r2) if t.get("name") == "expiring"), {}))
+    # GET /api/users returns 500 subscription tokens per call and the bot scope
+    # may call it. Bounded and recorded, like /api/reality/private.
+    _before_rows = len(as_list(js("GET", "/api/audit", None, AUTH)[1]))
+    _st, _r = js("GET", "/api/users", None, AUTH)
+    _items = (as_dict(_r).get("items") or []) if _st == 200 else []
+    check("the customer list still works under its limiter",
+          _st == 200 and isinstance(_items, list),
+          f"HTTP {_st} - a limiter that breaks the customer table is its own outage")
+    # 245 calls: over the 240/60s budget by a margin, and enough that the
+    # burst below is not satisfied by the budget itself moving under the window.
+    _codes = [js("GET", "/api/users", None, AUTH)[0] for _ in range(245)]
+    check("listing customers is rate-limited",
+          429 in _codes,
+          f"34 calls gave {_codes.count(200)}x200 and {_codes.count(429)}x429 - "
+          f"a bot token can page every subscription token unthrottled")
+    _after = as_list(js("GET", "/api/audit", None, AUTH)[1])
+    _new = [r for r in _after if r.get("event") == "USERS_LIST"]
+    check("listing customers leaves an audit row",
+          len(_new) > 0,
+          "audit() does not commit by itself; on a read the row is discarded "
+          "with the session unless the endpoint commits it")
+    check("the audit row survives to the log", len(_after) >= _before_rows,
+          f"{_before_rows} -> {len(_after)} rows")
+
     check("expires_in_days=0 means 'no expiry' only when asked explicitly",
           never.get("expires_at") is None, f"expires_at={never.get('expires_at')}")
     # ...and nothing else may BECOME 0. The field was the only plain `int`

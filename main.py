@@ -137,6 +137,21 @@ ai_limiter = SlidingWindowLimiter(max_events=30, window_seconds=3600)
 # QR generation is CPU-bound and reachable with a bot token: budget it per
 # source and per token so a leaked bot cannot pin the sync worker pool.
 qr_limiter = SlidingWindowLimiter(max_events=30, window_seconds=60)
+# GET /api/users hands out 500 subscription tokens per call, to the same bot
+# scope that may fetch ONE via /qr (which qr_limiter bounds). This is a
+# runaway-loop guard, NOT an anti-exfiltration control: 10,000 customers is 20
+# calls, and no sane budget here stops a determined holder of a live token.
+#
+# 240/60s rather than 30/60s, and the difference was measured, not guessed. At
+# 30 the budget broke attack_quota_test.py, which calls this endpoint once per
+# boundary input to prove the panel is still alive afterwards:
+#     huge days broke the list endpoint (429)
+#     {'used_gb': 'abc'} destroyed the user row
+# The second line is the real damage: with the list throttled the suite could
+# not find the user it had just created, so the follow-on checks failed on
+# missing rows rather than on anything real. A limiter that breaks the panel's
+# own tooling is worse than no limiter at all.
+users_list_limiter = SlidingWindowLimiter(max_events=240, window_seconds=60)
 # Restore bodies are buffered (and joined again) before the route's auth
 # dependency runs, so an anonymous client could make the process hold ~128 MiB
 # per request on the direct-port deployment. A per-source budget plus a single
@@ -5730,9 +5745,31 @@ def api_stats(admin: Admin = Depends(require_admin)):
 
 
 @app.get("/api/users")
-def api_users(q: str = "", limit: int = 500, offset: int = 0,
-              admin: Admin = Depends(require_admin)):
+def api_users(request: Request, q: str = "", limit: int = 500,
+              offset: int = 0, admin: Admin = Depends(require_admin)):
     q = q.strip()[:64]
+    # This is a credential disclosure, not a plain list read: every item
+    # carries the customer's `token`, and that token is a working
+    # subscription credential. ("GET", "/api/users") is in
+    # BOT_ALLOWED_EXACT, so the least-privilege reseller-bot token can reach
+    # it - the same scope that may fetch ONE customer's link through /qr,
+    # which qr_limiter already bounds. 500 per call, offset paging to
+    # 1,000,000, and nothing counting it, was the gap.
+    caller = f"userslist|{getattr(request.state, 'token_id', None) or admin.id}"
+    if not users_list_limiter.hit(caller):
+        raise HTTPException(status_code=429,
+                            detail="Too many customer-list requests, wait a minute")
+    with db.s() as _audit_s:
+        audit(_audit_s, "USERS_LIST",
+              f"{limit} row(s) from offset {offset}"
+              + (f" q={q!r}" if q else "")
+              + f" by {admin.username}", client_ip(request))
+        # audit() deliberately does not commit - it rides in the caller's
+        # transaction so a failed mutation leaves no phantom audit row. On a
+        # read there is no later commit, so without this the row is discarded
+        # with the session and the audit silently does nothing. Measured: with
+        # no _commit here, USERS_LIST never appeared in /api/audit.
+        _commit(_audit_s)
     # Paging: the endpoint used to hard-cap at 500 with no offset, so a
     # reseller with 600 customers got {"items": 500 rows, "total": 600} and
     # no way to reach rows 501-600 except one `q` search each. The panel
