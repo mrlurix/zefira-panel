@@ -65,6 +65,11 @@ OFFLINE_SUITES = [
     # apply ".env" as a prefix - which flagged the shipped .env.example and so
     # refused EVERY update, on every release since v1.0.0. No test covered it.
     ("update_guard_test.py", "updater intrusion guard"),
+    # Migration steps, one transaction each. Section 3 documents a failure the
+    # fix addresses and cannot detect here (pysqlite commits DDL outside the
+    # transaction - measured), so it is the transaction-boundary checks in
+    # section 5 that do the guarding.
+    ("migration_guard_test.py", "schema migration steps"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the

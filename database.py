@@ -420,6 +420,64 @@ class ApiToken(Base):
         }
 
 
+# Migration steps, each run in its own transaction - see init(). Built once at
+# import so the statements live in one place instead of inline in the caller.
+# `bool_ddl`/`text_ddl`/`dt_ddl` were computed from `conn.engine.dialect.name`;
+# the engine is the same object whichever connection it hands out.
+def _migration_steps(dialect_name):
+    bool_ddl = ("BOOLEAN NOT NULL DEFAULT FALSE" if dialect_name == "postgresql"
+                else "BOOLEAN NOT NULL DEFAULT 0")
+    text_ddl = "TEXT NULL" if dialect_name == "mysql" else "TEXT NOT NULL DEFAULT ''"
+    dt_ddl = "DATETIME" if dialect_name == "mysql" else "TIMESTAMP"
+
+    def _drop(table, column):
+        return lambda self, conn: self._drop_column(conn, table, column)
+
+    def _add(table, column, ddl):
+        return lambda self, conn: self._add_column(conn, table, column, ddl)
+
+    def _blank_backfill(column):
+        def _run(self, conn):
+            try:
+                conn.execute(text("UPDATE vpn_users SET %s = '' "
+                                  "WHERE %s IS NULL" % (column, column)))
+            except Exception:
+                pass
+        return _run
+
+    def _scopes_backfill(self, conn):
+        try:
+            conn.execute(text("UPDATE api_tokens SET scopes='full' "
+                              "WHERE scopes IS NULL"))
+        except Exception:
+            pass
+
+    def _protocols_backfill(self, conn):
+        conn.execute(text("UPDATE vpn_users SET protocols = protocol "
+                          "WHERE protocols IS NULL OR protocols = ''"))
+
+    return [
+        _drop("admins", "totp_enabled"),
+        _drop("admins", "totp_secret"),
+        _drop("admins", "totp_pending"),
+        _add("vpn_users", "protocol", "protocol VARCHAR(16) NOT NULL DEFAULT 'vless'"),
+        _add("vpn_users", "secret_data", f"secret_data {text_ddl}"),
+        _add("vpn_users", "protocols", f"protocols {text_ddl}"),
+        _add("vpn_users", "start_on_first_use", f"start_on_first_use {bool_ddl}"),
+        _add("vpn_users", "duration_days", "duration_days INTEGER"),
+        _add("vpn_users", "device_limit", "device_limit INTEGER"),
+        _add("vpn_users", "last_fetch_at", f"last_fetch_at {dt_ddl}"),
+        _add("vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)"),
+        _add("inbounds", "node_id", "node_id INTEGER"),
+        _add("user_templates", "device_limit", "device_limit INTEGER"),
+        _add("api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'"),
+        _add("api_tokens", "expires_at", f"expires_at {dt_ddl}"),
+        _blank_backfill("secret_data"),
+        _blank_backfill("protocols"),
+        _scopes_backfill,
+        _protocols_backfill,
+    ]
+
 class Database:
     def __init__(self, path: Path):
         import os
@@ -460,49 +518,28 @@ class Database:
                 os.chmod(self.engine.url.database, 0o600)
             except (OSError, AttributeError):
                 pass
-        with self.engine.begin() as conn:
-            self._drop_column(conn, "admins", "totp_enabled")
-            self._drop_column(conn, "admins", "totp_secret")
-            self._drop_column(conn, "admins", "totp_pending")
-            # Dialect-aware DDL. The old literals only worked on SQLite:
-            # PostgreSQL rejects `BOOLEAN ... DEFAULT 0` (needs FALSE) and
-            # MySQL rejects `TEXT NOT NULL DEFAULT ''` (error 1101) and
-            # treats TIMESTAMP as tz-converting with a 2038 cutoff, which
-            # would have made a Postgres/MySQL install fail at startup or
-            # store expiry timestamps in the wrong zone.
-            dialect = conn.engine.dialect.name
-            bool_ddl = "BOOLEAN NOT NULL DEFAULT FALSE" if dialect == "postgresql" \
-                else "BOOLEAN NOT NULL DEFAULT 0"
-            text_ddl = "TEXT NULL" if dialect == "mysql" else "TEXT NOT NULL DEFAULT ''"
-            dt_ddl = "DATETIME" if dialect == "mysql" else "TIMESTAMP"
-            self._add_column(conn, "vpn_users", "protocol", "protocol VARCHAR(16) NOT NULL DEFAULT 'vless'")
-            self._add_column(conn, "vpn_users", "secret_data", f"secret_data {text_ddl}")
-            self._add_column(conn, "vpn_users", "protocols", f"protocols {text_ddl}")
-            self._add_column(conn, "vpn_users", "start_on_first_use", f"start_on_first_use {bool_ddl}")
-            self._add_column(conn, "vpn_users", "duration_days", "duration_days INTEGER")
-            self._add_column(conn, "vpn_users", "device_limit", "device_limit INTEGER")
-            self._add_column(conn, "vpn_users", "last_fetch_at", f"last_fetch_at {dt_ddl}")
-            self._add_column(conn, "vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)")
-            self._add_column(conn, "inbounds", "node_id", "node_id INTEGER")
-            self._add_column(conn, "user_templates", "device_limit", "device_limit INTEGER")
-            self._add_column(conn, "api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'")
-            # Token lifetime. NULL on an EXISTING row means "never expires",
-            # which is exactly what those tokens had before this column
-            # existed - so no operator is locked out by the upgrade, and the
-            # new default applies to anything created from now on.
-            self._add_column(conn, "api_tokens", "expires_at", f"expires_at {dt_ddl}")
-            # Backfill the nullable MySQL TEXT columns so the ORM's
-            # non-nullable contract holds on every dialect.
-            for col in ("secret_data", "protocols"):
-                try:
-                    conn.execute(text(f"UPDATE vpn_users SET {col} = '' WHERE {col} IS NULL"))
-                except Exception:
-                    pass
-            try:
-                conn.execute(text("UPDATE api_tokens SET scopes='full' WHERE scopes IS NULL OR scopes=''"))
-            except Exception:
-                pass
-            conn.execute(text("UPDATE vpn_users SET protocols = protocol WHERE protocols IS NULL OR protocols = ''"))
+        # Each step gets its OWN transaction.
+        #
+        # These eighteen used to share one `engine.begin()`. Both column helpers
+        # are idempotent, but _add_column deliberately lets a failed ALTER
+        # propagate, as does the backfill below - so one failure raised out of
+        # the block and rolled back every step before it. On SQLite and
+        # PostgreSQL, where DDL is transactional, that discarded steps 1..k-1:
+        # the panel started against the old schema, the ORM's SELECTs named
+        # columns that did not exist, and the panel was dead - identically dead
+        # on every later boot because the same step kept failing.
+        #
+        # MySQL was never affected: its DDL implies a COMMIT, so each step
+        # autocommitted and the outer `with` was decorative. Moving the boundary
+        # is therefore a no-op there.
+        #
+        # With a boundary per step, a failure leaves a well-defined prefix
+        # applied and the next boot resumes from it instead of from nothing.
+        # Statements and their order are copied verbatim from the block this
+        # replaces; only the transaction changed.
+        for _step in _migration_steps(self.engine.dialect.name):
+            with self.engine.begin() as _conn:
+                _step(self, _conn)
 
     @staticmethod
     def _drop_column(conn, table: str, name: str) -> None:
