@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import base64
 import hashlib
 import ipaddress
@@ -3525,14 +3525,11 @@ def _external_db_snapshot(stamp: str) -> str | None:
         dest = INSTANCE_DIR / f"db.pre-restore-{stamp}.dump"
         dest.parent.mkdir(parents=True, exist_ok=True)
         os.chmod(dest.parent, 0o700)
-        scheme = url.split(":", 1)[0].lower()
-        if scheme.startswith("postgres"):
-            cmd = ["pg_dump", "--dbname=" + url, "--file=" + str(dest)]
-        elif scheme.startswith("mysql"):
-            cmd = ["mysqldump", "--result-file=" + str(dest), url]
-        else:
+        cmd, extra_env, temp_paths = _dump_invocation(url, dest)
+        if not cmd:
             return None
         if not shutil.which(cmd[0]):
+            _drop_temp_files(temp_paths)
             return None
         # pg_dump --file / mysqldump --result-file create the file with the
         # process umask, so under the common 0022 the COMPLETE database -
@@ -3542,7 +3539,9 @@ def _external_db_snapshot(stamp: str) -> str | None:
         fd = os.open(str(dest), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(fd)
         os.chmod(dest, 0o600)
-        r = subprocess.run(cmd, capture_output=True, timeout=600)
+        r = subprocess.run(cmd, capture_output=True, timeout=600,
+                           env={**os.environ, **(extra_env or {})})
+        _drop_temp_files(temp_paths)
         if r.returncode != 0:
             log.error("%s failed for the pre-restore snapshot: %s",
                       cmd[0], (r.stderr or b"")[:200])
@@ -3555,6 +3554,7 @@ def _external_db_snapshot(stamp: str) -> str | None:
         return str(dest)
     except Exception as exc:  # noqa: BLE001 - a snapshot must never block
         log.error("pre-restore snapshot error: %s", exc)
+        _drop_temp_files(locals().get("temp_paths") or [])
         return None
 
 
@@ -3616,6 +3616,74 @@ def _runtime_intrusions(tree_paths) -> list:
         elif p.startswith(RUNTIME_DIR_PREFIXES) or p.endswith(RUNTIME_SECRET_SUFFIXES):
             bad.append(p)
     return bad
+
+
+def _dsn_without_password(url: str) -> tuple:
+    """(url safe to put in argv, password) from a DATABASE_URL.
+
+    The netloc is partitioned by hand on purpose. urlsplit().password
+    percent-decodes, so a password containing %40 would come back as '@' and
+    the tool would be handed a corrupted credential.
+    """
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+        sp = urlsplit(url)
+    except ValueError:
+        return url, ""
+    if "@" not in sp.netloc:
+        return url, ""
+    userinfo, _, hostpart = sp.netloc.rpartition("@")
+    user, sep, password = userinfo.partition(":")
+    if not sep:
+        # No password in the URL at all.
+        return url, ""
+    safe_netloc = (user + "@" + hostpart) if user else hostpart
+    safe = urlunsplit((sp.scheme, safe_netloc, sp.path, sp.query, sp.fragment))
+    return safe, password
+
+
+def _dump_invocation(url: str, dest) -> tuple:
+    """(argv, extra_env, temp_paths) for dumping `url` to `dest`.
+
+    Invariant: no element of argv may contain the database password. argv is
+    world-readable through /proc/<pid>/cmdline on Linux, so anything placed
+    there is disclosed to every local account for the lifetime of the dump.
+    """
+    scheme = url.split(":", 1)[0].lower()
+    safe, password = _dsn_without_password(url)
+    if scheme.startswith("postgres"):
+        cmd = ["pg_dump", "--dbname=" + safe, "--file=" + str(dest)]
+        # libpq reads the password from the environment; it is not in argv.
+        return cmd, ({"PGPASSWORD": password} if password else {}), []
+    if scheme.startswith("mysql"):
+        tmp = None
+        env = {}
+        if password:
+            import tempfile
+            fd, tmp = tempfile.mkstemp(prefix="zefira-dump-", suffix=".cnf")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write("[client]\npassword=%s\n" % password)
+            os.chmod(tmp, 0o600)
+        # mysqldump's supported route for a secret: a 0600 defaults file read
+        # only by this process. MYSQL_PWD is documented as insecure.
+        cmd = ["mysqldump"]
+        if tmp:
+            cmd.append("--defaults-extra-file=" + tmp)
+        cmd += ["--result-file=" + str(dest), safe]
+        return cmd, env, ([tmp] if tmp else [])
+    return None, None, None
+
+def _drop_temp_files(paths) -> None:
+    """Remove the 0600 defaults files a dump invocation may have created.
+
+    They hold the database password in plaintext, so they must not outlive the
+    dump whether it succeeded, failed, or raised.
+    """
+    for p in paths or []:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
 
 
 def _snapshot_runtime_state() -> str | None:

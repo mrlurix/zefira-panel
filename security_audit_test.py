@@ -288,6 +288,73 @@ try:
     check("the external-DB snapshot is actually taken",
           "_external_db_snapshot" in src and "pg_dump" in src,
           "no dump on DATABASE_URL")
+
+    # The password must not reach argv. A dump of the whole database is exactly
+    # the moment that matters, and argv is readable by every local account.
+    import pathlib as _pl
+    import tempfile as _tf
+
+    _dest = _pl.Path(_tf.gettempdir()) / "zefira-dump-argv-guard.dump"
+    _secrets = {
+        "postgresql://zefira:S3cr3t%40pw@db.internal:5432/zefira": "S3cr3t%40pw",
+        "mysql://root:hunter2@10.0.0.5/zefira": "hunter2",
+        "postgres://u:p%3Ass@h/db": "p%3Ass",
+    }
+    for _url, _pw in _secrets.items():
+        _cmd, _env, _temps = panel_main._dump_invocation(_url, _dest)
+        check(f"no argv element carries the password ({_url.split('://')[0]})",
+              _cmd is not None and not any(_pw in a for a in _cmd),
+              "argv is world-readable via /proc/<pid>/cmdline")
+    # The DSN the tool does receive must be byte-identical apart from the secret,
+    # so a percent-encoded '@' in the password cannot come back corrupted.
+    _cmd, _env, _temps = panel_main._dump_invocation(
+        "postgresql://zefira:S3cr3t%40pw@db.internal:5432/zefira", _dest)
+    check("the sanitised DSN keeps everything but the password",
+          _cmd and "--dbname=postgresql://zefira@db.internal:5432/zefira" in _cmd,
+          str(_cmd))
+    check("the password reaches libpq through the environment, not argv",
+          _env and _env.get("PGPASSWORD") == "S3cr3t%40pw" and
+          not any("S3cr3t" in a for a in _cmd),
+          f"env keys {sorted((_env or {}).keys())}")
+    # A DSN with no password must not gain an empty one, or libpq refuses it.
+    _cmd2, _env2, _t2 = panel_main._dump_invocation(
+        "postgresql://zefira@db.internal/zefira", _dest)
+    check("a DSN with no password is passed through unchanged",
+          _cmd2 and "--dbname=postgresql://zefira@db.internal/zefira" in _cmd2
+          and not _env2, str(_cmd2))
+    # MYSQL_PWD is documented as insecure; the defaults file must be 0600 and
+    # must not survive the dump.
+    _cmd3, _env3, _t3 = panel_main._dump_invocation(
+        "mysql://root:hunter2@10.0.0.5/zefira", _dest)
+    _ok3 = bool(_cmd3) and any("--defaults-extra-file=" + t in _cmd3 for t in _t3)
+    _ok3 = _ok3 and "hunter2" not in " ".join(_cmd3)
+    _ok3 = _ok3 and not any("MYSQL_PWD" in k for k in (_env3 or {}))
+    check("mysqldump gets a 0600 defaults file, not MYSQL_PWD and not argv",
+          _ok3, str(_cmd3))
+    if _t3:
+        # The invariant is "no other user can read this", which on POSIX is the
+        # mode. On Windows os.chmod only toggles the read-only bit and never
+        # sets POSIX bits - mkstemp's 0600 does not survive the trip - so
+        # st_mode reports 0666 there and says nothing about access. The panel
+        # runs on Linux (install.sh, systemd, nginx), so the mode is the real
+        # invariant; elsewhere the check reports itself as not applicable
+        # rather than quietly passing on a number that means nothing.
+        if os.name == "posix":
+            _mode = _pl.Path(_t3[0]).stat().st_mode & 0o777
+            check("the defaults file is 0600",
+                  _mode == 0o600, "mode=%o, world/group can read the password"
+                  % _mode)
+        else:
+            print("  [SKIP] the defaults file is 0600 - POSIX mode bits are "
+                  "not meaningful on %s" % os.name)
+        check("the defaults file holds the password",
+              "hunter2" in io.open(_t3[0], encoding="utf-8").read())
+        panel_main._drop_temp_files(_t3)
+        check("the defaults file is removed once the dump is done",
+              not any(_pl.Path(t).exists() for t in _t3))
+    check("the old hand-built commands are gone",
+          '"--dbname=" + url' not in src and '"--result-file=" + str(dest), url' not in src,
+          "the password-bearing command construction is back")
 except Exception as exc:
     check("snapshot guards could be evaluated", False, str(exc)[:90])
 
