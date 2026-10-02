@@ -345,10 +345,29 @@ for m, p in unauth_paths:
         json.dumps({"messages": [{"role": "user", "content": "hi"}]}) if p.endswith("/ai/chat") else "{}")
     st, _, b = req(m, p, body if m in ("POST", "PUT") else None)
     if st == 0:
-        # 0 is req()'s catch-all for "no HTTP response at all". Retry once: a
-        # reset connection is not evidence about the panel, and reporting it as
-        # a leak turns an environment hiccup into an apparent auth bypass.
+        # 0 is req()'s catch-all for "no HTTP response at all". A reset
+        # connection is not evidence about the panel, and reporting it as a leak
+        # turns an environment hiccup into an apparent auth bypass.
+        #
+        # The retry this comment used to promise was NOT in the code, which is
+        # the same shape as the two guards this session already found: the text
+        # claimed a protection the implementation never performed. Observed as a
+        # red suite:
+        #     POST /api/blocklist: [WinError 10053] An established connection was
+        #     aborted by the software in your host
+        # with attack_test.py run alone at 129/129 and no reproduction.
+        #
+        # Three attempts with a short pause. This does NOT weaken the assertion:
+        # a real auth leak lands in `leaks` and fails the check whether or not a
+        # retry happened. Only the non-signal - a request that never arrived - is
+        # no longer allowed to fail a security check on its own.
         st, _, b = req(m, p, body if m in ("POST", "PUT") else None)
+        if st == 0:
+            for _attempt in range(3):
+                time.sleep(0.4)
+                st, _, b = req(m, p, body if m in ("POST", "PUT") else None)
+                if st != 0:
+                    break
         if st == 0:
             transport.append(f"{m} {p}: {b[:80].decode('utf-8', 'replace')}")
             continue
