@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.15"
+ZEFIRA_PINNED="1.15.16"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
@@ -586,11 +586,26 @@ fi
 # DATABASE_URL). The panel scrubs the admin password on first boot, so a
 # backup is the only surviving copy of any hand-set values.
 if [[ -f "$ENV_FILE" ]]; then
-    cp -a "$ENV_FILE" "$ENV_FILE.bak-$(date +%Y%m%d%H%M%S)"
-    # cp -a preserves the source mode: a legacy 0644 .env would leave a
-    # world-readable copy of the admin password + DB credentials behind.
-    chmod 600 "$ENV_FILE.bak-"* 2>/dev/null || true
-    echo "[*] Existing .env backed up to $ENV_FILE.bak-<timestamp>"
+    # Create the backup at 0600 from the moment it exists, then rename into
+    # place.
+    #
+    # `cp -a` preserves the SOURCE mode, so a legacy 0644 .env produced a
+    # world-readable copy of the admin password and the database credentials,
+    # and the chmod that followed left a window in which any local account could
+    # read it. $TARGET is mode 0755 by default, so "world-readable" was not
+    # theoretical.
+    #
+    # Same shape as the .env write a few lines below - mktemp, chmod 600, mv -f
+    # - so the backup never carries any name at any mode but 0600. It also drops
+    # a second slip: the old chmod globbed over every .env.bak-* in the
+    # directory, so it restyled backups from earlier runs as a side effect and
+    # silently did nothing when the glob matched none.
+    _env_bak="$ENV_FILE.bak-$(date +%Y%m%d%H%M%S)"
+    _env_bak_tmp="$(mktemp "$TARGET/.env.bak.XXXXXX")"
+    cat -- "$ENV_FILE" > "$_env_bak_tmp"
+    chmod 600 "$_env_bak_tmp"
+    mv -f "$_env_bak_tmp" "$_env_bak"
+    echo "[*] Existing .env backed up to $_env_bak"
     if [[ -z "${ADMIN_PASS:-}" ]]; then ADMIN_PASS=$(gen_pass); fi
 fi
 ENV_TMP="$(mktemp "$TARGET/.env.XXXXXX")"

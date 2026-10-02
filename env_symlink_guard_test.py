@@ -77,5 +77,24 @@ check("the original symlink refusal survives",
       "the mv -f path lost its own guard")
 
 print()
+print("=== 5. the .env backup is never readable by another account ===")
+# `cp -a` preserves the SOURCE mode, so a legacy 0644 .env produced a
+# world-readable copy of the admin password and the database credentials, and
+# the chmod that followed left a window in which any local account could read
+# it. The backup now exists as 0600 under a temp name and is renamed into place.
+check("no `cp -a` of the env file remains",
+      not re.search(r'cp -a\s+"\$ENV_FILE"', code),
+      "the backup is still created at the source's mode")
+check("the backup is written to a mktemp file",
+      '_env_bak_tmp="$(mktemp "$TARGET/.env.bak.XXXXXX")"' in code)
+check("that temp file is 0600 before it is named .bak",
+      'chmod 600 "$_env_bak_tmp"' in code)
+check("it is renamed into place",
+      re.search(r'mv -f\s+"\$_env_bak_tmp"\s+"\$_env_bak"', code) is not None)
+check("no chmod-after-copy glob over old backups",
+      not re.search(r'chmod 600 "\$ENV_FILE\.bak-"\*', code),
+      "the old chmod restyled every earlier backup as a side effect")
+
+print()
 print("=== %s ===" % ("ALL OK" if not fails else "%d FAILED" % len(fails)))
 sys.exit(1 if fails else 0)
