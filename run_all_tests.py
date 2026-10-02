@@ -70,6 +70,10 @@ OFFLINE_SUITES = [
     # transaction - measured), so it is the transaction-boundary checks in
     # section 5 that do the guarding.
     ("migration_guard_test.py", "schema migration steps"),
+    # The installer ran as root and appended to a .env that a compromised
+    # panel (it owns /opt/zefira) can replace with a symlink. Derives the chown
+    # that makes the symlink plantable, then asserts no unguarded append.
+    ("env_symlink_guard_test.py", "installer env symlink"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the

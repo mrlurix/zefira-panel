@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.12"
+ZEFIRA_PINNED="1.15.13"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
@@ -824,11 +824,35 @@ EOF
             if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]]; then
                 SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
                 SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+                # Append ATOMICALLY, never with `>> "$ENV_FILE"`.
+                #
+                # $TARGET is chowned to zefira (see the chown block above), so a
+                # panel that has been compromised owns both /opt/zefira and
+                # /opt/zefira/.env and can replace .env with a symlink to any
+                # path on the host. This runs as ROOT, so a plain `>>` would
+                # follow that link and write attacker-influenced lines into a
+                # root-owned target - /etc/cron.d/x being the obvious one.
+                #
+                # The earlier symlink refusal (in the .env block) does not cover
+                # this: it runs before certbot, and the window between the two is
+                # exactly when the service is up and serving. So this block
+                # re-checks, and then builds the new contents beside the file and
+                # renames into place - the same pattern the .env block already
+                # uses, so a symlink is replaced rather than written through.
+                if [[ -L "$ENV_FILE" ]]; then
+                    echo "[!] refusing to add SSL settings: $ENV_FILE is a symlink" >&2
+                    echo "    (remove it first if this is expected: rm -f $ENV_FILE)" >&2
+                    exit 1
+                fi
+                _env_ssl_tmp="$(mktemp "$TARGET/.env.ssl.XXXXXX")"
+                cat -- "$ENV_FILE" > "$_env_ssl_tmp"
+                chmod 600 "$_env_ssl_tmp"
                 {
                     echo "ZEFIRA_SSL_CERT=$(env_escape "$SSL_CERT")"
                     echo "ZEFIRA_SSL_KEY=$(env_escape "$SSL_KEY")"
                     echo "ZEFIRA_SSL_DOMAIN=$(env_escape "$DOMAIN")"
-                } >> "$ENV_FILE"
+                } >> "$_env_ssl_tmp"
+                mv -f "$_env_ssl_tmp" "$ENV_FILE"
                 # Deploy the cert: without a 443 block the panel would stay
                 # plain HTTP behind nginx (false HTTPS: no Secure cookies, no
                 # HSTS, plaintext logins). Terminate TLS in nginx and tell
