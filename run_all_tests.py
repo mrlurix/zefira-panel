@@ -74,6 +74,9 @@ OFFLINE_SUITES = [
     # panel (it owns /opt/zefira) can replace with a symlink. Derives the chown
     # that makes the symlink plantable, then asserts no unguarded append.
     ("env_symlink_guard_test.py", "installer env symlink"),
+    # docs/bump_assets.py wrote its argv version straight into a regex REPLACEMENT,
+    # so one backslash corrupted every asset URL in the site. Runs against a COPY.
+    ("bump_assets_guard_test.py", "docs asset bump inputs"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the
