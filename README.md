@@ -4,6 +4,8 @@
 [![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mrlurix.github.io/zefira-panel/)
 [![Pentest](https://img.shields.io/badge/pentest-129%2F129-success)](https://github.com/mrlurix/zefira-panel/blob/main/attack_test.py)
 
+> 🌐 **Languages:** **English** · [فارسی](README.fa.md) · [中文](README.zh.md) · [Русский](README.ru.md)
+
 > 📚 **Documentation: [mrlurix.github.io/zefira-panel](https://mrlurix.github.io/zefira-panel/)** — install guide, user manual, API reference, FAQ.
 
 Simple panel for managing and selling VPN accounts. Started as a private tool for my own servers and cleaned up for public use.
@@ -265,3 +267,5 @@ USDC BEP-20:   0x4caF4EfDe83784351ED81e39f56e5dB49FE8FE18
 ---
 
 If you like it, give it a star. Issues and PRs are welcome.
+
+**English** · [فارسی](README.fa.md) · [中文](README.zh.md) · [Русский](README.ru.md)

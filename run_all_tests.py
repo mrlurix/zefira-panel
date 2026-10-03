@@ -77,6 +77,10 @@ OFFLINE_SUITES = [
     # docs/bump_assets.py wrote its argv version straight into a regex REPLACEMENT,
     # so one backslash corrupted every asset URL in the site. Runs against a COPY.
     ("bump_assets_guard_test.py", "docs asset bump inputs"),
+    # The four READMEs, compared rather than eyeballed: a translation that drops
+    # a number, an address or a code fence is worse than none, because the reader
+    # cannot tell which part to trust.
+    ("readme_i18n_test.py", "README translations"),
     ("i18n_test.py", "docs i18n dictionaries"),
     # Reads the route table out of main.py, the sidebar out of app.js and the
     # setting keys out of protocols.py, then requires a real mention in the
