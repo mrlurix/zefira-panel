@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSubs">Subscriptions &amp; Clients — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=34">
+<link rel="stylesheet" href="assets/style.css?v=36">
 </head>
 <body>
 <header class="topbar">
@@ -82,14 +82,17 @@
   <li><b data-i18n="dsub.dlText">Download config</b><span data-i18n="dsub.dlText2"> — single .txt for link-based protocols, ready .conf for WireGuard (with keys + endpoint), ready .ovpn for OpenVPN (CA + cert + key embedded), or a .zip bundle when several apply.</span></li>
 </ul>
 
+<h2 id="feed-contents" data-i18n="dsub.feedTitle">What the subscription feed contains</h2>
+<p><span data-i18n="dsub.feedBody">The feed carries share links and nothing else. WireGuard, OpenVPN, L2TP/IPsec and Cisco AnyConnect are file protocols &mdash; a .conf/.ovpn is not a URI, so no link importer can read one &mdash; and they are delivered as files: the dashboard card, the per-user Download config button, or the ZIP. A plan made only of those has nothing to list, so the feed answers 422 with that reason instead of text a client cannot parse. Clash output answers 422 for the same reason: Mihomo has no proxy type for those protocols.</span></p>
+
 <h2 id="custom-subscription-path" data-i18n="dsub.customPath">Custom subscription path</h2>
 <p><span data-i18n="dsub.customA">During install (or via</span> <code>SUBSCRIPTION_PATH</code><span data-i18n="dsub.customB">) you can rename</span> <code>/sub</code> <span data-i18n="dsub.customC">to anything, e.g.</span> <code>/s</code> <span data-i18n="dsub.customD">— links become</span> <code>https://domain/s/TOKEN</code><span data-i18n="dsub.customE">. Obscurity is not security, but it cuts scanner noise.</span></p>
 
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=34"></script>
-<script src="assets/docs.js?v=34"></script>
-<script src="assets/support-ai.js?v=34"></script>
+<script src="assets/i18n.js?v=36"></script>
+<script src="assets/docs.js?v=36"></script>
+<script src="assets/support-ai.js?v=36"></script>
 </body>
 </html>

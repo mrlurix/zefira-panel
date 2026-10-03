@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.18"
+ZEFIRA_PINNED="1.15.19"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
