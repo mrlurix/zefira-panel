@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mrlurix.github.io/zefira-panel/)
-[![Pentest](https://img.shields.io/badge/pentest-117%2F117-success)](https://github.com/mrlurix/zefira-panel/blob/main/security_test.py)
+[![Pentest](https://img.shields.io/badge/pentest-129%2F129-success)](https://github.com/mrlurix/zefira-panel/blob/main/attack_test.py)
 
 > 📚 **Documentation: [mrlurix.github.io/zefira-panel](https://mrlurix.github.io/zefira-panel/)** — install guide, user manual, API reference, FAQ.
 
@@ -32,7 +32,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.14.0/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.16/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -42,7 +42,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.14.0` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.16` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -94,6 +94,7 @@ Default login: `http://YOUR_SERVER_IP:8000`
 
 - Users with traffic limit, expiry date, and notes. Start-on-first-use is supported if you want the timer to start only after the first connection. Pencil button per row edits note, volume, expiry, device limit.
 - Multiple protocols per user, all in one subscription. Supports normal base64 subs and Clash YAML (`?format=clash`). Link remarks show the plain username.
+- The subscription feed carries **share links and nothing else**. `WireGuard`, `OpenVPN`, `L2TP/IPsec` and `Cisco AnyConnect` are file protocols - a `.conf`/`.ovpn` is not a URI, so no link importer can read one - and they are delivered as files: the dashboard card, the per-user **Download config** button, or the ZIP. A plan made *only* of file protocols therefore has no links to list, and the feed answers `422` with that reason instead of a page of text a client cannot parse. Before v1.15.8 it inlined those files under a `### OpenVPN ###` header; a client skips that one `#` line and is handed the other ~90 as if they were nodes.
 - Browser dashboard: opening a subscription link in a browser shows usage, links, QR and apps; VPN clients always get raw bytes.
 - Inbounds: define extra ports/hosts per protocol and every user gets links for all of them. Pin inbounds to server nodes — offline nodes are auto-excluded from links.
 - Server nodes: register remote servers with 5-minute health checks, latency and uptime; on-demand check, enable/disable, safe delete.
@@ -162,9 +163,9 @@ panel and docs front-end logic (a warning that can never be shown, a copy
 button that copies its own label, a list re-rendered from a stale response, a
 stale asset version in a `fetch()` URL). All nine restore the panel to its
 shipped defaults afterwards, so the suites are
-order-independent and can run against a live panel (or all seven in one go with
+order-independent and can run against a live panel (or all of them in one go with
 `python run_all_tests.py admin YOURPASS`). A green run ends with
-`13/13 suites passed` - nine live suites plus four that need no server. The
+`21/21 suites passed` - nine live suites plus twelve that need no server. The
 per-suite counts are deliberately **not** written down here: they move every
 time a check is added, and a copied number that has drifted is worse than no
 number, because it reads as something to compare against. Read them off the run
@@ -175,9 +176,24 @@ too. Each one executes shipped code rather than reading it, because every
 defect below passed a source-level review:
 
 ```bash
-python installer_test.py     # the installer's guarantees, as static guards
-node i18n_dict_check.js      # the docs dictionaries, loaded and inspected
-node i18n_render_check.js    # the docs renderer, fed hostile strings
+python installer_test.py      # the installer's guarantees, as static guards
+node i18n_dict_check.js       # the docs dictionaries, loaded and inspected
+node i18n_render_check.js     # the docs renderer, fed hostile strings
+```
+
+Nine more do not need a server either, and all nine were written because the
+defect they cover had already shipped:
+
+```bash
+python dashboard_link_test.py    # the customer dashboard link, in a guessed-domain install
+python proxy_trust_test.py      # proxy trust and client IP agreement
+python link_encoding_test.py    # share-link remark encoding
+python update_guard_test.py     # the updater's runtime-intrusion guard
+python migration_guard_test.py  # schema migration steps, one transaction each
+python env_symlink_guard_test.py # the installer writing .env through a symlink
+python bump_assets_guard_test.py# docs asset-bump inputs
+python i18n_test.py             # panel templates and JS against every locale
+python docs_coverage_test.py    # every endpoint, sidebar section and setting documented
 ```
 
 `i18n_dict_check.js` exists because the docs are four languages that must stay
