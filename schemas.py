@@ -136,7 +136,7 @@ class UserPatchIn(BaseModel):
         groups = (
             ("volume_gb", "set_volume_gb", "add_volume_gb"),
             ("used_gb", "add_used_gb"),
-            ("expires_at", "set_expires_at", "extend_days"),
+            ("expires_at", "set_expires_at", "extend_days", "days"),
             ("note", "set_note"),
             ("device_limit", "set_device_limit"),
             ("days", "extend_days"),

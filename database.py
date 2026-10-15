@@ -170,7 +170,7 @@ class VpnUser(Base):
             "last_fetch_at": (
                 self.last_fetch_at.isoformat(timespec="seconds") + "Z" if self.last_fetch_at else None
             ),
-            "last_fetch_ip": self.last_fetch_ip or None,
+            "last_fetch_ip": safe_text(self.last_fetch_ip) or None,
             "created_at": (
                 self.created_at.isoformat(timespec="seconds") + "Z" if self.created_at else None
             ),
@@ -500,7 +500,7 @@ class AuditLog(Base):
             # 500'd /api/audit.
             "ts": self.ts.isoformat(timespec="seconds") + "Z" if self.ts else None,
             "event": safe_text(self.event),
-            "detail": safe_text(self.detail[:200]),
+            "detail": safe_text(self.detail[:200] if self.detail else None),
             "ip": safe_text(self.ip),
             "ok": self.ok,
         }
@@ -579,6 +579,32 @@ def _migration_steps(dialect_name):
     def _add(table, column, ddl):
         return lambda self, conn: self._add_column(conn, table, column, ddl)
 
+    def _index(table, column, name):
+        """A migration step that creates an index. Same shape as _add above.
+
+        ALTER TABLE ADD COLUMN cannot create an index, and
+        Base.metadata.create_all() emits indexes only for the tables it builds -
+        so a column added by migration arrives unindexed. On a table built this
+        way, measured, PRAGMA index_list returned [] and EXPLAIN planned SCAN
+        for /sub/{token} - the anonymous subscription lookup, once per poll.
+        Unique as well as indexed: token_digest() is an HMAC and the ORM column
+        already declares unique=True.
+
+        A pre-existing duplicate value, or a dialect that spells it differently,
+        must not stop the panel booting - the column and its data are already
+        correct and this is only the index. So it warns and moves on, unlike
+        _add_column below which deliberately lets a failed ALTER do the same.
+        """
+        def _run(self, conn):
+            try:
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (%s)"
+                                  % (name, table, column)))
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "could not create index %s on %s(%s)", name, table, column,
+                    exc_info=True)
+        return _run
+
     def _blank_backfill(column):
         def _run(self, conn):
             try:
@@ -649,6 +675,14 @@ def _migration_steps(dialect_name):
         _add("vpn_users", "last_fetch_at", f"last_fetch_at {dt_ddl}"),
         _add("vpn_users", "last_fetch_ip", "last_fetch_ip VARCHAR(64)"),
         _add("vpn_users", "token_sha", "token_sha VARCHAR(64)"),
+        # create_all() emits this index for a FRESH table and does nothing
+        # for an existing one, so every UPGRADED install resolved
+        # /sub/{token} with a full scan of vpn_users. Measured on a table
+        # built the migration way: PRAGMA index_list returned [] and
+        # EXPLAIN said SCAN, not SEARCH. Unique as well as indexed -
+        # token_digest() is an HMAC and the ORM column already declares
+        # unique=True, so the database should enforce it.
+        _index("vpn_users", "token_sha", "ix_vpn_users_token_sha"),
         _add("inbounds", "node_id", "node_id INTEGER"),
         _add("user_templates", "device_limit", "device_limit INTEGER"),
         _add("api_tokens", "scopes", "scopes VARCHAR(16) NOT NULL DEFAULT 'full'"),

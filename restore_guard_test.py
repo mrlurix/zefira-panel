@@ -44,6 +44,8 @@ def checks(main, schemas):
     wipe_at = main.find("s.delete(u)")
     guard_at = main.find("if not data.users:")
     loop_at = main.find("for ru_raw in data.users:")
+    prep_guard_at = main.find("if not prepared_users:")
+    dedup_at = main.find("prepared_users = deduped")
 
     # 3. token cap
     cap = re.search(r"live = s\.scalar\([\s\S]{0,320}?\)\s*or 0", main)
@@ -65,8 +67,27 @@ def checks(main, schemas):
         "token cap filters on expires_at": "ApiToken.expires_at" in cap_seg,
         "token cap treats NULL expiry as live": "ApiToken.expires_at.is_(None)" in cap_seg,
         "or_ is imported": re.search(r"\bor_\b", sql_import) is not None,
-        "no other read of data.users escapes the guard":
-            len(re.findall(r"data\.users", main)) == 2,  # the guard, and the loop
+        # NOT `len(re.findall(r"data\.users", main)) == N`, which is what this
+        # said and which was an occurrence count rather than a property. It
+        # stayed green through a real data-loss bug: the guard tests
+        # `data.users`, the wipe depends on `prepared_users`, and every per-row
+        # path (bad row, missing volume, duplicate name or token) can empty the
+        # second while leaving the first truthy. Measured against a live panel:
+        # POST /api/restore {"users":[{}]} answered 200 {"ok": true,
+        # "added_users": 0, "skipped": 1} and left vpn_users empty.
+        # `if\b[^\n:]*\bdata\.users\b` and not `if\s+(?:not\s+)?data\.users`: the
+        # narrower form missed `if len(data.users) > ...`, which is exactly the
+        # shape the check exists to catch.
+        "no other CONDITION on data.users decides anything":
+            len(re.findall(r"if\b[^\n:]*\bdata\.users\b", main)) == 1,
+        "the wipe is guarded by prepared_users too":
+            re.search(r"if not prepared_users:\s*\n\s*raise HTTPException", main) is not None,
+        "the prepared_users guard answers 400":
+            re.search(r"if not prepared_users:[\s\S]{0,420}?status_code=400", main) is not None,
+        "the prepared_users guard runs before the customer table is wiped":
+            prep_guard_at != -1 and wipe_at != -1 and prep_guard_at < wipe_at,
+        "prepared_users is finalised by the dedup before it is guarded":
+            prep_guard_at != -1 and dedup_at != -1 and dedup_at < prep_guard_at,
     }
 
 
@@ -93,6 +114,19 @@ def main_run():
          ["empty-restore guard exists", "guard returns 400",
           "guard runs before the customer table is wiped",
           "guard runs before the loop that fills prepared_users"]),
+        # A bounded, non-greedy span rather than a nested quantifier: nested
+        # (?:\s*(...|\s*"...")*)* over a 7000-line file backtracks catastrophically
+        # and the mutation takes minutes instead of milliseconds.
+        ("remove the prepared_users guard, as shipped",
+         lambda t: re.sub(r"[ \t]*if not prepared_users:[\s\S]{0,700}?\n(?=\s*_snapshot_db_before_restore\(\))", "", t, count=1),
+         ["the wipe is guarded by prepared_users too",
+          "the prepared_users guard answers 400",
+          "the prepared_users guard runs before the customer table is wiped",
+          "prepared_users is finalised by the dedup before it is guarded"]),
+        ("let data.users decide something again",
+         lambda t: t.replace("    prepared_users = deduped\n",
+                             "    if len(data.users) > 10000:\n        pass\n\n    prepared_users = deduped\n", 1),
+         ["no other CONDITION on data.users decides anything"]),
         ("count expired tokens again",
          lambda t: re.sub(r"\.where\(or_\(ApiToken\.expires_at\.is_\(None\), ApiToken\.expires_at > _now\)\)", "", t),
          ["token cap filters on expires_at", "token cap treats NULL expiry as live"]),
@@ -118,7 +152,7 @@ def main_run():
     if failures:
         print("FAIL: %d problem(s): %s" % (len(failures), "; ".join(failures)))
         return 1
-    print("PASS: all three guards hold, and each can fail.")
+    print("PASS: every guard holds, and each can fail.")
     return 0
 
 

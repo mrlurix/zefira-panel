@@ -37,6 +37,18 @@ SUITES = [
     ("attack_paths_test.py", "operator paths / restore"),
     ("frontend_bugs_test.py", "front-end regressions"),
     ("panel_sections_test.py", "panel sections end-to-end"),
+    # The migration list, executed rather than read. It exists because
+    # a helper landed between @staticmethod and def _add_column, which
+    # ast.parse cannot see: the file parsed, the names did not resolve,
+    # and every migration raised on the first step. 13 checks, 4 mutations.
+    ("migration_run_test.py", "the migration list actually runs"),
+    # Six defects an agent sweep found on 2026-10-16, each measured before
+    # it was fixed: a restore that answered ok:true after deleting every
+    # customer, a validator that caught one spelling of a field and not the
+    # other, two serialisers that 500 on a bytes or NULL column, a missing
+    # index on the anonymous subscription lookup, and the access log
+    # carrying that same credential. 28 checks, 7 mutations.
+    ("reliability_guards_test.py", "agent-sweep defects stay fixed"),
     # Reads, changes, reads back and restores EVERY settings card. Cards whose
     # action reaches outside the panel (a real certificate, a real chat, provider
     # quota) are probed with input rejected before the side effect, so this

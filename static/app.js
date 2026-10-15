@@ -335,7 +335,10 @@ function userRow(u) {
   const dateSmall = document.createElement("small");
   // Guarded: a null/garbage expires_at used to throw a RangeError here,
   // AFTER the table body was cleared - one bad row blanked every user.
-  const expDate = u.pending_start ? null : new Date(u.expires_at);
+  // `|| ""` and not the bare value: new Date(null).getTime() is 0, and
+// isNaN(0) is FALSE, so a NULL expiry slipped past the guard below and
+// printed "Jan 01, 1970" under an "Expired" badge. new Date("") is NaN.
+      const expDate = u.pending_start ? null : new Date(u.expires_at || "");
   dateSmall.textContent = (!expDate || isNaN(expDate.getTime())) ? "\u2014" : dateFmt.format(expDate);
   exp.appendChild(dateSmall);
 

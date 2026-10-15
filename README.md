@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.41/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.42/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.41` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.42` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -149,7 +149,7 @@ same code path if you need concurrent writers.
 
 ### Running the tests
 
-There are 40 test suites. 10 hit the running panel from the outside and
+There are 42 test suites. 10 hit the running panel from the outside and
 30 are static guards that need nothing running. One command runs all 40:
 
 ```bash
@@ -294,6 +294,8 @@ python api_coverage_test.py                                # API reference cover
 python update_status_latency_test.py                # the update page never waits on GitHub
 python backpack_tunnel_test.py             # BackPack v1.8.5 tunnel capabilities
 python ai_url_guard_test.py               # the AI fetch URL matches its validated base
+python reliability_guards_test.py   # the defects an agent sweep found stay fixed
+python migration_run_test.py       # the migration list, executed
 ```
 
 > **Always run the verifier.** The lock is generated on one machine but

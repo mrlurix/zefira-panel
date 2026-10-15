@@ -520,14 +520,26 @@ if strs == 200:
         req("DELETE", f"/api/users/{u['id']}", headers=AUTH2)
 check("restore keeps every row, re-deriving an unreadable expiry", ok_atomic)
 
-# One real customer row, because a restore now REFUSES an empty `users` list:
-# an empty list means "delete every customer", not "restore no customers", so
-# this payload would be rejected with 400 before the credential check below ever
-# ran. Supplying a valid row keeps the test testing what it was written for -
-# that a crafted api_tokens/admin block is not imported - rather than testing
-# the empty-list refusal.
+# One real customer row, because a restore REFUSES a `users` list whose every
+# row was rejected: an empty surviving list means "delete every customer", not
+# "restore no customers", so such a payload is answered 400 before the
+# credential check below ever runs.
+#
+# The row used to be {"volume_gb": 1.0, "duration_days": 30,
+# "protocols": ["vless"]} with no token at all. RestoreUserIn wants
+# `protocols` as a comma-separated STRING and `token` as 32-200 chars, so that
+# row failed validation, was counted as "skipped", and prepared_users came out
+# empty. Nothing here noticed: the assertions below are all about api_tokens and
+# admins, and they hold whether the customer row survived or not. The test
+# passed against a panel that had silently dropped its own probe - and the
+# comment above it called the row "real".
+#
+# The shapes below are what the panel's own exporter writes, read off a real
+# backup rather than assumed: protocols is a string, token is 32-hex or a
+# Fernet blob. 32-hex is the shape that still validates.
 probe_user = {"username": "probe_restore_row", "volume_gb": 1.0,
-              "duration_days": 30, "protocols": ["vless"]}
+              "duration_days": 30, "protocols": "vless",
+              "token": "ab" * 16}
 # ---- 25b. Restore must NOT import credentials (a backup is unsigned) ----
 # Importing `api_tokens` from a backup file meant a crafted file could ship
 # token_sha=sha256(attacker_chosen) with scope "full" and become a working
@@ -544,8 +556,15 @@ try:
           strst == 200 and rj2.get("restored_tokens") == 0
           and rj2.get("restored_admins") == 0
           and "credentials_note" in rj2, f"got {strst} {str(rj2)[:120]}")
+    # The probe row must actually survive. Without this the three assertions
+    # above pass against a restore that dropped every customer row, which is
+    # exactly what the old probe row was doing.
+    check("the probe row was accepted, not skipped",
+          strst == 200 and rj2.get("skipped") == 0
+          and rj2.get("added_users") == 1, f"got {strst} {str(rj2)[:140]}")
 except Exception:
     check("restore accepts the file but imports no credentials", False, f"got {strst}")
+    check("the probe row was accepted, not skipped", False, f"got {strst}")
 _st, _tokx, _ = login_with(PASSWORD)
 AUTH2 = {"Cookie": f"zefira_session={_tokx}", "X-Requested-With": "XMLHttpRequest"}
 stlst2, _, lsb2 = req("GET", "/api/api-tokens", headers=AUTH2)

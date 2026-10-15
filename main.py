@@ -1638,6 +1638,27 @@ def _request_id(request: Request) -> str:
     return secrets.token_hex(8)
 
 
+def _redact_credential_path(path: str) -> str:
+    """Strip a customer credential out of a path before it reaches the log.
+
+    /sub/{token} is anonymous and that token IS the account: it resolves the
+    user and returns their WireGuard private key, OpenVPN client key, L2TP PSK
+    and every per-protocol password. The access log is the panel's only request
+    metric, so the line has to stay useful - which is why this rewrites the
+    credential rather than dropping the line.
+
+    Rotating the token does not help: the next poll writes the new one to the
+    same place. Length is kept, because "a 32-hex token" is what an operator
+    scanning for a specific leak needs to recognise.
+    """
+    m = re.match(r"^(/sub/)([A-Za-z0-9_-]{8,})(/.*)?$", path or "")
+    if not m:
+        return path
+    tok = m.group(2)
+    return "%s%s%s" % (m.group(1), tok[:4] + ("*" * max(0, len(tok) - 4)),
+                       m.group(3) or "")
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     rid = _request_id(request)
@@ -1663,8 +1684,12 @@ async def security_headers_middleware(request: Request, call_next):
     # One line per request, with the id, the status and how long it took. The
     # panel has no metric exporter and no trace backend, so this line is the
     # only thing that ties a slow response back to the code that produced it.
+    # The path can carry a credential: /sub/{token} is anonymous, and that
+    # token is the customer's whole account. Rotating it does not help, because
+    # the next poll writes the new one here too.
+    _logged_path = _redact_credential_path(request.url.path)
     log.info("rid=%s %s %s -> %s %.0fms", rid, request.method,
-             request.url.path, response.status_code,
+             _logged_path, response.status_code,
              (time_mod.perf_counter() - _t0) * 1000.0)
     return response
 
@@ -5220,6 +5245,21 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         seen_tokens.add(pu.token)
         deduped.append(pu)
     prepared_users = deduped
+    # The guard above refuses an empty `users` list, but the wipe below depends
+    # on `prepared_users`, and every per-row path can empty THAT while leaving
+    # `data.users` truthy: a row that fails validation, a missing or zero
+    # volume, a duplicate username or token. Measured against a live panel, not
+    # reasoned: POST /api/restore {"users":[{}]} answered HTTP 200 with
+    # {"ok": true, "added_users": 0, "skipped": 1} and left vpn_users empty -
+    # a green success after deleting every customer.
+    if not prepared_users:
+        raise HTTPException(
+            status_code=400,
+            detail="None of this backup's customers could be restored (%d row(s) "
+                   "were rejected or duplicated), so restoring it would delete "
+                   "every existing customer instead of replacing them. It was "
+                   "refused. Export the customers first, or restore a file that "
+                   "contains usable ones." % len(data.users))
     _snapshot_db_before_restore()
     with db.s() as s:
         for u in s.scalars(select(VpnUser)).all():
