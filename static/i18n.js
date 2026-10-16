@@ -324,7 +324,7 @@ Object.assign(Z_STRINGS.en, {
 "modal.exactHint": "Setting an exact expiry switches a start-on-first-use user to fixed expiry.",
 "modal.saveChanges": "Save Changes",
 "modal.qrTitle": "Subscription QR", "modal.qrCopy": "Copy Link"
-});
+,"nav.mcp": "AI client (MCP)","title.mcp": "AI client (MCP)","menu.mcp": "AI client (MCP)","mcp.title": "AI client (MCP)","mcp.hintA": "Lets an AI client drive this panel over the Model Context Protocol. It grants nothing a","mcp.hintScope": "full","mcp.hintB": "-scoped API token does not already carry: it is another door to the same authority, with an audit row per call.","mcp.enable": "Enable MCP","mcp.enableHttp": "Accept MCP over HTTP (POST /api/mcp)","mcp.limit": "Calls per minute, per token","mcp.saveBtn": "Save MCP Settings","mcp.testBtn": "Test transport","mcp.wireTitle": "Point your client at this panel","mcp.wireA": "Create a","mcp.wireB": "token under Developer API, then give it to your client as","mcp.wireC": ". No CSRF header, no cookie - a cookie is refused outright.","mcp.endpointLabel": "Endpoint","mcp.identityLabel": "Authenticated as","mcp.countA": "Protocol","mcp.countB": "tools available","mcp.countC": ".","mcp.neverA": "The panel never shows a token again, only its name and scope - here:","mcp.docsA": "Every tool, its arguments and the confirmation string destructive calls need are listed in the","mcp.docsB": "endpoint reference","mcp.docsC": ".","msg.mcpSaved": "MCP settings saved","msg.mcpTestOk": "The MCP transport answered","msg.mcpTestFail": "The MCP transport did not answer"});
 
 Object.assign(Z_STRINGS.fa, {
 "brand.adminPanel": "پنل مدیریت",
@@ -535,7 +535,7 @@ Object.assign(Z_STRINGS.fa, {
 "sub.copy": "کپی", "sub.copyConfig": "کپی کانفیگ", "sub.copied": "کپی شد ✓", "sub.copyFailed": "کپی نشد",
 "sub.qrTitle": "QR اشتراک", "sub.qrCopy": "کپی لینک",
 "audit.empty": "هنوز رویدادی ثبت نشده."
-});
+,"nav.mcp": "کلاینت هوش مصنوعی (MCP)","title.mcp": "کلاینت هوش مصنوعی (MCP)","menu.mcp": "کلاینت هوش مصنوعی (MCP)","mcp.title": "کلاینت هوش مصنوعی (MCP)","mcp.hintA": "به یک کلاینت هوش مصنوعی اجازه می‌دهد این پنل را با پروتکل MCP اداره کند. هیچ","mcp.hintScope": "دسترسی کامل","mcp.hintB": "اضافه بر توکن API نمی‌دهد: دری دیگر به همان اختیار، با یک رد ممیزی برای هر فراخوانی.","mcp.enable": "فعال کردن MCP","mcp.enableHttp": "پذیرش MCP روی HTTP (POST /api/mcp)","mcp.limit": "فراخوانی در هر دقیقه، برای هر توکن","mcp.saveBtn": "ذخیره تنظیمات MCP","mcp.testBtn": "آزمون ترابری","mcp.wireTitle": "کلاینت خود را به این پنل وصل کنید","mcp.wireA": "یک توکن","mcp.wireB": "زیر API توسعه‌دهنده بسازید و آن را به کلاینت خود بدهید به شکل","mcp.wireC": ". بدون هدر CSRF و بدون کوکی - کوکی صریحاً رد می‌شود.","mcp.endpointLabel": "نشانی","mcp.identityLabel": "احراز هویت‌شده به عنوان","mcp.countA": "پروتکل","mcp.countB": "ابزار در دسترس","mcp.countC": ".","mcp.neverA": "پنل توکن را دیگر هرگز نشان نمی‌دهد، تنها نام و دامنهٔ آن را - اینجا:","mcp.docsA": "هر ابزار، آرگومان‌هایش و رشتهٔ تأییدی که فراخوانی‌های ویرانگر لازم دارند در","mcp.docsB": "مرجع endpoint","mcp.docsC": "آمده است.","msg.mcpSaved": "تنظیمات MCP ذخیره شد","msg.mcpTestOk": "ترابری MCP پاسخ داد","msg.mcpTestFail": "ترابری MCP پاسخ نداد"});
 
 Object.assign(Z_STRINGS.fa, {
 "tunnels.remoteTitle": "دسترسی راه‌دور و تانل‌زنی",
@@ -842,7 +842,7 @@ Object.assign(Z_STRINGS.zh, {
 "sub.copy": "复制", "sub.copyConfig": "复制配置", "sub.copied": "已复制 ✓", "sub.copyFailed": "复制失败",
 "sub.qrTitle": "订阅二维码", "sub.qrCopy": "复制链接",
 "audit.empty": "暂无事件记录。"
-});
+,"nav.mcp": "AI 客户端 (MCP)","title.mcp": "AI 客户端 (MCP)","menu.mcp": "AI 客户端 (MCP)","mcp.title": "AI 客户端 (MCP)","mcp.hintA": "允许 AI 客户端通过模型上下文协议操作本面板。它不会授予","mcp.hintScope": "完整","mcp.hintB": "作用域的 API 令牌所不具备的权限：只是通往同一权限的另一个入口，且每次调用都会写入审计。","mcp.enable": "启用 MCP","mcp.enableHttp": "通过 HTTP 接受 MCP（POST /api/mcp）","mcp.limit": "每分钟调用次数（按令牌）","mcp.saveBtn": "保存 MCP 设置","mcp.testBtn": "测试传输","mcp.wireTitle": "把客户端指向本面板","mcp.wireA": "在开发者 API 下创建一个","mcp.wireB": "令牌，然后以","mcp.wireC": "交给客户端。不需要 CSRF 头，也不需要 Cookie——Cookie 会被直接拒绝。","mcp.endpointLabel": "端点","mcp.identityLabel": "当前身份","mcp.countA": "协议","mcp.countB": "个可用工具","mcp.countC": "。","mcp.neverA": "面板不会再次显示令牌，只会显示它的名称和作用域——即：","mcp.docsA": "每个工具、其参数，以及破坏性调用所需的确认字符串，都列在","mcp.docsB": "端点参考","mcp.docsC": "中。","msg.mcpSaved": "MCP 设置已保存","msg.mcpTestOk": "MCP 传输已响应","msg.mcpTestFail": "MCP 传输没有响应"});
 
 Object.assign(Z_STRINGS.ru, {
 "brand.adminPanel": "Админ-панель",
@@ -1053,7 +1053,7 @@ Object.assign(Z_STRINGS.ru, {
 "sub.copy": "Копировать", "sub.copyConfig": "Скопировать конфиг", "sub.copied": "Скопировано ✓", "sub.copyFailed": "Не скопировалось",
 "sub.qrTitle": "QR подписки", "sub.qrCopy": "Скопировать ссылку",
 "audit.empty": "Событий пока нет."
-});
+,"nav.mcp": "ИИ-клиент (MCP)","title.mcp": "ИИ-клиент (MCP)","menu.mcp": "ИИ-клиент (MCP)","mcp.title": "ИИ-клиент (MCP)","mcp.hintA": "Позволяет ИИ-клиенту управлять панелью через протокол Model Context Protocol. Он не даёт","mcp.hintScope": "полного","mcp.hintB": "доступа, которого нет у токена API с полной областью: это ещё одна дверь к той же власти, с записью в аудит каждого вызова.","mcp.enable": "Включить MCP","mcp.enableHttp": "Принимать MCP по HTTP (POST /api/mcp)","mcp.limit": "Вызовов в минуту, на токен","mcp.saveBtn": "Сохранить настройки MCP","mcp.testBtn": "Проверить транспорт","mcp.wireTitle": "Направьте клиент на эту панель","mcp.wireA": "Создайте токен","mcp.wireB": "в разделе API для разработчиков и передайте клиенту как","mcp.wireC": ". Заголовок CSRF не нужен, cookie не нужна - cookie отклоняется.","mcp.endpointLabel": "Адрес","mcp.identityLabel": "Аутентифицирован как","mcp.countA": "Протокол","mcp.countB": "доступных инструментов","mcp.countC": ".","mcp.neverA": "Панель больше никогда не показывает сам токен - только имя и область - здесь:","mcp.docsA": "Каждый инструмент, его аргументы и строка подтверждения для опасных вызовов перечислены в","mcp.docsB": "справочнике эндпоинтов","mcp.docsC": ".","msg.mcpSaved": "Настройки MCP сохранены","msg.mcpTestOk": "Транспорт MCP ответил","msg.mcpTestFail": "Транспорт MCP не ответил"});
 
 Object.assign(Z_STRINGS.zh, {
 "tunnels.remoteTitle": "远程访问与隧道",

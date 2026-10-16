@@ -659,9 +659,15 @@ check("the two canonical menu lists agree with each other",
 check("...and with the sections that actually exist in the template",
       sorted(_mids_list) == sorted(set(_tpl_secs)),
       f"lists={sorted(_mids_list)} template={sorted(set(_tpl_secs))}")
+# "api, settings" adjacency was the old assertion, but adjacency is a fact
+# about the default order rather than the property being claimed: that api
+# sits in the orderable run instead of after the terminal slot. Now that a
+# second section may sit between them, the assertion is that api is
+# followed, possibly through other sections, by settings.
 check("the api section can therefore be reordered and hidden",
       "api" in _mids_list and "api" in _msrv_list
-      and re.search(r'"api"\s*,\s*"settings"', _mids.group(1)) is not None,
+      and re.search(r'"api"\s*,\s*(?:"[a-z]+"\s*,\s*)*"settings"',
+                    _mids.group(1)) is not None,
       "the default slot is the one the operator asked for, and it is editable")
 
 # ---- the token self-test must not forge usage -------------------------
@@ -721,11 +727,24 @@ check("copying is not blocked, but the button is marked",
 _cc = re.search(r'const API_COPY_IDS = \[([^\]]*)\]', app)
 _cc_list = re.findall(r'"([^"]+)"', _cc.group(1)) if _cc else []
 _ccl = re.search(r'document\.addEventListener\("click".*?API_COPY_IDS\.indexOf\(sel\) === -1', app, re.S)
+# "three ids" and the literal string '#section-api' were both weak ways to
+# say "scoped, and allowlisted". These three say it in a form that cannot
+# rot the same way: the scoping must still name specific section ids rather
+# than the document, every id it names must be a real section in the
+# template, and the allowlist must be exactly the template's copy targets.
+# A page-wide handler fails the first, a section that does not exist fails
+# the second, a stale allowlist fails the third.
+_cc_scopes = re.search(r'btn\.closest\(([^)]*)\)', app)
+_cc_secs = (re.findall(r'#section-([a-z]+)', _cc_scopes.group(1))
+            if _cc_scopes else [])
 check("the copy handler is allowlisted, not page-wide",
-      len(_cc_list) == 3
-      and _ccl is not None
-      and re.search(r'btn\.closest\("#section-api"\)', app) is not None,
-      f"allowlist={_cc_list}")
+      _ccl is not None
+      and bool(_cc_secs)
+      and not re.search(r'body|document|\*|^\s*\)', _cc_scopes.group(1))
+      and all(('id="section-%s"' % x) in panel for x in _cc_secs)
+      and sorted(_cc_list) == sorted(
+          set(re.findall(r'data-copy="([^"]+)"', panel))),
+      f"allowlist={_cc_list} scopes={_cc_secs}")
 check("the copy handler cannot throw on a malformed selector",
       re.search(r'try \{\s*\n\s*src = \$\(sel\);', app) is not None
       or re.search(r'src = \$\(sel\);\s*\n\s*\} catch', app) is not None,

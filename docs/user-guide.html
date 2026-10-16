@@ -105,6 +105,17 @@
 <p><span data-i18n="usr.guardA">Tokens are shown</span> <b data-i18n="usr.guardOnce">once</b><span data-i18n="usr.guardB">, can be revoked instantly, are included in backups, and a</span> <code>bot</code> <span data-i18n="usr.guardC">token gets</span> <code>403</code> <span data-i18n="usr.guardD">on deletes, patches, backup/restore, settings, tokens and updates. Guard them like passwords.</span></p>
 <p><b data-i18n="usr.tgB">Telegram reseller bot in 5 minutes:</b> <span data-i18n="usr.tgA">1) message</span> <b>@BotFather</b> → <code>/newbot</code><span data-i18n="usr.tgCopy">, copy the token;</span> <span data-i18n="usr.tgC">2) in Zefira create a</span> <code>bot</code><span data-i18n="usr.tgD">-scoped API token;</span> <span data-i18n="usr.tgE">3) open</span> <code>examples/telegram-bot-python</code> <span data-i18n="usr.tgF">(or</span> <code>-node</code><span data-i18n="usr.tgG">), set</span> <code>TELEGRAM_BOT_TOKEN</code>, <code>ZEFIRA_URL</code>, <code>ZEFIRA_API_TOKEN</code><span data-i18n="usr.tgH">; 4) run it — customers get</span> <code>/buy</code> <span data-i18n="usr.tgI">plans keyboard, instant account + subscription link,</span> <code>/my</code> <span data-i18n="usr.tgJ">quota view. Panel-side notifications (user create/delete, brute-force lockouts) are separate:</span> <b data-i18n="usr.tgK">Settings → Telegram Notifications</b> <span data-i18n="usr.tgL">with any bot token + chat ID (message the bot once first, then Send Test).</span></p>
 
+<h2 id="mcp-ai-clients" data-i18n="usr.mcp">AI client (MCP)</h2>
+
+<p><span data-i18n="usr.mcpA">The</span> <b>MCP</b> <span data-i18n="usr.mcpB">section lets an AI client drive this panel. It is a door, not a new authority: an MCP token is an ordinary</span> <code>full</code> <span data-i18n="usr.mcpC">API token, so anything a client can reach, a token you already had could reach too. Three things are added on top:</span></p>
+
+<ul>
+<li><span data-i18n="usr.mcpL1">Every tool call writes an audit row, so the log shows what the agent did.</span></li>
+<li><span data-i18n="usr.mcpL2">Destructive tools - deleting a customer, deleting a token - refuse to run unless the call carries the exact confirmation string the refusal names.</span></li>
+<li><span data-i18n="usr.mcpL3">Calls per minute, per token, on a budget you set.</span></li>
+</ul>
+
+<p><span data-i18n="usr.mcpD">Create a</span> <code>zfp_…</code> <span data-i18n="usr.mcpE">token under Developer API, then point your client at</span> <code>POST /api/mcp</code> <span data-i18n="usr.mcpF">with</span> <code>Authorization: Bearer …</code><span data-i18n="usr.mcpG">. No CSRF header and no cookie: a cookie is refused outright, because a browser cookie driving an agent would be a cross-site request with a budget attached. Every tool, its arguments and the confirmation strings are in the</span> <a href="api.html">endpoint reference</a>.</p>
 <h2 id="panel-updates" data-i18n="usr.upd">Panel updates</h2>
 <p><b data-i18n="usr.updB1">Update</b> <span data-i18n="usr.updA">(left menu, above Settings) compares this server with GitHub: current vs latest commit, and the exact incoming changes.</span> <b data-i18n="usr.updB2">Update now</b> <span data-i18n="usr.updC">asks for your password, then pulls the code, reinstalls dependencies and restarts the panel — watch it poll until it reports the new version. Updates are refused if you have local code changes, and every step is audit-logged.</span></p>
 

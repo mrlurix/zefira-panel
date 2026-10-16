@@ -533,6 +533,7 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     if (btn.dataset.section === "update") loadUpdate();
     if (btn.dataset.section === "blocker") loadBlocklist();
     if (btn.dataset.section === "api") loadApiDev();
+    if (btn.dataset.section === "mcp") loadMcp();
   });
 });
 document.querySelectorAll("[data-goto]").forEach((el) => {
@@ -941,7 +942,7 @@ function applyBrand(name) {
 // could be neither reordered nor hidden, which is exactly what Personalize
 // exists to let the operator do. Any new section has to be added here AND to
 // MENU_SECTIONS in main.py, or it is pinned on.
-const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings"];
+const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "settings"];
 const MENU_LOCKED = ["dashboard", "users", "inbounds", "customize", "settings"];
 const DASH_IDS = ["usage", "link", "groups", "apps"];
 let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));
@@ -2639,12 +2640,15 @@ async function loadApiDev() {
 // execCommand fallback (which exists because plaintext-http installs are
 // supported) turns that into silent exfiltration. Neither precondition exists
 // today, but a primitive that broad does not need one to be wrong later.
-const API_COPY_IDS = ["#api-base-url", "#api-auth-header", "#api-example-curl"];
+const API_COPY_IDS = ["#api-base-url", "#api-auth-header", "#api-example-curl", "#mcp-endpoint"];
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-copy]");
   if (!btn) return;
   // Must be inside this section, and must name one of the three known rows.
-  const section = btn.closest("#section-api");
+  // Two sections now, one allowlist between them: the MCP endpoint row is
+  // the same kind of read-only text, and widening the SECTION check
+  // rather than the id list keeps the allowlist the thing that decides.
+  const section = btn.closest("#section-api, #section-mcp");
   if (!section) return;
   const sel = btn.dataset.copy;
   if (API_COPY_IDS.indexOf(sel) === -1) return;
@@ -2661,6 +2665,59 @@ document.addEventListener("click", async (e) => {
   const text = (src.value !== undefined && src.tagName !== "CODE" ? src.value : src.textContent) || "";
   if (await copyText(String(text).trim())) toast(t("msg.linkCopied"));
   else toast(t("msg.copyFailed"), false);
+});
+
+// ---- MCP ----
+async function loadMcp(writeForm = true) {
+  const token = nextSeq("mcp");
+  try {
+    const m = await api("/api/mcp/settings");
+    if (!isCurrent("mcp", token)) return;   // a newer save/load won
+    if (writeForm) {
+      $("#mcp-enabled").checked = !!m.enabled;
+      $("#mcp-http-enabled").checked = !!m.http_enabled;
+      $("#mcp-limit").value = m.max_calls_per_min;
+    }
+    const badge = $("#mcp-badge");
+    if (badge) {
+      badge.textContent = m.enabled ? t("badge.on") : t("badge.off");
+      badge.className = "badge proto " + (m.enabled ? "ok" : "off");
+    }
+    // The endpoint is this page's own origin plus the path, so an operator on
+    // a reverse proxy or a plain-HTTP install copies the address that actually
+    // serves them rather than a guess.
+    $("#mcp-endpoint").textContent = location.origin + "/api/mcp";
+    $("#mcp-identity").textContent = m.token_hint || "-";
+    $("#mcp-protocol").textContent = m.protocol_version || "-";
+    $("#mcp-tools").textContent = String(m.tool_count != null ? m.tool_count : "-");
+    $("#mcp-hint").textContent = m.token_hint || "-";
+  } catch (_) {}
+}
+bind("#mcp-save-btn", "click", async () => {
+  try {
+    await api("/api/mcp/settings", {
+      method: "PUT",
+      body: {
+        enabled: $("#mcp-enabled").checked,
+        http_enabled: $("#mcp-http-enabled").checked,
+        max_calls_per_min: parseInt($("#mcp-limit").value, 10) || 60
+      }
+    });
+    toast(t("msg.mcpSaved"));
+    loadMcp();
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+});
+bind("#mcp-test-btn", "click", async () => {
+  const btn = $("#mcp-test-btn");
+  btn.disabled = true;
+  try {
+    const r = await api("/api/mcp/test", { method: "POST", body: {} });
+    toast(r.ok ? t("msg.mcpTestOk") : t("msg.mcpTestFail"), !!r.ok);
+  } catch (err) {
+    if (err.message !== "auth") toast(err.message, false);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---- Telegram ----
