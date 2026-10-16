@@ -147,3 +147,103 @@ class HttpExecutor:
     async def call(self, tool, args):
         method, path, body, query = build_call(tool, args)
         return await asyncio.to_thread(self._once, method, path, body, query)
+
+
+import json as _json
+import urllib.parse as _up
+
+
+def split_path_and_query(full):
+    """(path, query_string_bytes) from a joined path.
+
+    Split on the FIRST ? only, and never on an encoded %3F: a username
+    containing a literal question mark arrives percent-encoded and must stay
+    inside the path.
+    """
+    if "?" not in full:
+        return full, b""
+    head, tail = full.split("?", 1)
+    return head, tail.encode()
+
+
+class AsgiExecutor:
+    """Runs a tool in-process by forwarding through the panel's own app."""
+
+    def __init__(self, app, token):
+        self.app = app
+        self.token = token
+
+    async def call(self, tool, args):
+        method, path, body, query = _build(tool, args)
+        url = path
+        if query:
+            url += "?" + _up.urlencode(
+                {k: v for k, v in query.items() if v != ""})
+        bare, raw_qs = split_path_and_query(url)
+
+        payload = b"" if body is None else _json.dumps(
+            body, ensure_ascii=False, default=str).encode()
+        headers = [
+            (b"host", b"127.0.0.1:8000"),
+            (b"authorization", ("Bearer " + self.token).encode()),
+            # A bearer already exempts the CSRF guard; sending this anyway
+            # keeps the forwarded call working if that rule is tightened.
+            (b"x-requested-with", b"XMLHttpRequest"),
+            (b"accept", b"application/json"),
+            (b"content-type", b"application/json"),
+            # The panel's size middleware compares against this, so it has to
+            # be the real length or a POST is rejected as oversized.
+            (b"content-length", str(len(payload)).encode()),
+        ]
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": method,
+            "scheme": "http",
+            "path": bare,
+            "raw_path": bare.encode(),
+            "query_string": raw_qs,
+            "root_path": "",
+            "headers": headers,
+            "client": ("127.0.0.1", 0),
+            "server": ("127.0.0.1", 8000),
+            # A fresh dict per call. A shared one would leak one caller's
+            # request.state into the next, and the spike's two consecutive
+            # 200s are exactly the shape a leak would hide behind.
+            "state": {},
+        }
+
+        out = {"status": 0}
+        chunks = []
+
+        async def receive():
+            # Idempotent on purpose: the panel's size middleware reads the
+            # body, then swaps in its own replay, so a receive that answered
+            # http.disconnect the second time would break the POST path.
+            return {"type": "http.request", "body": payload,
+                    "more_body": False}
+
+        async def send(m):
+            if m["type"] == "http.response.start":
+                out["status"] = m["status"]
+            elif m["type"] == "http.response.body":
+                chunks.append(m.get("body", b""))
+
+        await self.app(scope, receive, send)
+
+        raw = b"".join(chunks)
+        try:
+            parsed = _json.loads(raw) if raw else None
+        except Exception:
+            parsed = raw.decode("utf-8", "replace")
+        status = out["status"]
+        if 200 <= status < 300:
+            return {"status": status, "data": parsed}
+        return {"status": status, "error": parsed}
+
+
+def _build(tool, args):
+    """build_call under a private name, so importing this half alone works."""
+    from mcp_exec import build_call
+    return build_call(tool, args)

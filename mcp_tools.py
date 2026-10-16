@@ -94,16 +94,33 @@ TOOLS = [
      "method": "GET", "path": "/api/users/by-username/{username}",
      "body": {}, "query": {}, "path_params": {"username": "username"}},
 
+    # `protocols` is a LIST, not a comma-separated string: UserCreateIn
+    # declares List[Protocol]. The first draft of this table sent a string and
+    # every create_user answered 422 - found by forwarding a real call
+    # through the app, not by reading the schema.
+    #
+    # `days` is ge=1, so 0 is NOT "starts on first use" - it is a 422. The
+    # sentinel is start_on_first_use, and it is what this table sends.
     {"name": "create_user",
      "description": "Create a customer. Give protocols, volume_gb and days.",
      "input_schema": _s(username=_str("Username, 3-32 characters."),
-                        protocols=_str("Comma-separated, e.g. vless,trojan."),
+                        protocols={"type": "array",
+                                   "description": "Protocols, e.g. "
+                                                  "[\"vless\", \"trojan\"].",
+                                   "minItems": 1,
+                                   "items": {"type": "string"}},
                         volume_gb=_num("Traffic allowance in GB."),
-                        days=_int("Days of access; 0 means starts on first use."),
+                        days=_int("Days of access. Omit with "
+                                  "start_on_first_use instead of passing 0."),
+                        start_on_first_use={"type": "boolean",
+                                           "description": "Do not count down "
+                                                          "until the first "
+                                                          "fetch."},
                         note=_str("Optional note.")),
      "method": "POST", "path": "/api/users",
      "body": {"username": "username", "protocols": "protocols",
-              "volume_gb": "volume_gb", "days": "days", "note": "note"},
+              "volume_gb": "volume_gb", "days": "days",
+              "start_on_first_use": "start_on_first_use", "note": "note"},
      "query": {}, "path_params": {}},
 
     {"name": "extend_user",
