@@ -121,6 +121,14 @@ class SlidingWindowLimiter:
 
     def __init__(self, max_events: int, window_seconds: float):
         self.max = max_events
+        # An operator-adjustable ceiling, for the one limiter whose
+        # limit is a setting rather than a code constant.
+        # Measured, not assumed: the MCP limiter was built at 60 and
+        # an operator who set the limit to 5 was still protected by
+        # 60, because self.max was frozen here with no way to
+        # change it. None means 'use self.max', which is every other
+        # limiter in the panel.
+        self.max_override = None
         self.window = window_seconds
         self._events: dict[str, deque] = defaultdict(deque)
         # Sync endpoints run on uvicorn's thread pool: concurrent hit()
@@ -186,7 +194,10 @@ class SlidingWindowLimiter:
             q = self._events[key]
             while q and now - q[0] > self.window:
                 q.popleft()
-            if len(q) >= self.max:
+            max_events = (self.max_override
+                           if self.max_override is not None
+                           else self.max)
+            if len(q) >= max_events:
                 return False
             q.append(now)
             return True

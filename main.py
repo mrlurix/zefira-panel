@@ -87,6 +87,7 @@ from schemas import (
     UserCreateIn,
     UserPatchIn,
     UserResetIn,
+    McpSettingsIn,
 )
 from security import (
     COOKIE_NAME,
@@ -211,6 +212,10 @@ _notify_pool: "queue.Queue | None" = None
 # leaked token could otherwise be replayed from many IPs to occupy every
 # worker. Per-token budget + a global concurrency cap.
 sub_token_limiter = SlidingWindowLimiter(max_events=60, window_seconds=60)
+# The MCP budget is SEPARATE from every per-endpoint limiter: an AI
+# agent looping through tools/call would otherwise spend the operator's
+# user-create budget without it being visible as AI traffic.
+mcp_limiter = SlidingWindowLimiter(max_events=60, window_seconds=60)
 _sub_render_slots = threading.BoundedSemaphore(8)
 
 
@@ -862,7 +867,7 @@ def load_appearance() -> dict:
 # and the server rejected a layout that mentioned it, pinning the section in
 # place for good. A new section that is not in this tuple can be neither
 # reordered nor hidden.
-MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings")
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings", "mcp")
 MENU_ALWAYS = ("dashboard", "users", "inbounds", "customize", "settings")
 DASH_BLOCKS = ("usage", "link", "groups", "apps")
 
@@ -2832,6 +2837,11 @@ def theme_css():
 
 
 AI_KEYS = ("ai_enabled", "ai_provider", "ai_base_url", "ai_model", "ai_api_key_enc", "ai_extra")
+# MCP switches. No credential key among them, deliberately: the operator
+# points MCP at an API token they already have, so there is no new secret
+# to encrypt, back up, or leak.
+MCP_KEYS = ("mcp_enabled", "mcp_http_enabled", "mcp_max_calls_per_min")
+
 # Live API tokens per admin. Minting is throttled to 10 per 10 minutes and
 # deletion to 10 per 10 minutes, so without a cap an attacker holding one
 # leaked token could build a fleet faster than the operator could remove it.
@@ -3532,6 +3542,199 @@ def _run_ai_tool(tool: str, args: dict, admin: Admin, request: Request, ip: str)
                 return True, f"{user.username}: {change}"
     return False, f"unknown tool {tool!r}"
 
+
+
+def _mcp_identity(raw_token: str):
+    """(admin_id, token_id, token_name, scopes) for a bearer, or None.
+
+    Mirrors what require_admin derives from the Authorization header, without
+    re-deciding it: the same digest, the same expiry rule, the same scope
+    string. A token whose admin has been deleted authenticates nobody, exactly
+    as it does on every other route - so the lookup returns None and the
+    caller gets a 401 rather than a session with no owner.
+    """
+    if len(raw_token) > 200:
+        return None
+    digest = hashlib.sha256(raw_token.encode()).hexdigest()
+    with db.s() as s:
+        row = s.scalar(select(ApiToken).where(ApiToken.token_sha == digest))
+        if row is None or _token_expired(row):
+            return None
+        return (row.admin_id, row.id, row.name, (row.scopes or "full"))
+
+
+def _mcp_settings_dict() -> dict:
+    """The three switches, read through the settings cache."""
+    try:
+        limit = int(cached_setting("mcp_max_calls_per_min") or 60)
+    except ValueError:
+        limit = 60
+    return {"enabled": cached_setting("mcp_enabled") != "0",
+            "http_enabled": cached_setting("mcp_http_enabled") != "0",
+            "max_calls_per_min": limit}
+
+
+def _mcp_token_hint(request: Request) -> str:
+    """Which identity this request authenticated as. Never its value.
+
+    An operator needs to know WHICH token to put in their AI client, and the
+    panel has no business putting that token back into a page.
+
+    The state is only filled in when require_admin authenticated the request,
+    so a bearer presented to this route - which uses require_admin, so the
+    cookie path resolves first - could still look like an anonymous session.
+    The header the caller actually sent is therefore read too. Only the name
+    and the scope leave this function; the raw token never does.
+    """
+    name = getattr(request.state, "token_name", "") or ""
+    scopes = getattr(request.state, "token_scopes", "") or "full"
+    if not name:
+        auth = request.headers.get("authorization", "")
+        if auth[:7].lower() == "bearer " and len(auth.strip()) > 7:
+            ident = _mcp_identity(auth[7:].strip())
+            if ident is not None:
+                _a, _t, name, scopes = ident
+    return "%s (%s)" % (name, scopes) if name else "this admin session (%s)" % scopes
+
+
+@app.get("/api/mcp/settings")
+def api_mcp_settings_get(request: Request, admin: Admin = Depends(require_admin)):
+    from mcp_tools import TOOLS, PROTOCOL_VERSION
+    s = _mcp_settings_dict()
+    return {"enabled": s["enabled"], "http_enabled": s["http_enabled"],
+            "max_calls_per_min": s["max_calls_per_min"],
+            "tool_count": len(TOOLS), "protocol_version": PROTOCOL_VERSION,
+            "token_hint": _mcp_token_hint(request)}
+
+
+@app.put("/api/mcp/settings")
+def api_mcp_settings_put(data: McpSettingsIn, request: Request,
+                         admin: Admin = Depends(require_admin)):
+    with db.s() as s:
+        _save_settings(s, {
+            "mcp_enabled": "1" if data.enabled else "0",
+            "mcp_http_enabled": "1" if data.http_enabled else "0",
+            "mcp_max_calls_per_min": str(data.max_calls_per_min),
+        })
+        audit(s, "MCP_SETTINGS",
+              "enabled=%s http=%s limit=%s by %s"
+              % (data.enabled, data.http_enabled, data.max_calls_per_min,
+                 admin.username), client_ip(request))
+        _commit(s)
+    # Without this the new value serves stale for up to fifteen seconds.
+    for k in MCP_KEYS:
+        _settings_cache.pop(k, None)
+    log.info("MCP settings updated by %s", admin.username)
+    return {"ok": True}
+
+
+@app.post("/api/mcp/test")
+def api_mcp_test(request: Request, admin: Admin = Depends(require_admin)):
+    """Prove the transport works, from the browser, before a client does."""
+    from mcp_tools import TOOLS, PROTOCOL_VERSION
+    from mcp_protocol import Dispatcher
+    from mcp_exec import AsgiExecutor
+    out = asyncio.run(Dispatcher(
+        AsgiExecutor(app, "zfp_self_test"),
+        compose=lambda n, a: _mcp_compose(n, a, request)
+    ).handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+              "params": {}}))
+    return {"ok": bool(out and out.get("result")),
+            "tool_count": len(TOOLS), "protocol_version": PROTOCOL_VERSION,
+            "sample": (out or {}).get("result", {}).get("serverInfo", {})}
+
+
+@app.post("/api/mcp")
+async def api_mcp(request: Request):
+    """The MCP transport. Bearer only.
+
+    A cookie is refused. Bearer requests already skip the panel's CSRF guard,
+    so an MCP client needs no CSRF token and no cookie-shaped request can
+    drive this route at all.
+    """
+    from mcp_protocol import Dispatcher
+    from mcp_exec import AsgiExecutor
+
+    cfg = _mcp_settings_dict()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=405, detail="MCP is switched off")
+    if not cfg["http_enabled"]:
+        raise HTTPException(status_code=405,
+                            detail="The MCP HTTP transport is switched off")
+
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() != "bearer " or len(auth.strip()) <= 7:
+        raise HTTPException(status_code=401,
+                            detail="MCP requires a bearer token")
+    raw_token = auth[7:].strip()
+
+    # Authenticate BEFORE charging the limiter. The other way round, an
+    # unauthenticated caller could burn an operator's whole MCP budget with a
+    # loop of 401s and nothing would show it was not their own traffic.
+    #
+    # require_admin sets token_id/token_name/token_scopes on request.state when
+    # IT authenticates a request. Here it is called from inside a route, on a
+    # Request the middleware stack already consumed, so nothing set them and
+    # they stayed at their defaults: every MCP token shared one budget keyed
+    # on admin.id, and token_hint told the operator "this admin session" for a
+    # caller that had actually presented a token. So the identity is read
+    # here, from the same row require_admin reads.
+    ident = _mcp_identity(raw_token)
+    if ident is None:
+        raise HTTPException(status_code=401, detail="Session expired")
+    admin_id, token_id, token_name, scopes = ident
+    request.state.token_id = token_id
+    request.state.token_name = token_name
+    request.state.token_scopes = scopes
+    request.state.admin_id = admin_id
+    with db.s() as s:
+        admin = s.get(Admin, admin_id)
+    if admin is None:
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    # The ceiling is the operator's setting, read per call rather than frozen
+    # in the limiter's constructor: measured, setting 5 while the limiter was
+    # built at 60 produced no 429 at all across 12 calls.
+    mcp_limiter.max_override = _mcp_settings_dict()["max_calls_per_min"]
+    key = "mcp|%s" % (token_id or admin_id)
+    if not mcp_limiter.hit(key):
+        raise HTTPException(status_code=429,
+                            detail="MCP call rate exceeded; wait a moment")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"jsonrpc": "2.0", "id": None,
+                             "error": {"code": -32700,
+                                       "message": "body must be JSON"}},
+                            status_code=200)
+
+    from mcp_protocol import Dispatcher as _D
+    from mcp_exec import AsgiExecutor as _A
+    d = _D(_A(app, raw_token),
+           compose=lambda n, a: _mcp_compose(n, a, request),
+           audit=lambda name, target, good, detail: _mcp_audit(
+               request, name, target, good, detail))
+    response = await d.handle(payload)
+    if response is None:
+        return Response(status_code=202)
+    return JSONResponse(response)
+
+
+def _mcp_audit(request: Request, tool: str, target: str, ok: bool,
+               detail: str = "") -> None:
+    """One audit row per tool call, best effort.
+
+    Losing a log line is bad; refusing a legitimate call because the log is
+    unhappy is worse. So every failure here is swallowed.
+    """
+    try:
+        with db.s() as s:
+            audit(s, "MCP_CALL", "%s target=%s %s"
+                  % (tool, target, detail or ""), client_ip(request), ok=ok)
+            _commit(s)
+    except Exception:
+        log.warning("could not write an MCP audit row for %s", tool)
 
 @app.post("/api/ai/chat")
 def api_ai_chat(data: AiChatIn, request: Request, admin: Admin = Depends(require_admin)):
@@ -7060,3 +7263,37 @@ if __name__ == "__main__":
         server_header=False,
         access_log=False,
     )
+
+
+def _mcp_compose(tool: str, args: dict, request: Request = None):
+    """Build a composed tool's answer from the panel's own state.
+
+    subscription_link has no route to call: the panel builds the link from the
+    user's token row plus the public base URL, exactly as the existing AI
+    assistant does. Composing it here rather than adding a route keeps the
+    tool honest - there is no endpoint that could leak a token to any caller
+    who guesses one.
+    """
+    if tool != "subscription_link":
+        raise ValueError("nothing composes %r" % tool)
+    name = str(args.get("username") or "").strip()
+    if not name:
+        raise ValueError("subscription_link needs a username")
+    with db.s() as s:
+        row = s.scalar(select(VpnUser).where(VpnUser.username == name))
+        if row is None:
+            raise ValueError("no customer named %r" % name)
+        token = decrypt_text(row.token) if row.token else ""
+    # public_base_url needs the request: its fallback is the Host header, which
+    # is attacker-controllable, so it takes the request to read.
+    base = public_base_url(request) if request is not None else ""
+    if not token:
+        raise ValueError("customer %r has no subscription token yet" % name)
+    from config import SUBSCRIPTION_PATH as _SUB_PATH
+    sub_path = (_SUB_PATH or "/sub").rstrip("/") or "/sub"
+    if not base:
+        raise ValueError("no public base URL is configured, so no link can be "
+                         "built; set one in Settings")
+    return {"username": name,
+            "subscription_url": "%s%s/%s" % (base.rstrip("/"), sub_path, token),
+            "note": "This link is the customer's whole account. Do not share it."}

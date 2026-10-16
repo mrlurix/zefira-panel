@@ -1,7 +1,8 @@
 import re
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
+from pydantic import (BaseModel, ConfigDict, Field, StrictBool, StrictInt,
+                       field_validator, model_validator)
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
 
@@ -673,3 +674,18 @@ class RestoreIn(RestoreConfirmIn):
     # Empty = older backup: treated as "unknown origin" -> OpenVPN client
     # credentials are re-issued against the local CA instead of imported.
     ca_fingerprint: str = Field(default="", max_length=64, pattern=r"^[a-f0-9]*\z")
+
+
+class McpSettingsIn(BaseModel):
+    """Operator-controlled MCP switches.
+
+    StrictBool, not bool: a JSON "true" is a string to Pydantic's lax bool
+    and an operator who sends one from a hand-written client should be told
+    so, not have a switch flipped by a value they did not mean. The settings
+    that matter here are whether an AI client may drive this panel at all.
+    """
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    enabled: StrictBool = True
+    http_enabled: StrictBool = True
+    max_calls_per_min: StrictInt = Field(default=60, ge=1, le=600)

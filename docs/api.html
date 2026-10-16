@@ -119,6 +119,12 @@
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td data-i18n="api.aiSettings">Provider, model, key state (key never returned)</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/ai/test</code></td><td data-i18n="api.aiTest">One cheap completion that checks provider, base URL, model and key together. Run it right after saving the settings: it costs a single chat turn, and it turns a dead config into an error at the settings page instead of at the first real question.</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/ai/chat</code></td><td><code>{messages[≤12]}</code> <span data-i18n="api.aiChatA">→ scoped assistant reply (30/hr). The assistant can also</span> <b data-i18n="api.aiChatAct">act</b><span data-i18n="api.aiChatB">: create/extend/top-up/reset/pause users, find users, stats, sub links (max 3 ops/turn, audit-logged; delete/reset/backup/update/settings/tokens never)</span></td></tr>
+
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/mcp/settings</code></td><td data-i18n="api.mcpSettings">{enabled, http_enabled, max_calls_per_min}</td></tr>
+
+<tr><td><span class="badge post">POST</span></td><td><code>/api/mcp/test</code></td><td data-i18n="api.mcpTest">Runs initialize through the in-process transport, so an operator can prove a client can reach the panel before wiring one up.</td></tr>
+
+<tr><td><span class="badge post">POST</span></td><td><code>/api/mcp</code></td><td data-i18n="api.mcpTransport">{jsonrpc, id, method, params}. Bearer only: a cookie is refused, so CSRF never applies. Rate-limited per token, and every tool call is audit-logged.</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/update/status</code></td><td data-i18n="api.updateStatus">Current vs latest commit + incoming changelog</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/update/apply</code></td><td data-i18n="api.updateApply">Password-confirmed pull + pip + restart</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/ssl/status</code></td><td data-i18n="api.sslStatus">Certbot presence, domains, expiry</td></tr>
