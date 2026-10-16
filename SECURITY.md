@@ -2,12 +2,18 @@
 
 Zefira takes security seriously: scrypt password hashing, HttpOnly
 SameSite cookies, rate-limited login, CSRF + CSP headers, audit logging, and
-thirty-five test suites that run against a live panel: `security_test.py` (120
-penetration/abuse checks), `feature_test.py` (178 feature checks),
-`functional_test.py` (60 end-to-end checks), `attack_test.py` (129 live
-adversarial probes), `attack_quota_test.py` (46 quota/schema boundaries),
-`attack_paths_test.py` (111 operator-path checks) and `frontend_bugs_test.py`
-(35 front-end regressions).
+a test suite that runs against a live panel. Run it with:
+
+```sh
+python run_all_tests.py <admin> <password>
+```
+
+The suites are listed in the READMEs. Count them there rather than here: this
+file used to state a total and a check count for each of seven suites, and
+every one of those numbers was stale within a few releases - a document that
+overstates its own coverage is worse than one that says nothing.
+`security_doc_test.py` now fails if such a figure reappears here, because the
+runner is the only place that knows the true count.
 
 ## What is encrypted, and what is not
 
@@ -83,6 +89,71 @@ Please include:
 - Panel version (`Update` section or `VERSION` file) and install type
 - Steps to reproduce (redact tokens, passwords, backup files)
 - What you expected vs. what happened
+
+## Bug bounty
+
+**No cash is promised, because none is funded.** There is no escrow behind this
+repository. Anything that named a figure would be a promise this project cannot
+keep, made to exactly the people most likely to do the difficult work of
+finding real bugs. So the reward is severity and recognition today, and payment
+if and when a programme is funded - which will be announced here, not implied.
+
+### Safe harbour
+
+If you follow this policy you have our permission to research this panel, and
+we will not pursue legal action against you for it. You may:
+
+- test against a panel **you run yourself**, which is the only kind of testing
+  we ask for;
+- read the source, including the release history, freely;
+- use automated scanners, read the database, and craft any input you like
+  against your own instance;
+- publish a write-up of what you found, once a fix has shipped or 90 days have
+  passed since the report, whichever is sooner.
+
+Out of scope, even under safe harbour: testing any panel you do not own,
+denial of service, social engineering of the operator, and exfiltrating data
+that is not yours. Everything else is fair game.
+
+### How to report
+
+Use the repository's **Report a vulnerability** button, which opens a private
+advisory: [security/advisories/new](https://github.com/mrlurix/zefira-panel/security/advisories/new).
+
+A private advisory is visible only to you and the maintainer. It does not
+create a public issue, and no other researcher can see that it exists.
+
+### What counts
+
+| severity | meaning |
+|---|---|
+| **Critical** | unauthenticated access to customer credentials, or remote code execution in the panel process |
+| **High** | authentication bypass; privilege escalation from a `bot`-scoped token to full admin; any path that reads a customer's WireGuard private key, OpenVPN client key or L2TP PSK without the operator's action |
+| **Medium** | stored XSS in the panel; CSRF that changes state; a rate limit that can be bypassed to make bulk customer operations cheap |
+| **Low** | information disclosure that does not expose a credential; a guard that can be tripped by a hand-edited database |
+
+Every report gets an acknowledgement. A confirmed fix is credited in the
+release notes unless you ask otherwise.
+
+### Known trade-offs, not defects
+
+Reporting any of these is a duplicate of a documented decision. They are
+listed so a good-faith report does not go to waste:
+
+- **Running more than one worker.** The panel refuses to start with
+  `WEB_CONCURRENCY>1` on purpose: its rate limiters, locks, settings cache and
+  node monitor live in process memory, so a second worker multiplies every
+  limit and can interleave restores. See `_enforce_single_worker` in
+  `main.py`. `ZEFIRA_ALLOW_MULTI_WORKER=1` overrides it, at the operator's own
+  risk.
+- **SQLite write serialisation.** One writer at a time is a property of SQLite,
+  not a bug in this panel. It is why the panel refuses to scale with workers
+  and why the rate limiters are per-process.
+- **No HSM or KMS.** `instance/secret.key` protects the encrypted settings and
+  the per-customer credential bundles. There is no hardware-backed key.
+- **The AI assistant sends operator-written prompts to the configured
+  provider.** It is an LLM the operator points at a host they choose. See "The
+  AI assistant, and what it sends" above.
 
 ## Scope notes
 

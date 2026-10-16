@@ -37,6 +37,12 @@ SUITES = [
     ("attack_paths_test.py", "operator paths / restore"),
     ("frontend_bugs_test.py", "front-end regressions"),
     ("panel_sections_test.py", "panel sections end-to-end"),
+    # SECURITY.md must not restate a coverage figure: it said thirty-five
+    # suites and seven per-suite check counts when the runner had 42. A
+    # document that overstates its own coverage is worse than one that
+    # says nothing, so the numbers were removed and this fails if one
+    # reappears. Also covers the bug-bounty section. 18 checks, 5 mutations.
+    ("security_doc_test.py", "the security policy stays honest"),
     # The migration list, executed rather than read. It exists because
     # a helper landed between @staticmethod and def _add_column, which
     # ast.parse cannot see: the file parsed, the names did not resolve,
