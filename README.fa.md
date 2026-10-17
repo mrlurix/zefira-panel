@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # پوشه‌ای خصوصی که فقط خودتان می‌خوانید
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.43/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.44/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.43` خودِ نصب‌کننده را pin می‌کند.
+> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.44` خودِ نصب‌کننده را pin می‌کند.
 >
 > سپس نصب‌کننده کد پنل را از تگ انتشاری که همراهش می‌آید clone می‌کند. اگر می‌خواهید سخت‌گیرانه‌تر pin کنید و کامیت دقیق را نام ببرید:
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### اجرای تست‌ها
 
 [مجموعه‌های تست](#اجرای-تستها) از بیرون به پنل در حال اجرا ضربه می‌زنند. پنل را بالا بیاورید، سپس هرکدام را اجرا کنید (بین مجموعه‌ها پنل را ری‌استارت کنید). برای اجرای همه با هم: `python run_all_tests.py admin YOURPASS`. مجموعه‌ها مستقل از ترتیب‌اند و در پایان همه به تنظیمات پیش‌فرض کارخانه برمی‌گردند.
-در مجموع 43 مجموعهٔ تست هست: 10 تا زنده که به پنل در حال اجرا نیاز دارند و 31 تا ایستا که به چیزی نیاز ندارند.
+در مجموع 51 مجموعهٔ تست هست: 15 تا زنده که به پنل در حال اجرا نیاز دارند و 36 تا ایستا که به چیزی نیاز ندارند.
 
 
 **فهرست کامل مجموعه‌ها و آنچه پوشش می‌دهند**
@@ -129,7 +129,9 @@ python attack_quota_test.py  http://127.0.0.1:8000 admin YOURPASS  # مرزها�
 python attack_paths_test.py  http://127.0.0.1:8000 admin YOURPASS  # مسیرهای اپراتور
 python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS  # رگرسیون فرانت‌اند
 python panel_sections_test.py http://127.0.0.1:8000 admin YOURPASS  # بخش‌های پنل
-python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS  # ممیزی امنیتی
+python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS
+python mcp_routes_test.py      http://127.0.0.1:8000 admin YOURPASS   # the MCP panel routes, end to end
+python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conformance, real SDK, both transports  # ممیزی امنیتی
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS  # هر کارت تنظیمات، سرتاسری
 ```
 
@@ -175,7 +177,13 @@ python security_doc_test.py              # the security policy states no coverag
 
 ```bash
 node i18n_dict_check.js         # دیکشنری‌های مستندات، بارگذاری و بازرسی‌شده
-node i18n_render_check.js       # رندرر مستندات، با ورودی‌های خصمانه
+node i18n_render_check.js
+python mcp_tools_test.py                                 # the MCP tool table
+python mcp_exec_test.py                                  # MCP call building and the HTTP executor
+python mcp_asgi_exec_test.py                             # the in-panel MCP executor
+python mcp_protocol_test.py                              # MCP JSON-RPC dispatch
+python mcp_stdio_test.py                                 # the MCP stdio transport
+python mcp_guards_test.py                                # MCP bug-hunt regression guards       # رندرر مستندات، با ورودی‌های خصمانه
 ```
 
 `i18n_dict_check.js` وجود دارد چون مستندات چهار زبان است که باید هماهنگ بمانند و هیچ‌چیز این را بررسی نمی‌کرد. فایل `docs/assets/i18n.js` را بارگذاری می‌کند، همان شیئی را که مرورگر می‌گیرد می‌خواند، و روی کلیدی که در هر زبانی گم یا خالی است، مقداری که دو ورودی به‌هم‌چسبیده دارد، mojibake، صفت `data-i18n` با املای اشتباه، و صفحه‌ای که به کلیدی ارجاع می‌دهد که در هیچ زبانی نیست شکست می‌خورد. برای مقادیری که **یکسان با انگلیسی** هستند گزارش می‌دهد ولی شکست نمی‌خورد، چون گاهی درست است: `GitHub Security Advisories` نام رسمی قابلیت گیت‌هاب است.

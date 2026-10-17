@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # 只有你自己能读的私有目录
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.43/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.44/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.43` 这个 tag 固定了安装脚本本身。
+> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.44` 这个 tag 固定了安装脚本本身。
 >
 > 随后安装脚本会按它自带的发布 tag 克隆面板源码。如果你想更严格地固定到具体提交：
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### 运行测试
 
 这些测试套件从外部打击运行中的面板。先启动面板，然后逐个运行（套件之间重启面板）。也可以一次跑完：`python run_all_tests.py admin YOURPASS`。各套件之间互不依赖顺序，结束时都会把面板恢复到出厂默认设置。
-共 43 套测试：10 套在线（需要正在运行的面板），31 套静态守卫（无需任何东西）。
+共 51 套测试：15 套在线（需要正在运行的面板），36 套静态守卫（无需任何东西）。
 
 
 **在线套件（10 个）**——需要正在运行的面板：
@@ -127,7 +127,9 @@ python attack_quota_test.py  http://127.0.0.1:8000 admin YOURPASS  # 配额/模�
 python attack_paths_test.py  http://127.0.0.1:8000 admin YOURPASS  # 运维路径
 python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS  # 前端回归
 python panel_sections_test.py http://127.0.0.1:8000 admin YOURPASS  # 面板各分区
-python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS  # 安全审计
+python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS
+python mcp_routes_test.py      http://127.0.0.1:8000 admin YOURPASS   # the MCP panel routes, end to end
+python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conformance, real SDK, both transports  # 安全审计
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS  # 逐一端到端验证每张设置卡片
 ```
 
@@ -173,7 +175,13 @@ python security_doc_test.py              # the security policy states no coverag
 
 ```bash
 node i18n_dict_check.js           # 加载并检查文档字典
-node i18n_render_check.js         # 用敌意输入喂给文档渲染器
+node i18n_render_check.js
+python mcp_tools_test.py                                 # the MCP tool table
+python mcp_exec_test.py                                  # MCP call building and the HTTP executor
+python mcp_asgi_exec_test.py                             # the in-panel MCP executor
+python mcp_protocol_test.py                              # MCP JSON-RPC dispatch
+python mcp_stdio_test.py                                 # the MCP stdio transport
+python mcp_guards_test.py                                # MCP bug-hunt regression guards         # 用敌意输入喂给文档渲染器
 ```
 
 `i18n_dict_check.js` 之所以存在，是因为文档有四种语言且必须保持同步，而此前没有任何东西在检查这一点。它加载 `docs/assets/i18n.js`，读出浏览器实际会拿到的对象，并在以下情况失败：某个键在任一语言中缺失或为空、某个值把两条内容粘在了一起、出现乱码、`data-i18n` 属性名拼错以至于 `applyI18n` 读不到、以及页面引用了任何语言都不存在的键。对于**与英文完全相同**的值它会报告但不算失败，因为有时这是对的：`GitHub Security Advisories` 是 GitHub 自己的功能名，把它翻译成协议列表反而更糟。

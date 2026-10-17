@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # приватный каталог, читаемый только вами
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.43/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.44/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.43` фиксирует сам установщик.
+> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.44` фиксирует сам установщик.
 >
 > Затем установщик клонирует исходники панели по тегу релиза, который идёт с ним. Если нужно жёстче — указать точный коммит:
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### Запуск тестов
 
 Эти наборы бьют по работающей панели снаружи. Запустите панель, затем выполняйте их по одному (перезапуская панель между наборами). Либо все сразу: `python run_all_tests.py admin YOURPASS`. Наборы не зависят от порядка и в конце возвращают панель к заводским настройкам.
-Всего 43 наборов тестов: 10 онлайн (нужна работающая панель) и 31 статических (ничего не нужно).
+Всего 51 наборов тестов: 15 онлайн (нужна работающая панель) и 36 статических (ничего не нужно).
 
 
 **Онлайн-наборы (10)** — требуют работающей панели:
@@ -127,7 +127,9 @@ python attack_quota_test.py  http://127.0.0.1:8000 admin YOURPASS  # грани�
 python attack_paths_test.py  http://127.0.0.1:8000 admin YOURPASS  # пути оператора
 python frontend_bugs_test.py http://127.0.0.1:8000 admin YOURPASS  # регрессии фронтенда
 python panel_sections_test.py http://127.0.0.1:8000 admin YOURPASS  # разделы панели
-python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS  # аудит безопасности
+python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS
+python mcp_routes_test.py      http://127.0.0.1:8000 admin YOURPASS   # the MCP panel routes, end to end
+python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conformance, real SDK, both transports  # аудит безопасности
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS  # каждая карточка настроек, сквозным образом
 ```
 
@@ -173,7 +175,13 @@ python security_doc_test.py              # the security policy states no coverag
 
 ```bash
 node i18n_dict_check.js           # словари документации, загруженные и проверенные
-node i18n_render_check.js         # рендерер документации с враждебными строками
+node i18n_render_check.js
+python mcp_tools_test.py                                 # the MCP tool table
+python mcp_exec_test.py                                  # MCP call building and the HTTP executor
+python mcp_asgi_exec_test.py                             # the in-panel MCP executor
+python mcp_protocol_test.py                              # MCP JSON-RPC dispatch
+python mcp_stdio_test.py                                 # the MCP stdio transport
+python mcp_guards_test.py                                # MCP bug-hunt regression guards         # рендерер документации с враждебными строками
 ```
 
 `i18n_dict_check.js` существует потому, что документация на четырёх языках должна оставаться согласованной, а проверял это никто. Он загружает `docs/assets/i18n.js`, читает тот объект, который получит браузер, и падает при ключе, отсутствующем или пустом в каком-либо языке, при значении, в котором склеились две записи, при мусорной кодировке, при `data-i18n`, написанном не так, как его читает `applyI18n`, и при странице, ссылающейся на ключ, которого нет ни в одном языке. О **совпадающих с английским** значениях он сообщает, но не падает, потому что это иногда верно: `GitHub Security Advisories` — собственное название функции GitHub.

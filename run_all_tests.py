@@ -61,6 +61,13 @@ SUITES = [
     # exercises them without issuing anything.
     ("settings_cards_test.py", "every settings card end-to-end"),
     ("security_audit_test.py", "security audit round 1"),
+    ("mcp_routes_test.py", "the MCP panel routes, end to end"),
+    # The real SDK, mcp==2.3.0, as a real client over both transports. It
+    # installs into a throwaway virtualenv OUTSIDE the repository so the
+    # panel installs no new dependency, and it exits 2 - never 0 - when
+    # that environment cannot be prepared, because a suite that could not
+    # run must never be reported as a pass.
+    ("mcp_conformance_test.py", "MCP conformance, real SDK, both transports"),
 ]
 # Suites that need no running panel: static guards over the installer, which
 # is only ever executed on a Linux VPS (never here), and the docs site.
@@ -169,6 +176,15 @@ OFFLINE_SUITES = [
     # six empty translations on its first run, in three languages.
     ("__NODE__ i18n_dict_check.js", "docs i18n coverage"),
     ("__NODE__ i18n_render_check.js", "docs i18n renderer safety"),
+    ("mcp_tools_test.py", "the MCP tool table"),
+    ("mcp_exec_test.py", "MCP call building and the HTTP executor"),
+    ("mcp_asgi_exec_test.py", "the in-panel MCP executor"),
+    ("mcp_protocol_test.py", "MCP JSON-RPC dispatch"),
+    ("mcp_stdio_test.py", "the MCP stdio transport"),
+    # One guard per defect the bug hunt found, so none of them can come
+    # back quietly. mcp_guards_mutation.py proves all thirteen of these
+    # can fail by re-introducing the original defect.
+    ("mcp_guards_test.py", "MCP bug-hunt regression guards"),
 ]
 
 

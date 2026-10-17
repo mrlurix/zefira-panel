@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.43/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.44/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.43` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.44` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -149,8 +149,8 @@ same code path if you need concurrent writers.
 
 ### Running the tests
 
-There are 43 test suites. 10 hit the running panel from the outside and
-30 are static guards that need nothing running. One command runs all 40:
+There are 51 test suites. 15 hit the running panel from the outside and
+36 are static guards that need nothing running. One command runs all 51:
 
 ```bash
 python run_all_tests.py http://127.0.0.1:8000 admin YOURPASS
@@ -169,6 +169,8 @@ python frontend_bugs_test.py  http://127.0.0.1:8000 admin YOURPASS   # front-end
 python panel_sections_test.py http://127.0.0.1:8000 admin YOURPASS   # panel sections end-to-end
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS   # every settings card end-to-end
 python security_audit_test.py http://127.0.0.1:8000 admin YOURPASS   # security audit round 1
+python mcp_routes_test.py      http://127.0.0.1:8000 admin YOURPASS   # the MCP panel routes, end to end
+python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conformance, real SDK, both transports
 ```
 
 These need no running panel - they are static
@@ -199,6 +201,12 @@ python i18n_test.py                                        # docs i18n dictionar
 python docs_coverage_test.py                               # docs cover the panel
 python i18n_dict_check.js                                  # docs i18n coverage
 python i18n_render_check.js                                # docs i18n renderer safety
+python mcp_tools_test.py                                 # the MCP tool table
+python mcp_exec_test.py                                  # MCP call building and the HTTP executor
+python mcp_asgi_exec_test.py                             # the in-panel MCP executor
+python mcp_protocol_test.py                              # MCP JSON-RPC dispatch
+python mcp_stdio_test.py                                 # the MCP stdio transport
+python mcp_guards_test.py                                # MCP bug-hunt regression guards
 ```
 
 `feature_test.py` walks the panel's 67 API routes across its 11 sections and
