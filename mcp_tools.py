@@ -23,6 +23,20 @@ and `==`, nothing looser.
 
 PROTOCOL_VERSION = "2026-07-28"
 
+# The versions this server will actually speak. Taken from the SDK's own
+# KNOWN_PROTOCOL_VERSIONS, read out of the installed 2.3.0 distribution:
+#
+#     ('2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25', '2026-07-28')
+#
+# PROTOCOL_VERSION above is mcp.types.LATEST_PROTOCOL_VERSION. A client is
+# answered with the version it asked for ONLY when that version is in this
+# tuple. Echoing any string would be a claim to speak a protocol that does not
+# exist - and the real SDK, which raises "Unsupported protocol version from the
+# server" on anything outside its handshake set, would have no way to tell the
+# difference between a version this server implements and one it does not.
+PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25",
+                     PROTOCOL_VERSION)
+
 # Which argument a confirmation has to name, and what to call that argument
 # when there is no single id to quote.
 _CONFIRM_FIELD = {

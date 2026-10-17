@@ -21,7 +21,7 @@ import io
 import json
 import os
 
-from mcp_tools import (PROTOCOL_VERSION, TOOLS, TOOL_INDEX,
+from mcp_tools import (PROTOCOL_VERSION, PROTOCOL_VERSIONS, TOOLS, TOOL_INDEX,
                        check_confirmation)
 
 SERVER_NAME = "zefira"
@@ -103,8 +103,20 @@ class Dispatcher:
 
         try:
             if method == "initialize":
+                # Answer with the version the client asked for ONLY
+                # if this server implements it. The handshake makes
+                # the server name the version it will use, and a
+                # client told about an unknown version will send
+                # features nothing here understands and read the
+                # replies as if it did. Anything unsupported gets
+                # our own latest, which is what the spec asks for
+                # and what the SDK accepts - measured: it raises
+                # "Unsupported protocol version from the server" for
+                # anything outside its handshake set.
                 want = params.get("protocolVersion")
-                ver = want if isinstance(want, str) and want else PROTOCOL_VERSION
+                ver = (want if isinstance(want, str)
+                       and want in PROTOCOL_VERSIONS
+                       else PROTOCOL_VERSION)
                 return self._ok(rid, {
                     "protocolVersion": ver,
                     "capabilities": {"tools": {}},
