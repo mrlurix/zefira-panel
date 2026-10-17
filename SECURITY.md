@@ -154,6 +154,27 @@ listed so a good-faith report does not go to waste:
 - **The AI assistant sends operator-written prompts to the configured
   provider.** It is an LLM the operator points at a host they choose. See "The
   AI assistant, and what it sends" above.
+- **The audit log keeps the newest 2000 rows, and nothing else.** `audit()`
+  prunes on every call, to the newest 2000 rows in the table — there is no
+  time-based retention and no archive. That number predates the MCP server and
+  has never been configurable, so the honest consequence is worth stating in
+  arithmetic rather than adjectives:
+
+  | MCP call budget | agent history the log holds |
+  |---|---|
+  | 60/min (the default) | about 33 minutes |
+  | 600/min (the maximum the schema allows) | about 3 minutes |
+
+  Measured on a running panel at the maximum: after ~2000 tool calls the two
+  canary rows — an operator's own settings change and a refused destructive
+  call — were both gone, and `MCP_CALL` was 100% of the retained log. An agent
+  polling a read-only tool at that rate does not corrupt the audit trail; it
+  fills it, which is a true description of what happened. Every call is
+  audited, including the destructive ones and the ones that were refused.
+
+  If you need longer history, lower `max_calls_per_min`. An operator who needs
+  a real archive needs a different product, and this document would rather say
+  so than let them discover it after an incident.
 
 ## Scope notes
 

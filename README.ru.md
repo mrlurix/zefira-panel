@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # приватный каталог, читаемый только вами
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.44/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.45/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.44` фиксирует сам установщик.
+> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.45` фиксирует сам установщик.
 >
 > Затем установщик клонирует исходники панели по тегу релиза, который идёт с ним. Если нужно жёстче — указать точный коммит:
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### Запуск тестов
 
 Эти наборы бьют по работающей панели снаружи. Запустите панель, затем выполняйте их по одному (перезапуская панель между наборами). Либо все сразу: `python run_all_tests.py admin YOURPASS`. Наборы не зависят от порядка и в конце возвращают панель к заводским настройкам.
-Всего 51 наборов тестов: 15 онлайн (нужна работающая панель) и 36 статических (ничего не нужно).
+Всего 52 наборов тестов: 15 онлайн (нужна работающая панель) и 37 статических (ничего не нужно).
 
 
 **Онлайн-наборы (10)** — требуют работающей панели:
@@ -176,6 +176,7 @@ python security_doc_test.py              # the security policy states no coverag
 ```bash
 node i18n_dict_check.js           # словари документации, загруженные и проверенные
 node i18n_render_check.js
+python audit_retention_test.py                       # audit retention figure matches the code
 python mcp_tools_test.py                                 # the MCP tool table
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor

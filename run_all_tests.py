@@ -185,6 +185,11 @@ OFFLINE_SUITES = [
     # back quietly. mcp_guards_mutation.py proves all thirteen of these
     # can fail by re-introducing the original defect.
     ("mcp_guards_test.py", "MCP bug-hunt regression guards"),
+    # Reads the audit retention out of main.py and the MCP budget out of
+    # the schema, then fails if SECURITY.md states anything else. A figure
+    # in a document that has drifted from the code is worse than no figure,
+    # and this repository shipped several of those.
+    ("audit_retention_test.py", "audit retention figure matches the code"),
 ]
 
 
