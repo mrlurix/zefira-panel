@@ -28,8 +28,36 @@ import urllib.request
 _MAX_PATH_SEGMENT = 64
 
 
+# A response the panel produced is small; a response from something that is
+# not the panel can be anything at all. 32 MiB is far above any real endpoint
+# here and low enough that a hostile or broken peer cannot exhaust memory
+# through one tool call. Measured before the cap: a single call buffered 50 MB.
+MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+
+
 class ToolError(Exception):
     """A refusal the caller should read, not a crash."""
+
+
+def _quote_segment(value, name, arg):
+    """_quote, then refuse a value that is only a dot-segment.
+
+    quote() never encodes ".", because RFC 3986 calls it unreserved - right for
+    a value, wrong here, because a bare ".." then survives into the path whole.
+    Measured: `delete_user` with user_id=".." built `DELETE /api/users/..`,
+    and `user_config` built `GET /api/users/../config`. Against the panel
+    directly both are refused - 422 from a route parameter typed int - so
+    nothing destructive happens, but behind a normalising reverse proxy, which
+    the documented install has, the request that arrives is /api/ or
+    /api/config instead. The path a tool DECLARES has to be the path that gets
+    REQUESTED.
+
+    No legitimate argument is "." or "..", so this refuses rather than escapes.
+    """
+    out = _quote(value, name, arg)
+    if out in (".", ".."):
+        raise ToolError("%s: %r is not a usable %s" % (name, value, arg))
+    return out
 
 
 def _quote(value, name, arg):
@@ -56,7 +84,8 @@ def build_call(tool, args):
             raise ToolError('%s needs "%s"' % (name, key))
         if args[key] is None:
             raise ToolError('%s: "%s" must not be null' % (name, key))
-        path = path.replace("{%s}" % key, _quote(args[key], name, key))
+        path = path.replace("{%s}" % key,
+                           _quote_segment(args[key], name, key))
 
     query = {}
     for arg, param in tool.get("query", {}).items():
@@ -88,6 +117,37 @@ def build_call(tool, args):
     return tool["method"], path, body, query
 
 
+class _SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+    """Follow redirects, but never carry the bearer to another origin.
+
+    urllib's default handler replays every header it is not explicitly told to
+    strip, and Authorization is not on its list. Measured against two loopback
+    servers: a 302 from the configured host sent
+    `Authorization: Bearer <token>` to a different port, and the tool call
+    still came back as a 200 success. A `full`-scope token can delete
+    customers and read their private keys, so that is the whole credential
+    handing itself to whatever a Location header names.
+
+    urllib cannot follow a redirect without the new request's headers, so
+    redirect_request returning None is what refuses the hop. The alternative -
+    following it and then checking resp.url - is too late: the header has
+    already been sent.
+    """
+
+    def __init__(self, base):
+        parts = urllib.parse.urlsplit(base)
+        self.origin = (parts.scheme.lower(), parts.netloc.lower())
+        self.blocked = None
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parts = urllib.parse.urlsplit(newurl)
+        target = (parts.scheme.lower(), parts.netloc.lower())
+        if target != self.origin:
+            self.blocked = newurl
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class HttpExecutor:
     """Speaks the panel's HTTP with a bearer token, on a worker thread.
 
@@ -100,6 +160,11 @@ class HttpExecutor:
         self.base = (base_url or "").rstrip("/")
         self.token = token
         self.timeout = timeout
+        # One opener, built once: rebuilding a handler per request would leak a
+        # connection pool's worth of state for nothing, and the no-redirect
+        # guard has to be the same object the request actually goes through.
+        self._redirect = _SameOriginRedirect(self.base)
+        self._opener = urllib.request.build_opener(self._redirect)
 
     def _once(self, method, path, body, query):
         url = self.base + path
@@ -121,15 +186,30 @@ class HttpExecutor:
         req = urllib.request.Request(url, data=data, headers=headers,
                                      method=method)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = resp.read()
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                # A refused cross-origin hop raises HTTPError below; this is
+                # here so the reason can name the host rather than just "401".
+                if self._redirect.blocked:
+                    return {"error":
+                            "the panel redirected to another origin and the "
+                            "token was NOT sent there: %s"
+                            % self._redirect.blocked}
+                raw = resp.read(MAX_RESPONSE_BYTES)
                 try:
                     return {"status": resp.status, "data": json.loads(raw)}
                 except Exception:
                     return {"status": resp.status,
                             "data": raw.decode("utf-8", "replace")}
         except urllib.error.HTTPError as exc:
-            raw = exc.read()
+            # A refused cross-origin hop arrives here as a 3xx, not as a
+            # response body, so `raw` is empty and the panel's own status would
+            # read as a silent failure. Say what happened instead - and say it
+            # here, because the `with` block above never runs on this path.
+            if self._redirect.blocked:
+                return {"error":
+                        "the panel redirected to another origin and the token "
+                        "was NOT sent there: %s" % self._redirect.blocked}
+            raw = exc.read(MAX_RESPONSE_BYTES)
             try:
                 parsed = json.loads(raw)
             except Exception:

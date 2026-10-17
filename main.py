@@ -3564,13 +3564,44 @@ def _mcp_identity(raw_token: str):
 
 
 def _mcp_settings_dict() -> dict:
-    """The three switches, read through the settings cache."""
+    """The three switches, read through the settings cache.
+
+    `== "1"`, not `!= "0"`. The other polarity is fail-OPEN: a fresh install
+    has no row at all, cached_setting returns None, and `None != "0"` is True,
+    so both switches read as ON. It also inverts the panel's own boolean
+    vocabulary - main.py normalises "0","1","true","false","yes","no","on",
+    "off","" elsewhere, so any writer following that house style and storing
+    "false" would ENABLE MCP. _ai_settings beside this uses `== "1"` and is off
+    unless the row says exactly "1"; two switches that mean the same thing
+    should not disagree about which value is the safe one.
+
+    Default-on on a fresh install is a product decision, not a bug: the plan
+    specifies it, and a missing row still reads as enabled either way because
+    api_mcp_settings_put writes "1" explicitly the first time it is used.
+    """
+    def _on(key: str) -> bool:
+        """The panel's own boolean vocabulary, defaulting to OFF.
+
+        main.py normalises "0","1","true","false","yes","no","on","off",""
+        everywhere else, so a writer following that house style must not be
+        surprised here. Anything NOT in the affirmative set is off, including
+        None on a fresh install and including a value nobody recognises: an
+        agent that can drive the panel should be something an operator
+        positively turned on.
+
+        Measured across the vocabulary: "1","true","yes" -> on;
+        "0","false","no","off","" -> off. The previous `!= "0"` read "false"
+        as ON, which is the opposite of what the rest of the panel means by it.
+        """
+        return (cached_setting(key) or "").strip().lower() in (
+            "1", "true", "yes", "on")
+
     try:
         limit = int(cached_setting("mcp_max_calls_per_min") or 60)
     except ValueError:
         limit = 60
-    return {"enabled": cached_setting("mcp_enabled") != "0",
-            "http_enabled": cached_setting("mcp_http_enabled") != "0",
+    return {"enabled": _on("mcp_enabled"),
+            "http_enabled": _on("mcp_http_enabled"),
             "max_calls_per_min": limit}
 
 
@@ -3610,38 +3641,84 @@ def api_mcp_settings_get(request: Request, admin: Admin = Depends(require_admin)
 @app.put("/api/mcp/settings")
 def api_mcp_settings_put(data: McpSettingsIn, request: Request,
                          admin: Admin = Depends(require_admin)):
+    # Only what the caller actually sent. The schema's fields default to None
+    # meaning "not mentioned", and writing the defaults instead was fail-open:
+    # measured, a PUT of {"enabled": false} reset http_enabled to True and the
+    # call budget to 60, so an operator who had switched the HTTP transport off
+    # got it back the moment they next enabled MCP - with nothing in the
+    # response to say so.
+    given = data.model_dump(exclude_unset=True, exclude_none=True)
+    if not given:
+        raise HTTPException(status_code=422,
+                            detail="send at least one of enabled, "
+                                   "http_enabled, max_calls_per_min")
+    rows = {"enabled": "mcp_enabled", "http_enabled": "mcp_http_enabled",
+            "max_calls_per_min": "mcp_max_calls_per_min"}
     with db.s() as s:
-        _save_settings(s, {
-            "mcp_enabled": "1" if data.enabled else "0",
-            "mcp_http_enabled": "1" if data.http_enabled else "0",
-            "mcp_max_calls_per_min": str(data.max_calls_per_min),
-        })
+        _save_settings(s, {rows[k]: str(int(v)) if isinstance(v, bool)
+                           else str(v) for k, v in given.items()})
         audit(s, "MCP_SETTINGS",
-              "enabled=%s http=%s limit=%s by %s"
-              % (data.enabled, data.http_enabled, data.max_calls_per_min,
-                 admin.username), client_ip(request))
+              "%s by %s" % (", ".join("%s=%s" % kv
+                                      for kv in sorted(given.items())),
+                             admin.username),
+              client_ip(request))
         _commit(s)
     # Without this the new value serves stale for up to fifteen seconds.
     for k in MCP_KEYS:
         _settings_cache.pop(k, None)
-    log.info("MCP settings updated by %s", admin.username)
-    return {"ok": True}
+    log.info("MCP settings updated by %s: %s", admin.username,
+             sorted(given))
+    return {"ok": True, "updated": sorted(given)}
 
 
 @app.post("/api/mcp/test")
 def api_mcp_test(request: Request, admin: Admin = Depends(require_admin)):
-    """Prove the transport works, from the browser, before a client does."""
+    """Prove a client can reach this panel, before wiring one up.
+
+    It has to call a tool, not `initialize`. Measured: the dispatcher answers
+    `initialize` from a literal dict and returns before the executor is ever
+    touched, so a route that only dispatched initialize reported ok:true with
+    the AsgiExecutor constructed and never used - and the suite check written
+    for it, "can actually reach the transport", was asserting something that
+    could not fail. That is the worst kind of green: it looked like coverage of
+    the thing the button promises and covered nothing.
+
+    panel_stats is the cheapest read-only tool there is, so the button now
+    costs one real round trip through the real executor: build the call, sign
+    it, and hand the answer back so an operator can see the panel's own numbers
+    rather than a bare yes.
+
+    The executor needs a credential that will actually authenticate, which is
+    the second half of what the old version hid: it was handed the literal
+    string "zfp_self_test", so the one forwarded call could only ever have
+    failed - and the check written for it passed anyway. So the caller's own
+    bearer is forwarded when there is one. When the panel's own UI calls this
+    with a session cookie there is no bearer to forward, and the route says so
+    instead of returning a green that proved nothing.
+    """
     from mcp_tools import TOOLS, PROTOCOL_VERSION
     from mcp_protocol import Dispatcher
     from mcp_exec import AsgiExecutor
+    auth = request.headers.get("authorization", "")
+    token = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+    base = {"tool_count": len(TOOLS), "protocol_version": PROTOCOL_VERSION}
+    if not token:
+        return dict(base, ok=False, called="panel_stats", sample="",
+                    detail="No bearer token on this request, so no call was "
+                           "made. Open this from an API client, or run the "
+                           "self-test from the command line, to exercise the "
+                           "transport end to end.")
     out = asyncio.run(Dispatcher(
-        AsgiExecutor(app, "zfp_self_test"),
+        AsgiExecutor(app, token),
         compose=lambda n, a: _mcp_compose(n, a, request)
-    ).handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-              "params": {}}))
-    return {"ok": bool(out and out.get("result")),
-            "tool_count": len(TOOLS), "protocol_version": PROTOCOL_VERSION,
-            "sample": (out or {}).get("result", {}).get("serverInfo", {})}
+    ).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+              "params": {"name": "panel_stats", "arguments": {}}}))
+    result = (out or {}).get("result", {})
+    text = ""
+    for block in result.get("content") or []:
+        text += block.get("text") or ""
+    ok = bool(out) and not result.get("isError") and bool(text)
+    return dict(base, ok=ok, called="panel_stats", sample=text[:400])
 
 
 @app.post("/api/mcp")
@@ -3691,6 +3768,20 @@ async def api_mcp(request: Request):
         admin = s.get(Admin, admin_id)
     if admin is None:
         raise HTTPException(status_code=401, detail="Session expired")
+
+    # Least privilege, and it fails closed. This was the one route in the panel
+    # that skipped it: _mcp_identity returned the token's scopes and nothing
+    # ever consulted them, so a bot token - and a token whose scopes row said
+    # anything other than "full" or "bot", which every other route refuses -
+    # could still list the whole admin tool surface here. The forwarded calls
+    # re-check scope inside their own routes, so the blast radius was
+    # disclosure of the tool table rather than a privilege gain, but a route
+    # that is the exception to the panel's own rule is the kind of thing that
+    # stops being an exception the next time someone adds a composed tool.
+    if not _token_scope_allowed(scopes, "POST", "/api/mcp"):
+        raise HTTPException(status_code=403,
+                            detail="This token's scope cannot use MCP; "
+                                   "MCP needs a full-scope token")
 
     # The ceiling is the operator's setting, read per call rather than frozen
     # in the limiter's constructor: measured, setting 5 while the limiter was
@@ -7283,7 +7374,10 @@ def _mcp_compose(tool: str, args: dict, request: Request = None):
         row = s.scalar(select(VpnUser).where(VpnUser.username == name))
         if row is None:
             raise ValueError("no customer named %r" % name)
-        token = decrypt_text(row.token) if row.token else ""
+        # parse_token, not decrypt_text: parse_token handles both the
+        # bare and the sealed row shape, and decrypt_text returns "" for
+        # a bare one. Every other token read in this file uses it.
+        token = parse_token(row.token) if row.token else ""
     # public_base_url needs the request: its fallback is the Host header, which
     # is attacker-controllable, so it takes the request to read.
     base = public_base_url(request) if request is not None else ""

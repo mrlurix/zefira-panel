@@ -305,13 +305,35 @@ try:
     call("PUT", "/api/mcp/settings", {"enabled": True}, headers=A)
 
     # ----------------------------------------------------------------- test
+    # With a bearer, the route must really call a tool: the old version
+    # dispatched `initialize`, which mcp_protocol answers from a literal
+    # before the executor is touched, so ok:true only meant "mcp_protocol
+    # imports". It also handed the executor the literal string
+    # "zfp_self_test", so the forwarded call could never have succeeded -
+    # and the old check asserted ok is True regardless.
     st, j = call("POST", "/api/mcp/test", {}, headers=A)
     check("POST /api/mcp/test is 200", st == 200, str(st))
     check("it reports the tool count", j.get("tool_count", 0) > 10,
           json.dumps(j)[:140])
-    check("and can actually reach the transport", j.get("ok") is True,
+    check("it says which tool it actually called",
+          j.get("called") == "panel_stats", json.dumps(j)[:140])
+    check("and with a bearer it completes that call for real",
+          j.get("ok") is True, json.dumps(j)[:140])
+    check("the answer carries the panel's own numbers, not a literal",
+          "total_users" in (j.get("sample") or ""),
           json.dumps(j)[:140])
-    check("it never returns a token", tok.lower() not in json.dumps(j).lower(),
+    check("it never returns a token",
+          tok.lower() not in json.dumps(j).lower(), json.dumps(j)[:140])
+
+    # The panel's own UI calls this with a session cookie. There is no
+    # bearer to forward, so the route must SAY SO rather than return the
+    # unconditional green this used to.
+    st, j = call("POST", "/api/mcp/test", {}, CSRF, cookie=True)
+    check("with only a cookie it reports no call was made",
+          st == 200 and j.get("ok") is False,
+          "%s %s" % (st, json.dumps(j)[:110]))
+    check("and it explains why, in words an operator can act on",
+          "bearer" in (j.get("detail") or "").lower(),
           json.dumps(j)[:140])
 
     # --------------------------------------------------------- audit trail
@@ -345,6 +367,98 @@ try:
     for row in (call("GET", "/api/users?limit=200", headers=A)[1].get("items") or []):
         if row.get("username") == uname:
             call("DELETE", "/api/users/%d" % row["id"], headers=A)
+    # ---- the four live guards from the bug hunt ----
+
+    # 4. a partial PUT must not reset what it did not mention. It did:
+    # McpSettingsIn defaulted every field to True/True/60 and the route
+    # wrote all three unconditionally, so {"enabled": false} switched
+    # the HTTP transport back ON and the budget back to 60. Measured.
+    call("PUT", "/api/mcp/settings",
+         {"enabled": True, "http_enabled": False,
+          "max_calls_per_min": 11}, headers=A)
+    before = call("GET", "/api/mcp/settings", headers=A)[1]
+    check("a full PUT sets all three",
+          before["enabled"] is True and before["http_enabled"] is False
+          and before["max_calls_per_min"] == 11,
+          json.dumps(before)[:130])
+    call("PUT", "/api/mcp/settings", {"enabled": False}, headers=A)
+    after = call("GET", "/api/mcp/settings", headers=A)[1]
+    check("a partial PUT leaves http_enabled exactly as it was",
+          after["http_enabled"] is False, json.dumps(after)[:130])
+    check("...and the call budget exactly as it was",
+          after["max_calls_per_min"] == 11, json.dumps(after)[:130])
+    check("...and changes only the field it was given",
+          after["enabled"] is False, json.dumps(after)[:130])
+    st, _ = call("PUT", "/api/mcp/settings", {}, headers=A)
+    check("an empty PUT body is refused, not silently accepted",
+          st == 422, st)
+    call("PUT", "/api/mcp/settings",
+         {"enabled": True, "http_enabled": True,
+          "max_calls_per_min": 60}, headers=A)
+
+    # 13. the self-test must really call a tool. It used to dispatch
+    # `initialize`, which mcp_protocol answers from a literal before the
+    # executor is touched, so ok:true only meant "mcp_protocol imports" -
+    # and the executor was handed the string "zfp_self_test", which could
+    # never have authenticated.
+    st, j = call("POST", "/api/mcp/test", {}, headers=A)
+    check("with a bearer, the self-test names the tool it called",
+          j.get("called") == "panel_stats", json.dumps(j)[:130])
+    check("and returns the panel's real numbers",
+          "total_users" in (j.get("sample") or ""),
+          json.dumps(j)[:130])
+    st, j = call("POST", "/api/mcp/test", {}, CSRF, cookie=True)
+    check("with only a cookie it admits no call was made",
+          st == 200 and j.get("ok") is False,
+          "%s %s" % (st, json.dumps(j)[:110]))
+
+    # 3. the scope check /api/mcp used to skip entirely.
+    botname = "mcp-rt-bot-%d" % os.getpid()
+    for row in (call("GET", "/api/api-tokens", cookie=True)[1] or []):
+        if isinstance(row, dict) and row.get("name") == botname:
+            call("DELETE", "/api/api-tokens/%d" % row["id"],
+                 cookie=True, headers=CSRF)
+    bot = call("POST", "/api/api-tokens",
+               {"name": botname, "scopes": "bot",
+                "password_confirm": P}, CSRF, cookie=True)[1]
+    bot = bot.get("token_once")
+    AB = {"Authorization": "Bearer " + bot,
+          "X-Requested-With": "XMLHttpRequest"}
+    st, j = call("POST", "/api/mcp",
+                 {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                 headers=AB)
+    check("a bot-scope token cannot list the admin tool table",
+          st == 403, "%s %s" % (st, json.dumps(j)[:90]))
+    check("and it is told MCP needs a full token",
+          "full" in str(j).lower(), json.dumps(j)[:120])
+    st, j = call("POST", "/api/mcp",
+                 {"jsonrpc": "2.0", "id": 2, "method": "ping"},
+                 headers=AB)
+    check("nor even a bare ping", st == 403, st)
+    if bot:
+        for row in (call("GET", "/api/api-tokens", cookie=True)[1]
+                    or []):
+            if isinstance(row, dict) and row.get("name") == botname:
+                call("DELETE", "/api/api-tokens/%d" % row["id"],
+                     cookie=True, headers=CSRF)
+
+    # 12. the switch polarity, through the panel's own PUT so the 15-second
+    # settings cache is popped rather than waited out. The first attempt
+    # measured the cache and wrongly reported the fix as not working.
+    call("PUT", "/api/mcp/settings", {"enabled": False}, headers=A)
+    check("enabled:false means the transport is refused",
+          call("POST", "/api/mcp", {"jsonrpc": "2.0", "id": 1,
+                                        "method": "ping"},
+               headers=A)[0] == 405)
+    call("PUT", "/api/mcp/settings", {"enabled": True}, headers=A)
+    check("and enabled:true means it is accepted",
+          call("POST", "/api/mcp", {"jsonrpc": "2.0", "id": 2,
+                                        "method": "ping"},
+               headers=A)[0] == 200)
+    call("PUT", "/api/mcp/settings",
+         {"enabled": True, "http_enabled": True,
+          "max_calls_per_min": 60}, headers=A)
+
 finally:
     proc.terminate()
     try:

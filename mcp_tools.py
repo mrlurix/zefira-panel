@@ -21,6 +21,11 @@ delete a customer by accident, so the comparison is exact: `isinstance(str)`
 and `==`, nothing looser.
 """
 
+# ToolError lives in mcp_exec and mcp_exec does NOT import this module, so
+# this is a one-way import with no cycle.
+from mcp_exec import ToolError
+
+
 PROTOCOL_VERSION = "2026-07-28"
 
 # The versions this server will actually speak. Taken from the SDK's own
@@ -301,12 +306,34 @@ TOOL_INDEX = {t["name"]: t for t in TOOLS}
 
 
 def expected_confirmation(name, args):
-    """The string a confirmation must equal, or None if this tool is safe."""
+    """The string a confirmation must equal, or None if this tool is safe.
+
+    None means "no confirmation required", so a MISSING target cannot also
+    mean "the confirmation is the four letters None". It did: args.get on an
+    absent key returns None, str() of that is "None", and the refusal then
+    said `Call it again with confirm: "None"`. A model that obeyed the
+    instruction passed the gate - measured for delete_user, delete_api_token
+    and create_api_token - so the one check standing between an agent and a
+    deleted customer could be opened by following its own error message.
+
+    Nothing destructive happened, because build_call independently requires the
+    same field and refused with ToolError: delete_user needs "user_id". But a
+    gate that can be opened is not a gate, and the message must never name a
+    string that is not the target's.
+
+    So a missing or null target refuses here, with a message that says what is
+    wrong instead of handing out a magic word.
+    """
     if name not in _CONFIRM_FIELD:
         return None
     if name in _CONFIRM_WORD:
         return _CONFIRM_WORD[name]
-    return str(args.get(_CONFIRM_FIELD[name]))
+    field = _CONFIRM_FIELD[name]
+    value = args.get(field) if isinstance(args, dict) else None
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ToolError("%s needs a %s to confirm: you named none, so there "
+                        "is nothing to echo back." % (name, field))
+    return str(value)
 
 
 def check_confirmation(name, args):

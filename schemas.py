@@ -683,9 +683,23 @@ class McpSettingsIn(BaseModel):
     and an operator who sends one from a hand-written client should be told
     so, not have a switch flipped by a value they did not mean. The settings
     that matter here are whether an AI client may drive this panel at all.
+
+    Every field defaults to None, meaning "not mentioned", and the route writes
+    only what was supplied. That is the whole point of this class and it was
+    the opposite before: with defaults of True/True/60 and an unconditional
+    three-key write, a PUT of {"enabled": false} silently reset http_enabled
+    to True and the call budget to 60. Measured against a running panel: an
+    operator who had switched the HTTP transport OFF, then sent the one field
+    they wanted to change, got the transport switched back on - fail-open, and
+    invisible until they turned MCP on again.
+
+    A patch that silently re-enables what you turned off is worse than no
+    patch, so the missing-field case is now explicit on both sides: the handler
+    writes only what arrived, and a caller who wants a full replace sends all
+    three, which is exactly what the panel's own UI does.
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    enabled: StrictBool = True
-    http_enabled: StrictBool = True
-    max_calls_per_min: StrictInt = Field(default=60, ge=1, le=600)
+    enabled: Optional[StrictBool] = None
+    http_enabled: Optional[StrictBool] = None
+    max_calls_per_min: Optional[StrictInt] = Field(default=None, ge=1, le=600)
