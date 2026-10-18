@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.46/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.47/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.46` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.47` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -149,8 +149,8 @@ same code path if you need concurrent writers.
 
 ### Running the tests
 
-There are 53 test suites. 15 hit the running panel from the outside and
-38 are static guards that need nothing running. One command runs all 53:
+There are 54 test suites. 16 hit the running panel from the outside and
+38 are static guards that need nothing running. One command runs all 54:
 
 ```bash
 python run_all_tests.py http://127.0.0.1:8000 admin YOURPASS
@@ -244,7 +244,8 @@ python installer_test.py      # the installer's guarantees, as static guards
 node i18n_dict_check.js       # the docs dictionaries, loaded and inspected
 node i18n_render_check.js
 python audit_retention_test.py                       # audit retention figure matches the code
-python type_hints_test.py                              # type annotations do not regress     # the docs renderer, fed hostile strings
+python type_hints_test.py                              # type annotations do not regress
+python api_response_shapes_test.py                  # API reference matches reality (live)     # the docs renderer, fed hostile strings
 ```
 
 Nine more do not need a server either, and all nine were written because the

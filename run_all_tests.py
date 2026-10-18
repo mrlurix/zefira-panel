@@ -62,6 +62,11 @@ SUITES = [
     ("settings_cards_test.py", "every settings card end-to-end"),
     ("security_audit_test.py", "security audit round 1"),
     ("mcp_routes_test.py", "the MCP panel routes, end to end"),
+    # LIVE, not static: this one starts its own panel and compares the
+    # response shapes docs/api.html publishes against what the API
+    # actually returns. A static check could only compare the
+    # documentation with itself and would pass forever.
+    ("api_response_shapes_test.py", "API reference matches reality"),
     # The real SDK, mcp==2.3.0, as a real client over both transports. It
     # installs into a throwaway virtualenv OUTSIDE the repository so the
     # panel installs no new dependency, and it exits 2 - never 0 - when

@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # پوشه‌ای خصوصی که فقط خودتان می‌خوانید
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.46/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.47/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.46` خودِ نصب‌کننده را pin می‌کند.
+> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.47` خودِ نصب‌کننده را pin می‌کند.
 >
 > سپس نصب‌کننده کد پنل را از تگ انتشاری که همراهش می‌آید clone می‌کند. اگر می‌خواهید سخت‌گیرانه‌تر pin کنید و کامیت دقیق را نام ببرید:
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### اجرای تست‌ها
 
 [مجموعه‌های تست](#اجرای-تستها) از بیرون به پنل در حال اجرا ضربه می‌زنند. پنل را بالا بیاورید، سپس هرکدام را اجرا کنید (بین مجموعه‌ها پنل را ری‌استارت کنید). برای اجرای همه با هم: `python run_all_tests.py admin YOURPASS`. مجموعه‌ها مستقل از ترتیب‌اند و در پایان همه به تنظیمات پیش‌فرض کارخانه برمی‌گردند.
-در مجموع 53 مجموعهٔ تست هست: 15 تا زنده که به پنل در حال اجرا نیاز دارند و 38 تا ایستا که به چیزی نیاز ندارند.
+در مجموع 54 مجموعهٔ تست هست: 16 تا زنده که به پنل در حال اجرا نیاز دارند و 38 تا ایستا که به چیزی نیاز ندارند.
 
 
 **فهرست کامل مجموعه‌ها و آنچه پوشش می‌دهند**
@@ -180,6 +180,7 @@ node i18n_dict_check.js         # دیکشنری‌های مستندات، با�
 node i18n_render_check.js
 python audit_retention_test.py                       # audit retention figure matches the code
 python type_hints_test.py                              # type annotations do not regress
+python api_response_shapes_test.py                  # API reference matches reality (live)
 python mcp_tools_test.py                                 # the MCP tool table
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=69">
+<link rel="stylesheet" href="assets/style.css?v=70">
 </head>
 <body>
 <header class="topbar">
@@ -177,6 +177,95 @@ curl -X PATCH -b jar.txt -H 'Content-Type: application/json' \
      -d '{"add_volume_gb": 20, "add_used_gb": -2.5}' \
      https://vpn.example.com/api/users/1</pre>
 
+<h2 id="example-responses" data-i18n="api.hResp">Example: what comes back</h2>
+
+<p><span data-i18n="api.respIntroA">Captured from a running panel rather than written from memory.</span> <span data-i18n="api.respIntroB">Every key set and type below is re-checked against the live API on every test run by</span> <code>api_response_shapes_test.py</code><span data-i18n="api.respIntroC">, so an example cannot quietly stop matching the code.</span></p>
+
+<table>
+<tr><th><span data-i18n="api.hColRoute">route</span></th><th><span data-i18n="api.hColBody">response body</span></th><th><span data-i18n="api.hColNote">note</span></th></tr>
+<tr><td><span class="badge post">POST</span> <code>/api/users</code></td><td><pre data-resp-route="POST /api/users"><code>{
+  "created_at": "2026-10-18T09:12:44Z",
+  "device_limit": null,
+  "expires_at": "2027-04-16T09:12:44Z",
+  "id": 12,
+  "is_active": true,
+  "last_fetch_at": null,
+  "last_fetch_ip": null,
+  "note": "",
+  "pending_start": false,
+  "protocols": [
+    "vless"
+  ],
+  "start_on_first_use": false,
+  "token": "b7f3c1a94d2e8065",
+  "used_gb": 12,
+  "username": "buyer1",
+  "volume_gb": 50.0
+}</code></pre></td><td><span data-i18n="api.respUser">Every create, reset and patch returns this whole object, so a bot can echo it back without a second call. <code>used_gb</code> is an integer while usage is whole and a <strong>float the moment it becomes fractional</strong> - <code>PATCH {"used_gb": 12.5}</code> comes back as <code>12.5</code>, not <code>12</code>. A negative value is a <code>422</code>, not a clamp. If your JSON decoder is typed, read this field as a number or your bot breaks the first time a customer's usage is not a round number.</span></td></tr>
+<tr><td><span class="badge get">GET</span> <code>/api/users</code></td><td><pre data-resp-route="GET /api/users"><code>{
+  "items": [
+    {
+      "created_at": "2026-10-18T09:12:44Z",
+      "device_limit": null,
+      "expires_at": "2027-04-16T09:12:44Z",
+      "id": 12,
+      "is_active": true,
+      "last_fetch_at": null,
+      "last_fetch_ip": null,
+      "note": "",
+      "pending_start": false,
+      "protocols": [
+        "vless"
+      ],
+      "start_on_first_use": false,
+      "token": "b7f3c1a94d2e8065",
+      "used_gb": 12,
+      "username": "buyer1",
+      "volume_gb": 50.0
+    }
+  ],
+  "limit": 50,
+  "offset": 0,
+  "total": 1
+}</code></pre></td><td><span data-i18n="api.respList">A list is an envelope, not an array: <code>items</code> plus <code>limit</code>, <code>offset</code> and <code>total</code>. Iterate <code>items</code>, page with <code>limit</code>/<code>offset</code>, and use <code>total</code> to know whether there is another page.</span></td></tr>
+<tr><td><span class="badge post">POST</span> <code>/api/api-tokens</code></td><td><pre data-resp-route="POST /api/api-tokens"><code>{
+  "created_at": "2026-10-18T09:12:44Z",
+  "expires_at": "2027-04-16T09:12:44Z",
+  "id": 12,
+  "last_used_at": null,
+  "name": "…",
+  "prefix": "zfp_a1b2c3d4",
+  "scopes": "full",
+  "token_once": "zfp_9c4e1f7a2b6d8350e1c4a7b9d2f6c83e5a1b4d7092c8f6e3a5b1d0c7e9f4a2b"
+}</code></pre></td><td><span data-i18n="api.respToken"><code>token_once</code> is the ONLY place the secret ever appears, and reading the token again returns <code>prefix</code> in its place. A bot that creates a token and discards that field has to make a new one. <code>scopes</code> is a single string, not an array.</span></td></tr>
+<tr><td><span class="badge get">GET</span> <code>/api/users/{id}/config</code></td><td><pre data-resp-route="GET /api/users/{id}/config"><code>vless://dbf9a1c4-2e77-4b3a-9f10-6c58e2d47b31@node1.example.com:443?type=ws&amp;security=tls&amp;sni=node1.example.com&amp;path=%2Fws&amp;mode=gun#buyer1
+vless://dbf9a1c4-2e77-4b3a-9f10-6c58e2d47b31@node1.example.com:443?type=grpc&amp;security=reality&amp;sni=www.bing.com&amp;pbk=xR4k2mQ9&amp;sid=6f2a&amp;mode=multi#buyer1</code></pre></td><td><span data-i18n="api.respConfig">This one is <strong>not</strong> JSON. The panel answers <code>text/plain</code> with the subscription document itself &mdash; one connection URI per line, per configured protocol. Hand the bytes to the customer unchanged; parsing them is your problem and the format is the protocol's, not the panel's.</span></td></tr>
+<tr><td><span class="badge post">POST</span> <code>/api/users/{id}/reset-usage</code></td><td><pre data-resp-route="POST /api/users/{id}/reset-usage"><code>{
+  "created_at": "2026-10-18T09:12:44Z",
+  "device_limit": null,
+  "expires_at": "2027-04-16T09:12:44Z",
+  "id": 12,
+  "is_active": true,
+  "last_fetch_at": null,
+  "last_fetch_ip": null,
+  "note": "",
+  "pending_start": false,
+  "protocols": [
+    "vless"
+  ],
+  "start_on_first_use": false,
+  "token": "b7f3c1a94d2e8065",
+  "used_gb": 12,
+  "username": "buyer1",
+  "volume_gb": 50.0
+}</code></pre></td><td><span data-i18n="api.respReset">Same object as create, returned after the meter is zeroed. If <code>reset_token</code> was requested, <code>token</code> is the new one and every previous subscription link is dead.</span></td></tr>
+<tr><td><span class="badge del">DELETE</span> <code>/api/users/{id}</code></td><td><pre data-resp-route="DELETE /api/users/{id}"><code>{
+  "ok": true
+}</code></pre></td><td><span data-i18n="api.respDelete"><code>200</code> with <code>{"ok": true}</code>, not <code>204</code> and not an empty body. A client that treats any non-2xx as failure is fine; one that treats 2xx-with-empty-body as success would never learn whether it worked.</span></td></tr>
+<tr><td><span class="badge post">POST</span> <code>/api/users</code></td><td><pre data-resp-route="POST /api/users (duplicate name)"><code>{
+  "detail": "username already exists"
+}</code></pre></td><td><span data-i18n="api.respConflict">A duplicate username is <code>409</code> with <code>detail</code> as a plain string. That is a different shape from a validation failure, where <code>detail</code> is an array of objects &mdash; so read <code>detail</code> as text <em>or</em> as a list, or you will crash on whichever one you did not expect.</span></td></tr>
+</table>
 <h2 id="example-bot-renewal" data-i18n="api.hExRenew">Example: bot renewal flow (bot-scoped token)</h2>
 <p><span data-i18n="api.renewA">No cookies, no CSRF header — just</span> <code>Authorization: Bearer zfp_…</code> <span data-i18n="api.renewB">from a</span> <code>bot</code><span data-i18n="api.renewC">-scoped token. Lookup by username, renew usage + link in one call:</span></p>
 <pre># 1) find the buyer by username (bots know tg123, not numeric IDs)
@@ -199,8 +288,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=69"></script>
-<script src="assets/docs.js?v=69"></script>
-<script src="assets/support-ai.js?v=69"></script>
+<script src="assets/i18n.js?v=70"></script>
+<script src="assets/docs.js?v=70"></script>
+<script src="assets/support-ai.js?v=70"></script>
 </body>
 </html>
