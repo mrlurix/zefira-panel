@@ -18,6 +18,7 @@ it is never sent.
 """
 
 import asyncio
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 import json
 import urllib.error
 import urllib.parse
@@ -39,7 +40,7 @@ class ToolError(Exception):
     """A refusal the caller should read, not a crash."""
 
 
-def _quote_segment(value, name, arg):
+def _quote_segment(value: Any, name: str, arg: str) -> str:
     """_quote, then refuse a value that is only a dot-segment.
 
     quote() never encodes ".", because RFC 3986 calls it unreserved - right for
@@ -60,14 +61,16 @@ def _quote_segment(value, name, arg):
     return out
 
 
-def _quote(value, name, arg):
+def _quote(value: Any, name: str, arg: str) -> str:
     s = str(value)
     if len(s) > _MAX_PATH_SEGMENT:
         raise ToolError("%s: %r is too long to be a %s" % (name, arg, arg))
     return urllib.parse.quote(s, safe="")
 
 
-def build_call(tool, args):
+def build_call(tool: Mapping[str, Any],
+              args: Mapping[str, Any]
+) -> Tuple[str, str, Any, Dict[str, Any]]:
     """(method, final_path, body, query) for one call. Raises ToolError.
 
     A missing path parameter is an error rather than a blank, because
@@ -134,12 +137,14 @@ class _SameOriginRedirect(urllib.request.HTTPRedirectHandler):
     already been sent.
     """
 
-    def __init__(self, base):
+    def __init__(self, base: str) -> None:
         parts = urllib.parse.urlsplit(base)
         self.origin = (parts.scheme.lower(), parts.netloc.lower())
         self.blocked = None
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(self, req: Any, fp: Any, code: int,
+                          msg: str, headers: Any,
+                          newurl: str) -> Optional[Any]:
         parts = urllib.parse.urlsplit(newurl)
         target = (parts.scheme.lower(), parts.netloc.lower())
         if target != self.origin:
@@ -156,7 +161,8 @@ class HttpExecutor:
     the dependency this project decided not to take.
     """
 
-    def __init__(self, base_url, token, timeout=30.0):
+    def __init__(self, base_url: str, token: str,
+                 timeout: float = 30.0) -> None:
         self.base = (base_url or "").rstrip("/")
         self.token = token
         self.timeout = timeout
@@ -166,7 +172,8 @@ class HttpExecutor:
         self._redirect = _SameOriginRedirect(self.base)
         self._opener = urllib.request.build_opener(self._redirect)
 
-    def _once(self, method, path, body, query):
+    def _once(self, method: str, path: str, body: Any,
+              query: Mapping[str, Any]) -> Dict[str, Any]:
         url = self.base + path
         if query:
             url += "?" + urllib.parse.urlencode(
@@ -224,7 +231,9 @@ class HttpExecutor:
         except Exception as exc:
             return {"error": "%s: %s" % (type(exc).__name__, exc)}
 
-    async def call(self, tool, args):
+    async def call(
+            self, tool: Mapping[str, Any],
+            args: Mapping[str, Any]) -> Dict[str, Any]:
         method, path, body, query = build_call(tool, args)
         return await asyncio.to_thread(self._once, method, path, body, query)
 
@@ -233,7 +242,7 @@ import json as _json
 import urllib.parse as _up
 
 
-def split_path_and_query(full):
+def split_path_and_query(full: str) -> Tuple[str, bytes]:
     """(path, query_string_bytes) from a joined path.
 
     Split on the FIRST ? only, and never on an encoded %3F: a username
@@ -249,11 +258,13 @@ def split_path_and_query(full):
 class AsgiExecutor:
     """Runs a tool in-process by forwarding through the panel's own app."""
 
-    def __init__(self, app, token):
+    def __init__(self, app: Any, token: str) -> None:
         self.app = app
         self.token = token
 
-    async def call(self, tool, args):
+    async def call(
+            self, tool: Mapping[str, Any],
+            args: Mapping[str, Any]) -> Dict[str, Any]:
         method, path, body, query = _build(tool, args)
         url = path
         if query:
@@ -297,14 +308,14 @@ class AsgiExecutor:
         out = {"status": 0}
         chunks = []
 
-        async def receive():
+        async def receive() -> Dict[str, Any]:
             # Idempotent on purpose: the panel's size middleware reads the
             # body, then swaps in its own replay, so a receive that answered
             # http.disconnect the second time would break the POST path.
             return {"type": "http.request", "body": payload,
                     "more_body": False}
 
-        async def send(m):
+        async def send(m: Mapping[str, Any]) -> None:
             if m["type"] == "http.response.start":
                 out["status"] = m["status"]
             elif m["type"] == "http.response.body":
@@ -323,7 +334,9 @@ class AsgiExecutor:
         return {"status": status, "error": parsed}
 
 
-def _build(tool, args):
+def _build(tool: Mapping[str, Any],
+          args: Mapping[str, Any]
+) -> Tuple[str, str, Any, Dict[str, Any]]:
     """build_call under a private name, so importing this half alone works."""
     from mcp_exec import build_call
     return build_call(tool, args)

@@ -24,6 +24,7 @@ and `==`, nothing looser.
 # ToolError lives in mcp_exec and mcp_exec does NOT import this module, so
 # this is a one-way import with no cycle.
 from mcp_exec import ToolError
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 
 PROTOCOL_VERSION = "2026-07-28"
@@ -65,23 +66,23 @@ DESTRUCTIVE = frozenset(_CONFIRM_FIELD)
 _O = {"type": "object", "properties": {}, "additionalProperties": False}
 
 
-def _s(**props):
+def _s(**props: Any) -> Dict[str, Any]:
     out = dict(_O)
     out["properties"] = props
     return out
 
 
-def _str(desc, **kw):
+def _str(desc: str, **kw: Any) -> Dict[str, Any]:
     d = {"type": "string", "description": desc}
     d.update(kw)
     return d
 
 
-def _int(desc):
+def _int(desc: str) -> Dict[str, Any]:
     return {"type": "integer", "description": desc}
 
 
-def _num(desc):
+def _num(desc: str) -> Dict[str, Any]:
     return {"type": "number", "description": desc}
 
 
@@ -305,7 +306,9 @@ TOOLS = [
 TOOL_INDEX = {t["name"]: t for t in TOOLS}
 
 
-def expected_confirmation(name, args):
+def expected_confirmation(
+        name: str, args: Mapping[str, Any]
+) -> Optional[str]:
     """The string a confirmation must equal, or None if this tool is safe.
 
     None means "no confirmation required", so a MISSING target cannot also
@@ -336,7 +339,9 @@ def expected_confirmation(name, args):
     return str(value)
 
 
-def check_confirmation(name, args):
+def check_confirmation(
+        name: str, args: Mapping[str, Any]
+) -> Optional[str]:
     """None when the tool may run, otherwise the refusal to show the caller.
 
     The comparison is exact on purpose. `isinstance(got, str) and got == want`

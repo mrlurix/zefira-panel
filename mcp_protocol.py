@@ -39,23 +39,25 @@ INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
 
-def available_tools(has_compose):
+def available_tools(
+        has_compose: bool) -> List[Dict[str, Any]]:
     """The table, minus any composed tool this process cannot serve."""
     return [t for t in TOOLS if not t.get("compose") or has_compose]
 
 
-def list_tools_payload(has_compose=False):
+def list_tools_payload(
+        has_compose: bool = False) -> Dict[str, Any]:
     return {"tools": [{"name": t["name"],
                        "description": t["description"],
                        "inputSchema": t["input_schema"]}
                       for t in available_tools(has_compose)]}
 
 
-def _text(s, is_error=False):
+def _text(s: str, is_error: bool = False) -> Dict[str, Any]:
     return {"content": [{"type": "text", "text": s}], "isError": bool(is_error)}
 
 
-def _json(payload):
+def _json(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
@@ -69,13 +71,17 @@ class Dispatcher:
     assembling a link it cannot verify, so it runs without one.
     """
 
-    def __init__(self, executor, audit=None, compose=None):
+    def __init__(self, executor: Any,
+                 audit: Optional[Any] = None,
+                 compose: Optional[Any] = None) -> None:
         self.executor = executor
         self.audit = audit
         self.compose = compose
 
     # ------------------------------------------------------------------ core
-    async def handle(self, request):
+    async def handle(
+            self, request: Any
+) -> Optional[Dict[str, Any]]:
         if not isinstance(request, dict):
             return self._err(None, INVALID_REQUEST,
                              "request must be an object")
@@ -139,7 +145,10 @@ class Dispatcher:
         # and the audit row is the point of the whole thing.
         return None if is_notification else response
 
-    async def _dispatch(self, method, params, rid, is_notification):
+    async def _dispatch(
+            self, method: Any, params: Any, rid: Any,
+            is_notification: bool
+) -> Optional[Dict[str, Any]]:
         if method == "initialize":
             # Answer with the version the client asked for ONLY if this server
             # implements it. The handshake makes the server name the version it
@@ -178,7 +187,9 @@ class Dispatcher:
                          "method not implemented: %s" % method)
 
     # ------------------------------------------------------------- tools/call
-    async def _call(self, rid, params):
+    async def _call(
+            self, rid: Any, params: Mapping[str, Any]
+) -> Dict[str, Any]:
         name = params.get("name")
         args = params.get("arguments")
         if args is None:
@@ -267,7 +278,9 @@ class Dispatcher:
                                          "error": res.get("error")}), True))
 
     # ----------------------------------------------------------------- audit
-    def _record(self, name, args, good, detail):
+    def _record(self, name: str,
+               args: Mapping[str, Any],
+               good: bool, detail: str) -> None:
         if self.audit is None:
             return
         try:
@@ -282,10 +295,11 @@ class Dispatcher:
 
     # ---------------------------------------------------------------- helpers
     @staticmethod
-    def _ok(rid, result):
+    def _ok(rid: Any, result: Any) -> Dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid, "result": result}
 
     @staticmethod
-    def _err(rid, code, message):
+    def _err(rid: Any, code: int,
+            message: str) -> Dict[str, Any]:
         return {"jsonrpc": "2.0", "id": rid,
                 "error": {"code": code, "message": message}}

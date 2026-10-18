@@ -190,6 +190,12 @@ OFFLINE_SUITES = [
     # in a document that has drifted from the code is worse than no figure,
     # and this repository shipped several of those.
     ("audit_retention_test.py", "audit retention figure matches the code"),
+
+    # Keeps the annotation coverage from regressing. The MCP modules were
+    # 0/34 when they shipped; main.py may not gain a new unannotated
+    # top-level function. The allowance list names four functions rather
+    # than counting, so it cannot be widened from inside the guard.
+    ("type_hints_test.py", "type annotations do not regress"),
 ]
 
 

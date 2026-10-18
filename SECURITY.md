@@ -146,6 +146,37 @@ listed so a good-faith report does not go to waste:
   limit and can interleave restores. See `_enforce_single_worker` in
   `main.py`. `ZEFIRA_ALLOW_MULTI_WORKER=1` overrides it, at the operator's own
   risk.
+
+  The usual reason to want a second worker is throughput, so here is what one
+  worker measured, on a deliberately pessimistic setup - a two-core box with
+  the load generator sharing both cores:
+
+  | what | result |
+  |---|---|
+  | `GET /api/stats` with a bearer token | 66 req/s, p50 106 ms |
+  | `GET /login`, a public page | 125 req/s, p50 62 ms |
+  | `GET /sub/<token>`, the customer's hot path | 123 req/s, p50 61 ms |
+  | 60 connections sending incomplete headers | no measurable degradation |
+  | 60 connections sending half a request body | no measurable degradation |
+  | slowest route, `/api/update/status` uncached | 0.44 s |
+
+  The two slow-client rows are the ones that matter for "one worker cannot
+  absorb a slow request". Both were stalled connections held open while
+  ordinary requests were measured, and neither moved the median by more than
+  a millisecond. uvicorn is async and the synchronous routes run in a thread
+  pool, so head-of-line blocking is a property of the ASGI server rather than
+  of the worker count. A separate first blocking test was inconclusive and is
+  worth recording: it used `/api/update/status`, which answered in 13 ms
+  because it was cached, so nothing slow was ever in flight and "not
+  blocked" proved nothing.
+
+  Realistic load for this product is far below the ceiling anyway: a customer
+  refreshes a subscription every few hours, and the panel rate-limits the
+  subscription path per IP. Redis would add a network service, a hop on every
+  rate-limit check, and a second thing to secure, back up and monitor, in
+  exchange for capacity this workload never approaches. If you outgrow it,
+  the fix is the shared-state backend, and this entry should be the place that
+  records why it was worth doing by then.
 - **SQLite write serialisation.** One writer at a time is a property of SQLite,
   not a bug in this panel. It is why the panel refuses to scale with workers
   and why the rate limiters are per-process.

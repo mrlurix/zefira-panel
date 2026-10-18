@@ -13,6 +13,7 @@ from a client must not end the session.
 """
 
 import asyncio
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 import json
 import os
 import sys
@@ -24,7 +25,7 @@ USAGE = ("zefira-mcp: set ZEFIRA_URL and ZEFIRA_TOKEN, or pass --base-url "
          "and --token\n")
 
 
-def read_env_config():
+def read_env_config() -> Tuple[str, str]:
     """(base_url, token) from the environment.
 
     Empty strings rather than an exception when a variable is absent: the
@@ -37,7 +38,10 @@ def read_env_config():
     return url, tok
 
 
-def run_stdio(base_url, token, stdin=None, stdout=None, executor=None):
+def run_stdio(base_url: str, token: str,
+           stdin: Optional[Any] = None,
+           stdout: Optional[Any] = None,
+           executor: Optional[Any] = None) -> int:
     """Serve MCP on stdin/stdout until the stream ends.
 
     `executor` exists so the test can drive this without a panel; the real
@@ -103,7 +107,7 @@ def run_stdio(base_url, token, stdin=None, stdout=None, executor=None):
     return 0
 
 
-def main(argv=None):
+def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     url, tok = read_env_config()
     i = 0
