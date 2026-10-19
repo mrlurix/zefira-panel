@@ -742,24 +742,67 @@ if _staged:
 
 # block_direct_ip promises "deny raw-IP access". It only denied PUBLIC
 # literals, so 127.0.0.1 / 10.0.0.1 and the numeric spellings walked through.
-# Toggled through the API; the restore uses a DOMAIN Host header, because with
-# the switch on the panel correctly refuses every request arriving on an IP
-# literal - including the one that would switch it back off.
+#
+# Two separate properties, and this test used to conflate them. The switch is
+# an ANTI-SCAN measure - "hides panel from IP scan" is the setting's own
+# label - so an ANONYMOUS request arriving on an IP literal must be refused,
+# with no credential of any kind. That is the security property, and it is
+# unchanged.
+#
+# What the test also asserted, using the admin cookie, was that even an
+# AUTHENTICATED request is refused on an IP literal. That is what made the
+# switch a trap: the request that turns the switch off is itself subject to
+# the switch, so an operator working over IP could tick the box and then
+# never untick it. Measured on a running panel, the un-tick was answered 403
+# and the stored value stayed "1" - and the comment here used to call that
+# "correct". It locked the operator out of their own panel instead.
+#
+# So an authenticated request is let through now, and every anonymous scanner
+# is still refused. The restore below no longer needs the domain-host cheat,
+# which is the whole point: the escape hatch is the operator's own session,
+# not a DNS record that may never have existed.
 st_bd, _ = js("PUT", "/api/settings", dict(s_before or {}, block_direct_ip=True), AUTH)
 if st_bd == 200:
-    for bad_host in ("127.0.0.1:8011", "10.0.0.1:8011", "2130706433:8011",
-                     "0x7f000001:8011", "8.8.8.8:8011"):
-        st_ip, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")}, bad_host)
-        check(f"block_direct_ip denies {bad_host.split(':')[0]}", st_ip == 403, f"got {st_ip}")
-    st_dn, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")},
-                              "panel.example.com")
-    check("block_direct_ip still allows the domain", st_dn == 200, f"got {st_dn}")
-    # Restore through the domain Host so the switch does not lock the suite.
-    raw_request("PUT", "/api/settings", json.dumps(dict(s_before or {}, block_direct_ip=False)).encode(),
-                {"Cookie": AUTH.get("Cookie", ""), "X-Requested-With": "XMLHttpRequest"},
-                "panel.example.com")
-    st_back, _, _ = req("GET", "/api/me", headers=AUTH)
-    check("block_direct_ip can be switched back off", st_back == 200, f"got {st_back}")
+    try:
+        for bad_host in ("127.0.0.1:8011", "10.0.0.1:8011", "2130706433:8011",
+                         "0x7f000001:8011", "8.8.8.8:8011"):
+            st_ip, _, _ = raw_request("GET", "/api/me", b"", {}, bad_host)
+            check(f"block_direct_ip denies an ANONYMOUS request on {bad_host.split(':')[0]}",
+                  st_ip == 403, f"got {st_ip}")
+        st_anon_dn, _, _ = raw_request("GET", "/api/me", b"", {},
+                                       "panel.example.com")
+        check("...and the 403 comes from the switch, not from auth: the domain "
+              "gets as far as the route", st_anon_dn != 403, f"got {st_anon_dn}")
+        st_dn, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")},
+                                  "panel.example.com")
+        check("block_direct_ip still allows the domain", st_dn == 200, f"got {st_dn}")
+        st_auth, _, _ = raw_request("GET", "/api/me", b"", {"Cookie": AUTH.get("Cookie", "")},
+                                    "127.0.0.1:8011")
+        check("block_direct_ip does not lock out an AUTHENTICATED operator",
+              st_auth == 200, f"got {st_auth}")
+        # Restore THROUGH THE IP, with no domain-host cheat. Before the fix
+        # this was a 403 and the switch stayed on for good.
+        st_off, _, _ = raw_request("PUT", "/api/settings",
+                                   json.dumps(dict(s_before or {},
+                                                   block_direct_ip=False)).encode(),
+                                   {"Cookie": AUTH.get("Cookie", ""),
+                                    "X-Requested-With": "XMLHttpRequest"},
+                                   "127.0.0.1:8011")
+        check("block_direct_ip can be switched back off over the IP itself",
+              st_off == 200, f"got {st_off}")
+        st_back, _, _ = req("GET", "/api/me", headers=AUTH)
+        check("block_direct_ip can be switched back off", st_back == 200, f"got {st_back}")
+    finally:
+        # The switch is ON now, and the panel refuses anonymous requests on
+        # an IP host - so a suite that died between the two would leave every
+        # later run unable to log in. Restore it whatever happened. The
+        # domain host is used here because it works with or without a
+        # credential, which is the point of the escape hatch.
+        raw_request("PUT", "/api/settings",
+                    json.dumps(dict(s_before or {}, block_direct_ip=False)).encode(),
+                    {"Cookie": AUTH.get("Cookie", ""),
+                     "X-Requested-With": "XMLHttpRequest"},
+                    "panel.example.com")
 else:
     check("block_direct_ip denies a raw IP", False, f"could not enable: {st_bd}")
 # The numeric spellings of 127.0.0.1 must be recognised as IPs, not hostnames.

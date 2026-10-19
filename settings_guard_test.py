@@ -64,7 +64,13 @@ def checks(appjs, schemas):
         "port guard still rejects NaN":
             "Number.isFinite" in g,
         "settings schema really is ge=1 le=65535":
-            len(re.findall(r"_port: StrictInt = Field\(ge=1, le=65535", schemas)) >= 8,
+                    # The BOUNDS are the invariant, not the spelling. Four of the
+        # ports became Optional[StrictInt] with default None, because
+        # "not sent" must mean "unchanged" rather than "written from
+        # the default" - the same reason every other field in the model
+        # changed. The constraint itself is unchanged, so this check
+        # accepts either shape and still insists on the bounds.
+        len(re.findall(r"_port:\s*(?:Optional\[)?StrictInt\]?\s*=\s*Field\([^)]*ge=1,\s*le=65535", schemas)) >= 8,
         # 2. fail-closed download
         "download path fails closed":
             re.search(r"catch \(_\)\s*\{[^}]*blocked\s*=\s*true", download) is not None,

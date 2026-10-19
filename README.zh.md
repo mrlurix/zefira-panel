@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # 只有你自己能读的私有目录
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.47/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.48/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.47` 这个 tag 固定了安装脚本本身。
+> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.48` 这个 tag 固定了安装脚本本身。
 >
 > 随后安装脚本会按它自带的发布 tag 克隆面板源码。如果你想更严格地固定到具体提交：
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### 运行测试
 
 这些测试套件从外部打击运行中的面板。先启动面板，然后逐个运行（套件之间重启面板）。也可以一次跑完：`python run_all_tests.py admin YOURPASS`。各套件之间互不依赖顺序，结束时都会把面板恢复到出厂默认设置。
-共 54 套测试：16 套在线（需要正在运行的面板），38 套静态守卫（无需任何东西）。
+共 55 套测试：16 套在线（需要正在运行的面板），39 套静态守卫（无需任何东西）。
 
 
 **在线套件（10 个）**——需要正在运行的面板：
@@ -178,6 +178,7 @@ node i18n_dict_check.js           # 加载并检查文档字典
 node i18n_render_check.js
 python audit_retention_test.py                       # audit retention figure matches the code
 python type_hints_test.py                              # type annotations do not regress
+python menu_order_test.py                               # the three menu orders agree
 python api_response_shapes_test.py                  # API reference matches reality (live)
 python mcp_tools_test.py                                 # the MCP tool table
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor

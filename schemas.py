@@ -227,6 +227,28 @@ class AppearanceIn(BaseModel):
     menu_layout: str = Field(default="", max_length=2000)
     dash_layout: str = Field(default="", max_length=2000)
 
+    @field_validator("menu_layout", "dash_layout", mode="before")
+    @classmethod
+    def _accept_a_layout_object(cls, v):
+        """Accept the layout as an OBJECT as well as as a JSON string.
+
+        GET /api/appearance returns these two already PARSED, because the
+        stored setting is a JSON string and the server hands the caller the
+        object. PUT wants a string. So the obvious client - GET the
+        appearance, change one field, PUT it back - is answered 422
+        "Input should be a valid string", and the only way to write a layout
+        is to know to re-stringify it first. Measured: that round trip failed
+        with 422, and the front end avoids it only because it stringifies the
+        layout itself.
+
+        A list is accepted here and turned back into the string the setting
+        stores, so the round trip works for a third-party client too.
+        """
+        if isinstance(v, (list, dict)):
+            import json as _json
+            return _json.dumps(v, separators=(",", ":"))
+        return v
+
     @field_validator("dash_note", mode="before")
     @classmethod
     def _strip_dash_note(cls, v):
@@ -299,33 +321,52 @@ class AiSettingsIn(BaseModel):
 
 
 class SettingsIn(BaseModel):
+    # The four PORTS stay REQUIRED, on purpose, and that is not an oversight.
+    # A body without them is refused with 422 rather than merged, and
+    # settings_cards_test.py asserts it, because a partial body that was
+    # accepted used to write the model's DEFAULTS over every field it did
+    # not mention. Measured on the original code: a body with the four ports
+    # and nothing else came back 200 and ERASED the WireGuard public key
+    # (its default is "") and turned all three switches off.
+    #
+    # So the two halves together:
+    #   - a body MISSING the ports -> 422, nothing changes. Unchanged.
+    #   - a body WITH the ports but omitting the rest -> only the fields it
+    #     names are written. That is the fix: every other field is Optional
+    #     with default None, and None means "not sent, leave it alone".
+    #
+    # The panel's own form always posts all eighteen fields, so the front end
+    # never sees the difference. Every other integration did. This is the
+    # same patch semantics McpSettingsIn already uses, for the same reason.
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    domain: str = Field(default="", max_length=253, pattern=HOST_RE)
+    domain: Optional[str] = Field(default=None, max_length=253, pattern=HOST_RE)
     sub_port: StrictInt = Field(ge=1, le=65535)
     hy2_port: StrictInt = Field(ge=1, le=65535)
     wg_port: StrictInt = Field(ge=1, le=65535)
-    wg_pub: str = Field(default="", max_length=200)
-    dns: str = Field(default="1.1.1.1", max_length=100, pattern=HOST_RE)
+    wg_pub: Optional[str] = Field(default=None, max_length=200)
+    dns: Optional[str] = Field(default=None, max_length=100, pattern=HOST_RE)
     ovpn_port: StrictInt = Field(ge=1, le=65535)
-    ovpn_proto: Literal["udp", "tcp"] = "udp"
-    l2tp_port: StrictInt = Field(ge=1, le=65535, default=1701)
-    cisco_port: StrictInt = Field(ge=1, le=65535, default=443)
-    socks5_port: StrictInt = Field(ge=1, le=65535, default=1080)
-    reality_port: StrictInt = Field(ge=1, le=65535, default=443)
-    reality_sni: str = Field(
-        default="www.yahoo.com,www.samsung.com,www.microsoft.com",
+    ovpn_proto: Optional[Literal["udp", "tcp"]] = None
+    l2tp_port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
+    cisco_port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
+    socks5_port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
+    reality_port: Optional[StrictInt] = Field(default=None, ge=1, le=65535)
+    reality_sni: Optional[str] = Field(
+        default=None,
         max_length=300,
     )
 
     @field_validator("reality_sni", mode="after")
     @classmethod
-    def _check_sni(cls, v: str) -> str:
+    def _check_sni(cls, v):
         # The SNI is a comma-separated host list that REALITY rotates through
         # (protocols.py splits on ","). A character-class regex accepted
         # "www..com" and "www yahoo.com" (empty DNS label / a space inside one
         # name), which then shipped as a dead server name in every REALITY
         # link. Validate each comma-separated entry.
+        if v is None:
+            return None          # not sent -> not touched
         cleaned = v.strip()
         if not cleaned:
             # Empty was accepted here, and an empty list made the link builder
@@ -345,11 +386,11 @@ class SettingsIn(BaseModel):
         if not seen:
             raise ValueError("reality_sni must contain at least one hostname")
         return cleaned
-    obfuscated_host: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
-    per_user_subdomain: bool = False
-    cdn_enabled: bool = False
-    cdn_sni: str = Field(default="", max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
-    block_direct_ip: bool = False
+    obfuscated_host: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
+    per_user_subdomain: Optional[bool] = None
+    cdn_enabled: Optional[bool] = None
+    cdn_sni: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
+    block_direct_ip: Optional[bool] = None
 
 
 class SslIssueIn(BaseModel):

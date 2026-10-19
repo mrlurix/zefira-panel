@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=70">
+<link rel="stylesheet" href="assets/style.css?v=72">
 </head>
 <body>
 <header class="topbar">
@@ -111,7 +111,7 @@
 <h2 id="server-objects" data-i18n="api.hServer">Server objects</h2>
 <table>
 <tr><th data-i18n="api.thMethod">Method</th><th data-i18n="api.thEndpoint">Endpoint</th><th data-i18n="api.thNotes">Notes</th></tr>
-<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td data-i18n="api.srvSettings">Domain, ports (VLESS/VMess/Trojan/SS, Hysteria2, WireGuard, OpenVPN, L2TP, Cisco, SOCKS5), REALITY, obfuscation…</td></tr>
+<tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td data-i18n="api.srvSettings">Domain, ports (VLESS/VMess/Trojan/SS, Hysteria2, WireGuard, OpenVPN, L2TP, Cisco, SOCKS5), REALITY, obfuscation… <code>PUT</code> needs the four ports <code>sub_port</code>, <code>hy2_port</code>, <code>wg_port</code> and <code>ovpn_port</code>; a body without them is refused with <code>422</code>. With them, only the fields you name are changed - anything you leave out keeps its stored value, so a request can never erase the WireGuard key or switch off <code>block_direct_ip</code> by omission. The three switches come back as real booleans, not as <code>"1"</code> and <code>"0"</code>.</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td data-i18n="api.realityGen">New X25519 keypair</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td data-i18n="api.realityReveal">Audit-logged reveal</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td data-i18n="api.appearance">Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
@@ -288,8 +288,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=70"></script>
-<script src="assets/docs.js?v=70"></script>
-<script src="assets/support-ai.js?v=70"></script>
+<script src="assets/i18n.js?v=72"></script>
+<script src="assets/docs.js?v=72"></script>
+<script src="assets/support-ai.js?v=72"></script>
 </body>
 </html>

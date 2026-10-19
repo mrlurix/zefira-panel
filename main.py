@@ -867,7 +867,19 @@ def load_appearance() -> dict:
 # and the server rejected a layout that mentioned it, pinning the section in
 # place for good. A new section that is not in this tuple can be neither
 # reordered nor hidden.
-MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "settings", "mcp")
+#
+# The ORDER matters as much as the membership, and it is the ORDER that
+# decides where a section lands in a saved layout. "mcp" was appended at the
+# end here while panel.html and MENU_IDS both put it directly above
+# "settings" - so the front end drew the MCP section above Settings, and
+# then the server's canonical order, which is the one that gets STORED, put
+# it back at the bottom. The saved layout on a live install read
+# [... "api", "settings", "mcp"], and the section rendered below Settings.
+#
+# Two places disagreed and nothing compared them, so menu_order_test.py now
+# does: this tuple, MENU_IDS in app.js and the nav buttons in panel.html must
+# all be the same sequence, in the same order.
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "settings")
 MENU_ALWAYS = ("dashboard", "users", "inbounds", "customize", "settings")
 DASH_BLOCKS = ("usage", "link", "groups", "apps")
 
@@ -1735,6 +1747,52 @@ def _numeric_ip_forms(host: str) -> bool:
     return 0 <= n <= 0xFFFFFFFF
 
 
+def _request_has_valid_credential(request: Request) -> bool:
+    """True when this request carries a credential the panel would accept.
+
+    The direct-IP block exists to hide the panel from an ANONYMOUS scanner.
+    It must not be able to lock out an operator who can authenticate, because
+    the request that turns the switch OFF is itself subject to the switch.
+
+    Measured on a running panel: with the switch ON, the settings PUT that
+    was supposed to turn it OFF was answered 403 - "Direct IP access to panel
+    is disabled, use domain" - and the stored value stayed "1". The panel had
+    locked the operator out of itself, and an install whose domain is still the
+    `zefira.example.com` placeholder had no way back at all.
+
+    So a request carrying a VALID session cookie or a VALID API token is let
+    through. An anonymous scanner still gets 403 on every panel path, which is
+    the entire point of the switch; this only changes the answer for requests
+    that are already authenticated, and the route's own auth check still runs
+    afterwards.
+
+    The bearer branch hits the database, but only on the rare path where the
+    host looked like an IP literal, so the hot path is untouched.
+    """
+    token = request.cookies.get(COOKIE_NAME)
+    if token and len(token) < 4096:
+        try:
+            payload = decode_session(token)
+        except Exception:
+            payload = None
+        if payload and payload.get("sub"):
+            return True
+    auth = request.headers.get("authorization", "")
+    if auth[:7].lower() == "bearer " and len(auth.strip()) > 7:
+        raw = auth[7:].strip()
+        if len(raw) <= 200:
+            digest = hashlib.sha256(raw.encode()).hexdigest()
+            try:
+                with db.s() as s:
+                    row = s.scalar(select(ApiToken)
+                                   .where(ApiToken.token_sha == digest))
+                    if row is not None and not _token_expired(row):
+                        return True
+            except Exception:
+                return False
+    return False
+
+
 @app.middleware("http")
 async def block_direct_ip_middleware(request: Request, call_next):
     if cached_setting("block_direct_ip") == "1":
@@ -1760,7 +1818,12 @@ async def block_direct_ip_middleware(request: Request, call_next):
             if looks_like_ip:
                 if request.url.path in ("/", "/login", "/panel") or request.url.path.startswith("/api/"):
                     if not request.url.path.startswith("/sub"):
-                        return JSONResponse({"detail": "Direct IP access to panel is disabled, use domain"}, status_code=403)
+                        # An authenticated operator is never locked out by this
+                        # switch - see _request_has_valid_credential. Without
+                        # it the request that turns the switch OFF was itself
+                        # answered 403, and the setting stayed on forever.
+                        if not _request_has_valid_credential(request):
+                            return JSONResponse({"detail": "Direct IP access to panel is disabled, use domain"}, status_code=403)
     return await call_next(request)
 
 
@@ -2346,7 +2409,16 @@ def api_system(admin: Admin = Depends(require_admin)):
 @app.get("/api/settings")
 def api_settings_get(admin: Admin = Depends(require_admin)):
     srv = load_srv()
-    return {k: srv[k] for k in sorted(SRV_KEYS)}
+    out = {k: srv[k] for k in sorted(SRV_KEYS)}
+    # The three switches are STORED as "1"/"0" but are DECLARED bool, so a
+    # client with a typed decoder was handed the string "0" where the model
+    # promised False. Hand back real booleans. The front end accepts both -
+    # it tests `String(v) === "1" || v === true` - and a bot author gets the
+    # type the reference documents.
+    for k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
+        if k in out:
+            out[k] = out[k] in ("1", "true", "True", 1, True)
+    return out
 
 
 @app.put("/api/settings")
@@ -2354,6 +2426,11 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
     with db.s() as s:
         for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
             v = getattr(data, k)
+            # None means the field was NOT sent, so the stored value stands.
+            # Skipping it is the whole point: without this, a partial request
+            # wrote the model's defaults over every switch it did not mention.
+            if v is None:
+                continue
             if k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
                 v = "1" if v else "0"
             row = s.get(Setting, k)

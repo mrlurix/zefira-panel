@@ -201,6 +201,11 @@ OFFLINE_SUITES = [
     # top-level function. The allowance list names four functions rather
     # than counting, so it cannot be widened from inside the guard.
     ("type_hints_test.py", "type annotations do not regress"),
+    # The sidebar order is decided in three places - the server's
+    # MENU_SECTIONS, the front end's MENU_IDS and the nav buttons in
+    # panel.html - and only the server's is stored. They disagreed once
+    # and nothing compared them, so this compares all three.
+    ("menu_order_test.py", "the three menu orders agree"),
 ]
 
 

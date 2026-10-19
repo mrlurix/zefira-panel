@@ -96,6 +96,11 @@ if st != 200:
 print("\n=== 1. Server / Hosts Settings (the full-replace one) ===")
 st, _, raw = req("GET", "/api/settings", headers=AUTH)
 orig = body_json(raw)
+# The settings as they were BEFORE this suite touched anything. The suite
+# turns block_direct_ip ON to prove that an omitted field is not written
+# over it, and that leaves the panel refusing anonymous requests on an IP
+# host - so the next run could not even log in. Restore them at the end.
+orig0 = dict(orig)
 check("GET /api/settings returns the panel settings", st == 200 and orig.get("domain") is not None,
       "status=%d keys=%d" % (st, len(orig)))
 
@@ -135,6 +140,79 @@ st, _, raw4 = req("GET", "/api/settings", headers=AUTH)
 after_partial = body_json(raw4)
 check("the refused PUT changed nothing", after_partial.get("domain") == orig.get("domain"),
       str(after_partial.get("domain")))
+
+# The 422 above only covers a body that is missing the PORTS. A body WITH
+# the four ports and nothing else was accepted, and every field it did
+# not mention was written from the model's DEFAULT - which for wg_pub is
+# "", so the WireGuard key was erased, and the three switches went from
+# "1" to "0" because their default is False. Measured on the original
+# code: HTTP 200, the key gone, all three switches off.
+#
+# So the second half of the contract: a body that HAS the ports changes
+# ONLY what it names. That is what "None means not sent" buys.
+# Seed a KNOWN state first. Reading the "before" values off a database
+# whose key already happened to be empty proves nothing: a key that stays
+# empty looks identical to a key that was erased. That is why two of the
+# four mutations passed green - the premise the check rests on was not
+# true in the database the suite ran against.
+_full = dict(orig)
+_full.update({"sub_port": orig.get("sub_port"),
+               "hy2_port": orig.get("hy2_port"),
+               "wg_port": orig.get("wg_port"),
+               "ovpn_port": orig.get("ovpn_port"),
+               "wg_pub": "TEST-WIREGUARD-PUBLIC-KEY",
+               "block_direct_ip": True,
+               "cdn_enabled": True,
+               "per_user_subdomain": True})
+st, _, _ = req("PUT", "/api/settings", json.dumps(_full), AUTH)
+check("the suite can seed a known state", st == 200, "status=%d" % st)
+st, _, rawS = req("GET", "/api/settings", headers=AUTH)
+seeded = body_json(rawS)
+check("...and the seed took: the key is set and the switches are on",
+      seeded.get("wg_pub") == "TEST-WIREGUARD-PUBLIC-KEY"
+      and seeded.get("block_direct_ip") is True,
+      str({_k: seeded.get(_k) for _k in ("wg_pub",
+                                    "block_direct_ip")}))
+orig = seeded
+_seeded = {"sub_port": orig.get("sub_port"),
+           "hy2_port": orig.get("hy2_port"),
+           "wg_port": orig.get("wg_port"),
+           "ovpn_port": orig.get("ovpn_port"),
+           "domain": "only-this.example.com"}
+st, _, _ = req("PUT", "/api/settings", json.dumps(_seeded), AUTH)
+check("a settings PUT with the ports is accepted", st == 200,
+      "status=%d" % st)
+st, _, raw5 = req("GET", "/api/settings", headers=AUTH)
+after_ports = body_json(raw5)
+check("...and it changed ONLY the field it named",
+      after_ports.get("domain") == "only-this.example.com",
+      str(after_ports.get("domain")))
+check("...and it did NOT erase the WireGuard key",
+      after_ports.get("wg_pub") == orig.get("wg_pub"),
+      "the key is %r, it was %r" % (after_ports.get("wg_pub"),
+                                   orig.get("wg_pub")))
+for _sw in ("block_direct_ip", "cdn_enabled", "per_user_subdomain"):
+    check("...and it did NOT switch %s off by omission" % _sw,
+          after_ports.get(_sw) == orig.get(_sw),
+          "%s is %r, it was %r" % (_sw, after_ports.get(_sw),
+                                  orig.get(_sw)))
+# and the switches come back as BOOLEANS, not as the strings "1"/"0"
+check("the switches are returned as booleans, not as \"1\"/\"0\"",
+      all(isinstance(after_ports.get(_sw), bool) for _sw in
+          ("block_direct_ip", "cdn_enabled", "per_user_subdomain")),
+      str({_sw: type(after_ports.get(_sw)).__name__ for _sw in
+           ("block_direct_ip", "cdn_enabled", "per_user_subdomain")}))
+
+# Put the settings back exactly as they were. Without this the switch
+# stays on and the next run of ANY suite cannot log in over an IP host.
+st, _, _ = req("PUT", "/api/settings", json.dumps(orig0), AUTH)
+st, _, rawR = req("GET", "/api/settings", headers=AUTH)
+restored = body_json(rawR)
+check("the suite puts the settings back, switch and all",
+      restored.get("block_direct_ip") == orig0.get("block_direct_ip")
+      and restored.get("wg_pub") == orig0.get("wg_pub"),
+      str({_k: restored.get(_k) for _k in ("block_direct_ip",
+                                       "wg_pub")}))
 
 print("\n=== 3. AI Assistant ===")
 st, _, raw = req("GET", "/api/ai/settings", headers=AUTH)
