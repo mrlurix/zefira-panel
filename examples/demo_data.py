@@ -17,12 +17,15 @@ Two things it is careful about, both measured rather than assumed:
     (user_create_limiter in main.py). A hundred is inside that, but only
     just, so the tool reports a 429 as what it is - "wait an hour" - rather
     than pretending to have created what it did not.
-  - The data is SEEDED. The same seed produces the same panel, so a video
+  - The data is SEEDED. The same seed produces the same customers, so a video
     recorded twice looks the same, and a re-run does not produce a second
     hundred customers with different numbers.
 
-Everything it creates is marked with a prefix ("demo_"), and --clean removes
-exactly those and nothing else. It never touches a real customer.
+--clean finds the customers again by REGENERATING their names from the same
+seed, so it removes exactly what this tool creates without the tool having to
+remember anything, and without the usernames having to carry a "demo_" prefix
+that would make them look fake in a screenshot. The servers and inbounds do
+carry that prefix, and are removed by name.
 
 It also sets USAGE, not just the plan, because a panel where every customer
 has used 0 GB has flat charts and tells the viewer nothing. The spread is
@@ -40,6 +43,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 __all__ = ["main"]
 
@@ -58,6 +62,8 @@ CITY = ["tehran", "mashhad", "isfahan", "shiraz", "tabriz", "karaj",
 NOTE = ["VIP", "wholesale", "test", "reseller", "referral", "trial",
         "annual", "monthly", "family plan", "student", "backup line",
         "telegram bot", "gift", "long-term", "renewed"]
+PROTOCOLS = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2"]
+SERVER_PREFIX = "demo_"
 
 
 class Panel:
@@ -109,16 +115,19 @@ class Panel:
 
 
 def _protocols(rng):
-    pool = ["vless", "reality", "vmess", "trojan", "ss", "hysteria2"]
     n = rng.choice([1, 1, 1, 2, 2, 3])
-    return rng.sample(pool, n)
+    return rng.sample(PROTOCOLS, n)
 
 
-def make_customers(rng, count, prefix):
-    """A customer list that looks like a real one rather than a test fixture."""
+def make_customers(rng, count):
+    """A customer list that looks like a real one rather than a test fixture.
+
+    Deterministic in the seed: the same rng produces the same names, the same
+    plans and the same usages, which is how --clean finds them again.
+    """
     out = []
     seen = set()
-    for i in range(count):
+    for _i in range(count):
         first = rng.choice(FIRST)
         last = rng.choice(LAST)
         name = "%s_%s" % (first, last)
@@ -132,23 +141,32 @@ def make_customers(rng, count, prefix):
         days = rng.choice([7, 15, 30, 30, 30, 60, 90, 180, 365])
         # the usage spread: a few heavy users, a long tail of light ones
         frac = rng.choice([0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9, 0.97])
-        used = round(vol * frac, 2)
-        note = rng.choice(NOTE)
+        expired = rng.random() < 0.08
+        expired_at = ""
+        if expired:
+            # The panel's PATCH takes an ABSOLUTE expiry
+            # (set_expires_at, "YYYY-MM-DDTHH:MM"), so the demo can show an
+            # account that has already run out. A customer list where nobody
+            # has ever expired looks like a test fixture.
+            days_back = rng.choice([3, 9, 21, 60, 120, 300])
+            expired_at = (datetime.now(timezone.utc)
+                          - timedelta(days=days_back)).strftime("%Y-%m-%dT%H:%M")
         out.append({
             "username": name,
             "protocols": _protocols(rng),
             "volume_gb": float(vol),
             "days": days,
             "device_limit": rng.choice([1, 1, 2, 3, 3, 5, 10]),
-            "note": "%s - %s" % (note, city),
-            "used_gb": used,
-            "expired": rng.random() < 0.08,
+            "note": "%s - %s" % (rng.choice(NOTE), city),
+            "used_gb": round(vol * frac, 2),
+            "expired": expired,
+            "expired_at": expired_at,
             "disabled": rng.random() < 0.05,
         })
     return out
 
 
-def create_customers(panel, customers, prefix):
+def create_customers(panel, customers):
     made = 0
     for c in customers:
         body = {k: c[k] for k in ("username", "protocols", "volume_gb",
@@ -168,7 +186,10 @@ def create_customers(panel, customers, prefix):
         uid = (out or {}).get("id")
         # now the usage, so the charts are not flat
         st2, _ = panel.call("PATCH", "/api/users/%d" % uid,
-                             {"used_gb": c["used_gb"]})
+                            {"used_gb": c["used_gb"]})
+        if st2 == 200 and c["expired"]:
+            panel.call("PATCH", "/api/users/%d" % uid,
+                       {"set_expires_at": c["expired_at"]})
         if st2 == 200 and c["disabled"]:
             panel.call("PATCH", "/api/users/%d" % uid, {"is_active": False})
         made += 1
@@ -181,9 +202,8 @@ def create_servers(panel, nodes, inbounds, rng):
     made_nodes = 0
     for i in range(nodes):
         city = CITY[i % len(CITY)]
-        name = "%s Node %02d" % (city.title(), i + 1)
-        st, out = panel.call("POST", "/api/server-nodes", {
-            "name": name,
+        st, _out = panel.call("POST", "/api/server-nodes", {
+            "name": "%s%s Node %02d" % (SERVER_PREFIX, city.title(), i + 1),
             "address": "%s-%02d.example.net" % (city, i + 1),
             "check_port": 443,
             "note": rng.choice(["Frankfurt", "Amsterdam", "Helsinki",
@@ -195,9 +215,10 @@ def create_servers(panel, nodes, inbounds, rng):
 
     made_in = 0
     for i in range(inbounds):
-        st, out = panel.call("POST", "/api/inbounds", {
-            "name": "demo_%s_%02d" % (["vless", "reality", "vmess",
-                                       "trojan"][i % 4], i + 1),
+        st, _out = panel.call("POST", "/api/inbounds", {
+            "name": "%s%s_%02d" % (SERVER_PREFIX,
+                                    ["vless", "reality", "vmess",
+                                     "trojan"][i % 4], i + 1),
             "protocol": ["vless", "reality", "vmess", "trojan"][i % 4],
             "port": 20000 + i,
             "host": "",
@@ -209,10 +230,19 @@ def create_servers(panel, nodes, inbounds, rng):
     return made_nodes, made_in
 
 
-def clean(panel, prefix):
-    """Remove exactly what this tool creates, and nothing else."""
-    print("  removing the customers whose username starts with %r" % prefix)
-    removed = 0
+def clean(panel, seed, count):
+    """Remove exactly what this tool creates, and nothing else.
+
+    The customer names are regenerated from the seed, so they are found again
+    without the tool having to remember anything, and without the usernames
+    having to carry a "demo_" prefix that would make them look fake.
+    """
+    wanted = {c["username"] for c in make_customers(random.Random(seed), count)}
+    print("  removing the customers this tool created (%d names)" % len(wanted))
+    # Collect the ids FIRST, then delete them. Deleting while paginating
+    # shifts the offsets under the walk, so it skips every other customer:
+    # the first version of this removed 42 of the 100 and reported the 42.
+    ids = []
     offset = 0
     while True:
         st, out = panel.call("GET", "/api/users?limit=200&offset=%d" % offset)
@@ -222,14 +252,17 @@ def clean(panel, prefix):
         if not items:
             break
         for u in items:
-            name = u.get("username") or ""
-            if not name.startswith(prefix):
-                continue
-            st2, _ = panel.call("DELETE", "/api/users/%d" % u["id"])
-            if st2 == 200:
-                removed += 1
+            if (u.get("username") or "") in wanted:
+                ids.append(u.get("id"))
         if len(items) < 200:
             break
+    removed = 0
+    for uid in ids:
+        if uid is None:
+            continue
+        st2, _ = panel.call("DELETE", "/api/users/%d" % uid)
+        if st2 == 200:
+            removed += 1
     print("    %d customers removed" % removed)
 
     for path, label in (("/api/server-nodes", "server nodes"),
@@ -241,7 +274,7 @@ def clean(panel, prefix):
         n = 0
         for it in items:
             name = it.get("name") or ""
-            if not name.startswith(prefix) and not name.startswith("demo_"):
+            if not name.startswith(SERVER_PREFIX):
                 continue
             st2, _ = panel.call("DELETE", path + "/%d" % it["id"])
             if st2 == 200:
@@ -258,28 +291,28 @@ def main(argv=None):
     ap.add_argument("--users", type=int, default=100)
     ap.add_argument("--nodes", type=int, default=6)
     ap.add_argument("--inbounds", type=int, default=4)
-    ap.add_argument("--prefix", default="demo_")
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--clean", action="store_true",
                     help="remove what this tool created, and exit")
     args = ap.parse_args(argv)
 
     if not args.password:
+        args.password = os.environ.get("ZEFIRA_DEMO_PASSWORD", "")
+    if not args.password:
         raise SystemExit("  pass --password, or set ZEFIRA_DEMO_PASSWORD")
-    args.password = os.environ.get("ZEFIRA_DEMO_PASSWORD", args.password)
 
     print("  panel: %s" % args.base)
     panel = Panel(args.base, args.admin, args.password)
     panel.login()
 
     if args.clean:
-        clean(panel, args.prefix)
+        clean(panel, args.seed, args.users)
         return 0
 
     rng = random.Random(args.seed)
     print("  creating demo data (seed %d)..." % args.seed)
-    customers = make_customers(rng, args.users, args.prefix)
-    made, complete = create_customers(panel, customers, args.prefix)
+    customers = make_customers(rng, args.users)
+    made, complete = create_customers(panel, customers)
     print("  %d customers created" % made)
     create_servers(panel, args.nodes, args.inbounds, rng)
     st, out = panel.call("GET", "/api/users?limit=1")
