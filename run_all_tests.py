@@ -214,6 +214,10 @@ OFFLINE_SUITES = [
     # temporary directory and works on the COPY, so the real instance is
     # never at risk, and it starts its own panel on its own port.
     ("key_loss_test.py", "a missing master key cannot be silent"),
+    # STATIC: it copies the application and the instance directory to a
+    # temporary directory and works on the COPY, so the real instance is
+    # never at risk, and it starts its own panel on its own port.
+    ("restore_report_test.py", "the restore report says what was lost"),
 ]
 
 

@@ -5543,6 +5543,15 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
     # not lost customers, so they are reported apart from `skipped`. Mixing
     # them in is what made a perfectly clean restore answer "(-3 skipped)".
     refused = dropped_settings = 0
+    # Rows that were ALREADY in the panel. They are not lost rows and
+    # counting them as skipped made a restore onto a panel that already
+    # had its nodes and inbounds report "skipped: 13" for a file where
+    # nothing at all was lost.
+    already_present = 0
+    # The settings skips, split by REASON: they are not the same kind
+    # of event, and only one of them needs the operator to act.
+    skipped_settings_refused = 0
+    skipped_settings_lost = 0
     # Rows whose credentials must be re-minted server-side, charged per
     # expensive protocol. See the re-provision branch below.
     ovpn_budget = 0
@@ -5774,7 +5783,9 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     # no error anywhere. An unsigned file does not get to
                     # repoint a deployment's public identity - that is an
                     # explicit operator action in Settings after a migration.
-                    skipped += 1
+                    # REFUSED BY DESIGN, not lost: the operator's own
+                    # domain stays as they have it and nothing is missing.
+                    skipped_settings_refused += 1
                     continue
                 sval = str(v)
                 if len(sval) > 500:
@@ -5782,13 +5793,15 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                 if k == "reality_priv_enc" and sval and not decrypt_text(sval):
                     # Encrypted with another server's master key: keeping it
                     # would silently break REALITY links. Drop + count it.
-                    skipped += 1
+                    # This one IS a loss: the operator's customers lose
+                    # their REALITY link until they re-provision.
+                    skipped_settings_lost += 1
                     continue
                 if k == "reality_pub" and not _reality_priv_ok:
-                    skipped += 1
+                    skipped_settings_lost += 1
                     continue
                 if k == "tg_chat_id" and not _tg_token_ok:
-                    skipped += 1
+                    skipped_settings_lost += 1
                     continue
                 ok = True
                 if k in ("domain", "obfuscated_host", "cdn_sni"):
@@ -5923,7 +5936,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     if s.scalar(select(BlockedSite).where(BlockedSite.domain == dom)):
-                        skipped += 1
+                        already_present += 1
                         continue
                     en = bs.get("enabled", True)
                     s.add(BlockedSite(domain=dom, category="custom", enabled=_rbool(en, True)))
@@ -5949,7 +5962,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                     note = str(rn.get("note", "") or "")[:200]
                     en = rn.get("enabled", True)
                     if s.scalar(select(ServerNode).where(ServerNode.name == nname)):
-                        skipped += 1
+                        already_present += 1
                         continue
                     s.add(ServerNode(name=nname, address=addr, check_port=cport,
                                      note=note, enabled=_rbool(en, True)))
@@ -5988,7 +6001,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     if s.scalar(select(Inbound).where(Inbound.name == iname)):
-                        skipped += 1
+                        already_present += 1
                         continue
                     # Node IDs differ across databases: remap by node NAME.
                     # Backups older than 1.13.9 carry only node_id, so match
@@ -6042,7 +6055,7 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         skipped += 1
                         continue
                     if s.scalar(select(TunnelNode).where(TunnelNode.name == trow_in.name)):
-                        skipped += 1
+                        already_present += 1
                         continue
                     # Tokens never cross hosts: mint fresh (guide download +
                     # both-server update required, stated in the response).
@@ -6136,7 +6149,10 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
         audit(
             s,
             "RESTORE",
-            f"+{added_users} users (-{skipped} skipped, -{refused} refused by design), settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens}, snodes={restored_snodes}, inbounds={restored_ibs}, tunnels={restored_tnodes} by {admin.username}",
+            f"+{added_users} users (-{skipped} skipped, -{already_present} already present, "
+            f"-{refused} refused by design, "
+            f"-{skipped_settings_lost} settings lost), "
+            f"settings={restored_settings}, admins={restored_admins}, blocked={restored_blocked}, templates={restored_templates}, tokens={restored_tokens}, snodes={restored_snodes}, inbounds={restored_ibs}, tunnels={restored_tnodes} by {admin.username}",
             client_ip(request),
         )
         s.commit()
@@ -6150,6 +6166,27 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
             # refused on purpose (unsigned-file credentials) or dropped by a
             # hard cap.
             "refused": refused,
+            # Reported apart from `skipped`, and for the same reason:
+            # these rows were ALREADY in the panel, so nothing was lost.
+            # Measured: restoring a 101-customer backup onto a panel that
+            # already had those customers answered "skipped: 13", and all
+            # thirteen were nodes and inbounds that were already there.
+            "already_present": already_present,
+            "skipped_settings_refused": skipped_settings_refused,
+            "skipped_settings_lost": skipped_settings_lost,
+            "counts_note": (
+                "skipped = rows genuinely LOST (rejected, or duplicated inside the file); "
+                "already_present = rows that were already in the panel, so nothing was lost; "
+                "refused = rows refused on purpose (credentials from an unsigned file). "
+                "skipped_settings_refused = settings refused on purpose "
+                "(the origin keys - domain, public_url, trusted_proxies - "
+                "are kept as the operator has them); "
+                "skipped_settings_lost = settings that belonged to "
+                "another server and could not be moved - THESE need the "
+                "operator to re-provision. "
+                "Only `skipped` and `skipped_settings_lost` mean "
+                "something went missing."
+            ),
             "dropped_settings": dropped_settings,
             "restored_settings": restored_settings,
             "restored_admins": restored_admins,
