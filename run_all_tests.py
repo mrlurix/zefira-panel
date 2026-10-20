@@ -210,6 +210,10 @@ OFFLINE_SUITES = [
     # panel.html - and only the server's is stored. They disagreed once
     # and nothing compared them, so this compares all three.
     ("menu_order_test.py", "the three menu orders agree"),
+    # STATIC: it copies the application and the instance directory to a
+    # temporary directory and works on the COPY, so the real instance is
+    # never at risk, and it starts its own panel on its own port.
+    ("key_loss_test.py", "a missing master key cannot be silent"),
 ]
 
 

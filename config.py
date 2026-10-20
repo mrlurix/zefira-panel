@@ -11,6 +11,45 @@ except OSError:
     pass
 
 
+def _instance_looks_used() -> bool:
+    """True when this instance already holds data.
+
+    A brand-new instance has no database file at all. If the file is there and
+    carries the panel's schema, the instance is NOT fresh - and generating a
+    new master key would make every encrypted credential in it permanently
+    undecryptable: the REALITY key, the Telegram token, the AI key, every
+    customer's private config.
+
+    Measured on a live panel: deleting instance/secret.key while keeping
+    instance/zefira.db, the panel started without a word, showed all 100
+    customers, and every encrypted field among them was gone. The panel's own
+    comment said "delete it to intentionally start a fresh instance", which is
+    only true when the DATABASE is fresh too.
+
+    Read-only, and it never raises: a check that cannot be performed is not a
+    reason to refuse to start. With an external DATABASE_URL the data lives
+    elsewhere, so the local file says nothing about it and this stays False.
+    """
+    if os.environ.get("DATABASE_URL", "").strip():
+        return False
+    path = INSTANCE_DIR / "zefira.db"
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+        import sqlite3
+        uri = path.resolve().as_uri() + "?mode=ro"
+        con = sqlite3.connect(uri, uri=True)
+        try:
+            rows = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name "
+                "IN ('vpn_users', 'settings', 'admins')").fetchall()
+        finally:
+            con.close()
+        return bool(rows)
+    except Exception:
+        return False
+
+
 def _load_or_create_secret() -> str:
     path = INSTANCE_DIR / "secret.key"
     if path.exists():
@@ -44,6 +83,20 @@ def _load_or_create_secret() -> str:
         except OSError:
             pass
         return existing
+    # The key is MISSING. If the instance still has its database, this is a
+    # LOST key, not a fresh start, and a new one would quietly destroy every
+    # encrypted credential in it. Refuse, and say how to get out of it.
+    if _instance_looks_used():
+        raise SystemExit(
+            f"{path} is missing, but this instance still has its database. "
+            "Refusing to start: a NEW master key would make every encrypted "
+            "credential in the existing data permanently undecryptable - the "
+            "REALITY key, the Telegram token, the AI key and every customer's "
+            "private config - while the panel looked perfectly healthy. "
+            "Restore the key from a backup. If you really are starting over, "
+            "delete the database as well, and the panel will create a fresh "
+            "key and a fresh instance together."
+        )
     key = secrets.token_hex(48)
     # Create exclusively with the final mode: no window where the key is
     # world-readable, and no chance of following a planted symlink.
