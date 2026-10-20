@@ -73,6 +73,10 @@ SUITES = [
     # that environment cannot be prepared, because a suite that could not
     # run must never be reported as a pass.
     ("mcp_conformance_test.py", "MCP conformance, real SDK, both transports"),
+    # LIVE: it starts its own panel with ZEFIRA_LOG_FORMAT=json and reads
+    # what the panel actually wrote, so it cannot pass by comparing the
+    # formatter with itself.
+    ("logging_format_test.py", "the log format, plain and JSON"),
 ]
 # Suites that need no running panel: static guards over the installer, which
 # is only ever executed on a Linux VPS (never here), and the docs site.

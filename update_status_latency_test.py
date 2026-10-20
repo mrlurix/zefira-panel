@@ -188,8 +188,13 @@ try:
     out = panel._update_status(wait=0.0)
     cold_dt = time.time() - t0
     print("    cold read with a %.1fs 'GitHub': %.3fs" % (STUB, cold_dt))
-    check("a plain read does not block on the network",
-          cold_dt < STUB / 2, "%.3fs, the stub alone costs %.1fs" % (cold_dt, STUB))
+    # The CHECK is made further down, once the warm read has been timed.
+    # The invariant is "the cold read did not wait for the network", and a
+    # fixed fraction of the stub measures the MACHINE as much as the panel:
+    # on a loaded box the cold read crossed STUB/2 and the check failed
+    # while the read was still plainly not waiting - the stub alone costs
+    # 1.5s. What has to be true is that the cold read costs LESS THAN THE
+    # STUB more than the warm one does on the same machine.
 
     keys = ("current", "latest", "incoming", "local_log", "error", "version",
             "update_available", "updating", "unit_warning", "restart_pending",
@@ -216,6 +221,12 @@ try:
     again = calls["n"]
     print("    warm read: %.3fs   stub invocations: %d then %d"
           % (warm_dt, before, again))
+    print("    cold read: %.3fs   warm read: %.3fs   extra: %.3fs"
+          % (cold_dt, warm_dt, cold_dt - warm_dt))
+    check("a plain read does not block on the network",
+          cold_dt - warm_dt < STUB / 2,
+          "the cold read cost %.3fs more than the warm one, and the "
+          "stub alone costs %.1fs" % (cold_dt - warm_dt, STUB))
     check("the GitHub half is fetched once and then cached",
           again == before, "the stub ran %d more time(s) on a warm cache" % (again - before))
     check("a warm read is fast", warm_dt < STUB / 2, "%.3fs" % warm_dt)

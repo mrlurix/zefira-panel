@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextvars
 import hashlib
 import ipaddress
 import json
@@ -106,7 +107,85 @@ from security import (
     verify_password,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+# The log format is plain text by default, exactly as it has always been, so
+# nothing changes for an existing install. Two environment variables opt into
+# the other modes:
+#
+#   ZEFIRA_LOG_FORMAT=json   one JSON object per line, for a log shipper
+#   ZEFIRA_LOG_LEVEL=DEBUG   the level (default INFO)
+#
+# The JSON lines carry the request id when there is one, which is the whole
+# point: the panel already mints a request id, echoes it on the response and
+# writes it into the access log, but the log lines a handler emits had no way
+# to be tied back to a request. A context variable carries it, so a line
+# logged deep inside a request says which request it belongs to.
+#
+# The formatter NEVER raises. A logging bug that takes the panel's logs down
+# with it is far worse than a malformed line, so anything unexpected falls
+# back to the plain format.
+_LOG_FORMAT = (os.environ.get("ZEFIRA_LOG_FORMAT") or "").strip().lower()
+_LOG_LEVEL = (os.environ.get("ZEFIRA_LOG_LEVEL") or "").strip().upper()
+try:
+    _LOG_LEVEL_NUM = getattr(logging, _LOG_LEVEL) if _LOG_LEVEL else logging.INFO
+    if not isinstance(_LOG_LEVEL_NUM, int):
+        _LOG_LEVEL_NUM = logging.INFO
+except Exception:
+    _LOG_LEVEL_NUM = logging.INFO
+
+# The request id of the request being handled, if any. A context variable and
+# not a thread local: the panel's handlers run in a thread pool, and a context
+# variable is copied into the thread that runs them.
+_CURRENT_REQUEST_ID = contextvars.ContextVar("zefira_request_id", default=None)
+
+
+class _JsonLogFormatter(logging.Formatter):
+    """One JSON object per line.
+
+    The fields are the ones a log shipper actually queries: a timestamp in
+    UTC, the level, the logger, the message, and the request id when the line
+    was written inside a request. Anything the caller passed as `extra` is
+    merged in, so a caller can add its own field without the formatter
+    knowing about it.
+    """
+
+    def format(self, record):
+        try:
+            out = {
+                "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                "level": record.levelname,
+                "logger": record.name,
+                "msg": record.getMessage(),
+            }
+            rid = _CURRENT_REQUEST_ID.get()
+            if rid:
+                out["request_id"] = rid
+            for key, value in getattr(record, "__dict__", {}).items():
+                if key.startswith("zefira_"):
+                    out[key[7:]] = value
+            if record.exc_info:
+                out["exc"] = self.formatException(record.exc_info)
+            return json.dumps(out, ensure_ascii=False, default=str)
+        except Exception:
+            # A formatter that raises takes the whole log down. Fall back to
+            # the plain line instead. And do NOT call getMessage() here: that
+            # is the very call that may have raised, and a second raise in
+            # the fallback would leave the log with nothing at all.
+            try:
+                return "%s | %s | %s" % (
+                    self.formatTime(record, self.datefmt),
+                    record.levelname, record.msg)
+            except Exception:
+                return "zefira: a log record could not be formatted"
+
+
+if _LOG_FORMAT == "json":
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(_JsonLogFormatter())
+    logging.basicConfig(level=_LOG_LEVEL_NUM, format="%(message)s",
+                        handlers=[_handler])
+else:
+    logging.basicConfig(level=_LOG_LEVEL_NUM,
+                        format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("zefira")
 
 db = Database(BASE_DIR / "instance" / "zefira.db")
@@ -1680,34 +1759,49 @@ def _redact_credential_path(path: str) -> str:
 async def security_headers_middleware(request: Request, call_next):
     rid = _request_id(request)
     request.state.request_id = rid
+    # Carry the request id into the log lines written while this request is
+    # being handled. The ACCESS log already had it - it writes "rid=..."
+    # into the message - but the lines a HANDLER emits had no way to be tied
+    # to a request: a telegram failure, a refused host header, a skipped
+    # restore. Those are the lines that matter when something went wrong at
+    # 14:03 and nobody knows which of two hundred requests it was.
+    #
+    # The reset is at the very END of the middleware, after the access log.
+    # Resetting it in a finally around call_next() cleared it before the
+    # access line was written, so the request id was missing from the very
+    # line that exists to carry it.
+    _tok = _CURRENT_REQUEST_ID.set(rid)
     _t0 = time_mod.perf_counter()
-    response = await call_next(request)
-    for key, value in SECURITY_HEADERS.items():
-        response.headers.setdefault(key, value)
-    response.headers["Content-Security-Policy"] = CSP
-    response.headers["X-Request-Id"] = rid
-    # The custom SUBSCRIPTION_PATH (e.g. /vpn) is served by the same handler as
-    # /sub, so it needs the same no-store: those responses carry the customer's
-    # bearer links and private configs and must never sit in a shared cache.
-    _sub_prefix = _subscription_path_prefix()
-    if (
-        request.url.path.startswith("/api")
-        or request.url.path.startswith("/sub")
-        or (_sub_prefix and request.url.path.startswith(_sub_prefix))
-    ):
-        response.headers.setdefault("Cache-Control", "no-store")
-    if request_scheme(request) == "https":
-        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-    # One line per request, with the id, the status and how long it took. The
-    # panel has no metric exporter and no trace backend, so this line is the
-    # only thing that ties a slow response back to the code that produced it.
-    # The path can carry a credential: /sub/{token} is anonymous, and that
-    # token is the customer's whole account. Rotating it does not help, because
-    # the next poll writes the new one here too.
-    _logged_path = _redact_credential_path(request.url.path)
-    log.info("rid=%s %s %s -> %s %.0fms", rid, request.method,
-             _logged_path, response.status_code,
-             (time_mod.perf_counter() - _t0) * 1000.0)
+    try:
+        response = await call_next(request)
+        for key, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(key, value)
+        response.headers["Content-Security-Policy"] = CSP
+        response.headers["X-Request-Id"] = rid
+        # The custom SUBSCRIPTION_PATH (e.g. /vpn) is served by the same handler as
+        # /sub, so it needs the same no-store: those responses carry the customer's
+        # bearer links and private configs and must never sit in a shared cache.
+        _sub_prefix = _subscription_path_prefix()
+        if (
+            request.url.path.startswith("/api")
+            or request.url.path.startswith("/sub")
+            or (_sub_prefix and request.url.path.startswith(_sub_prefix))
+        ):
+            response.headers.setdefault("Cache-Control", "no-store")
+        if request_scheme(request) == "https":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        # One line per request, with the id, the status and how long it took. The
+        # panel has no metric exporter and no trace backend, so this line is the
+        # only thing that ties a slow response back to the code that produced it.
+        # The path can carry a credential: /sub/{token} is anonymous, and that
+        # token is the customer's whole account. Rotating it does not help, because
+        # the next poll writes the new one here too.
+        _logged_path = _redact_credential_path(request.url.path)
+        log.info("rid=%s %s %s -> %s %.0fms", rid, request.method,
+                 _logged_path, response.status_code,
+                 (time_mod.perf_counter() - _t0) * 1000.0)
+    finally:
+        _CURRENT_REQUEST_ID.reset(_tok)
     return response
 
 
