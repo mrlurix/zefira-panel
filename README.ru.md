@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # приватный каталог, читаемый только вами
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.53/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.54/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.53` фиксирует сам установщик.
+> Оба способа работают. Однострочный вариант передаёт всё, что upstream отдаёт в этот момент, прямо в корневую оболочку, поэтому если вам важно, **какой** код выполняется от root, используйте второй: он попадает в каталог, который `mktemp` только что создал для вас (фиксированный `/tmp/zefira-inst` мог быть заранее создан другим локальным пользователем, а `mkdir -p` молча succeeds на каталоге, которым он не владеет), а тег `v1.15.54` фиксирует сам установщик.
 >
 > Затем установщик клонирует исходники панели по тегу релиза, который идёт с ним. Если нужно жёстче — указать точный коммит:
 >
@@ -113,7 +113,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### Запуск тестов
 
 Эти наборы бьют по работающей панели снаружи. Запустите панель, затем выполняйте их по одному (перезапуская панель между наборами). Либо все сразу: `python run_all_tests.py admin YOURPASS`. Наборы не зависят от порядка и в конце возвращают панель к заводским настройкам.
-Всего 59 наборов тестов: 17 онлайн (нужна работающая панель) и 42 статических (ничего не нужно).
+Всего 60 наборов тестов: 17 онлайн (нужна работающая панель) и 43 статических (ничего не нужно).
 
 
 **Онлайн-наборы (10)** — требуют работающей панели:
@@ -184,6 +184,7 @@ python logging_format_test.py                       # the log format, plain and 
 python key_loss_test.py                            # a missing master key cannot be silent
 python restore_report_test.py                       # the restore report says what was lost
 python mcp_client_ip_test.py                       # an MCP call is attributed to its caller
+python client_ip_test.py                            # who a request is counted as
 python mcp_tools_test.py                                 # the MCP tool table
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor

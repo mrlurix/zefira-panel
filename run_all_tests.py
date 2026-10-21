@@ -222,6 +222,11 @@ OFFLINE_SUITES = [
     # temporary directory, works on the COPY, and starts its own panel
     # on its own port.
     ("mcp_client_ip_test.py", "an MCP call is attributed to its caller"),
+    # STATIC: it exercises the rule with a synthetic peer, so it needs
+    # no panel and no network. An end-to-end probe always connects from
+    # the loopback, which is exactly the peer the panel trusts, so it
+    # cannot say anything about the case an attacker is in.
+    ("client_ip_test.py", "who a request is counted as"),
 ]
 
 

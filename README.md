@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.53/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.54/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.53` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.54` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -149,8 +149,8 @@ same code path if you need concurrent writers.
 
 ### Running the tests
 
-There are 59 test suites. 17 hit the running panel from the outside and
-42 are static guards that need nothing running. One command runs all 59:
+There are 60 test suites. 17 hit the running panel from the outside and
+43 are static guards that need nothing running. One command runs all 60:
 
 ```bash
 python run_all_tests.py http://127.0.0.1:8000 admin YOURPASS
@@ -250,7 +250,8 @@ python api_response_shapes_test.py                  # API reference matches real
 python logging_format_test.py                       # the log format, plain and JSON
 python key_loss_test.py                            # a missing master key cannot be silent
 python restore_report_test.py                       # the restore report says what was lost
-python mcp_client_ip_test.py                       # an MCP call is attributed to its caller     # the docs renderer, fed hostile strings
+python mcp_client_ip_test.py                       # an MCP call is attributed to its caller
+python client_ip_test.py                            # who a request is counted as     # the docs renderer, fed hostile strings
 ```
 
 Nine more do not need a server either, and all nine were written because the
