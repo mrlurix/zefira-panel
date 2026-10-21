@@ -218,6 +218,10 @@ OFFLINE_SUITES = [
     # temporary directory and works on the COPY, so the real instance is
     # never at risk, and it starts its own panel on its own port.
     ("restore_report_test.py", "the restore report says what was lost"),
+    # STATIC: it copies the application and the instance directory to a
+    # temporary directory, works on the COPY, and starts its own panel
+    # on its own port.
+    ("mcp_client_ip_test.py", "an MCP call is attributed to its caller"),
 ]
 
 

@@ -3880,7 +3880,7 @@ def api_mcp_test(request: Request, admin: Admin = Depends(require_admin)):
                            "self-test from the command line, to exercise the "
                            "transport end to end.")
     out = asyncio.run(Dispatcher(
-        AsgiExecutor(app, token),
+        AsgiExecutor(app, token, client_host=client_ip(request)),
         compose=lambda n, a: _mcp_compose(n, a, request)
     ).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
               "params": {"name": "panel_stats", "arguments": {}}}))
@@ -3973,7 +3973,7 @@ async def api_mcp(request: Request):
 
     from mcp_protocol import Dispatcher as _D
     from mcp_exec import AsgiExecutor as _A
-    d = _D(_A(app, raw_token),
+    d = _D(_A(app, raw_token, client_host=client_ip(request)),
            compose=lambda n, a: _mcp_compose(n, a, request),
            audit=lambda name, target, good, detail: _mcp_audit(
                request, name, target, good, detail))

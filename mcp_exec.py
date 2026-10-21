@@ -258,9 +258,24 @@ def split_path_and_query(full: str) -> Tuple[str, bytes]:
 class AsgiExecutor:
     """Runs a tool in-process by forwarding through the panel's own app."""
 
-    def __init__(self, app: Any, token: str) -> None:
+    def __init__(self, app: Any, token: str,
+                 client_host: str = "127.0.0.1") -> None:
         self.app = app
         self.token = token
+        # The address the CALLER reached the panel from.
+        #
+        # It used to be hard-coded to 127.0.0.1 in the ASGI scope, so
+        # every forwarded call claimed to come from the loopback. Two
+        # things followed. The audit trail recorded a customer created
+        # through MCP as 127.0.0.1 - the action was unattributable - and
+        # the per-IP rate limiters of the FORWARDED routes keyed on that
+        # one address, so every MCP client in the world shared a single
+        # bucket, together with the operator's own same-host requests.
+        #
+        # Measured: one MCP call that created a customer wrote
+        # MCP_CALL ip=203.0.113.9 and USER_CREATE ip=127.0.0.1 - the
+        # same operation, two addresses, one trail.
+        self.client_host = client_host or "127.0.0.1"
 
     async def call(
             self, tool: Mapping[str, Any],
@@ -297,7 +312,7 @@ class AsgiExecutor:
             "query_string": raw_qs,
             "root_path": "",
             "headers": headers,
-            "client": ("127.0.0.1", 0),
+            "client": (self.client_host, 0),
             "server": ("127.0.0.1", 8000),
             # A fresh dict per call. A shared one would leak one caller's
             # request.state into the next, and the spike's two consecutive
