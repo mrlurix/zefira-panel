@@ -3,6 +3,13 @@
 Every release, newest first. Generated from [`docs/changelog.html`](docs/changelog.html), which is the source of
 truth; run `python docs/gen_changelog.py` after editing that page.
 
+## v1.15.57 - The site that was never deployed
+
+- **Every docs build since Oct 17 failed, so the public site was thirteen releases behind.** The live changelog stopped at v1.15.43 and the live user guide had no MCP section at all, while the repository had both. The cause was one unclosed Liquid tag opener in an internal plan file: GitHub Pages runs Jekyll over docs/*.md, and a template tag that never closes aborts the build. The site now ships docs/.nojekyll, so Pages serves these files as static HTML instead of running Jekyll, and the plan no longer contains a Liquid opener. A guard fails when either fact changes.
+- **The first changelog entry called itself Latest and was the v1.15.3 docs-coverage release.** The unversioned block had stayed above every newer release since v1.15.3, so the first heading a reader met was dozens of releases old. It is merged into v1.15.3 now, so the first heading a reader meets is the newest release. The landing page's recent-changes cards also name the four newest changes: the changelog catch-up, the generated MCP tool table, MCP caller attribution and the MCP server itself.
+- **The MCP chapter explains the protocol, not just the switch.** What MCP is, the two transports (stdio and HTTP), the five setup steps, the 25-tool catalog with its six destructive tools, and the bounds: full scope only over HTTP, a cookie refused, a per-token budget, and one audit row per call. The same facts are in all four languages.
+- **A guard now watches the deployment itself.** The docs suite requires docs/.nojekyll to exist and scans the tree for a Liquid tag opener; a probe proves the scan can see the exact kind of string that broke the build. Nothing about the panel changed in this release.
+
 ## v1.15.56 - The changelog that was missing twenty-four releases
 
 - **Twenty-four releases had no public entry at all.** v1.15.3 through v1.15.26 shipped with their only record in a commit subject nobody outside the repository could read - among them the updater guard that refused every update since v1.0.0, the root escalation through the installer's .env symlink write, the unbounded customer-credential enumeration, and the database password passed in argv. The roadmap said so in its own words, under Being worked on. They are written now, in four languages.
@@ -280,7 +287,7 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 
 ## v1.15.14 - One backslash in the version corrupted every asset URL in the site
 
-- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=82 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
+- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=87 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
 - **The version is now digits-only, and the directory cannot be given at all.** A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.
 
 ## v1.15.13 - The installer's SSL block appended to .env through a symlink, as root
@@ -333,10 +340,14 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 - **The tag for a release must be cut after the release commit.** The installer clones the tag, and the guard compares the tag's product files with this tree. A tag placed on the previous commit would have shipped the pin bump's own installer - the class of bug that guard exists to stop.
 - **And the pins are one fact, not four.** VERSION, the installer's pin and the README examples all name the same release. A release that moves one without the others ships an installer that clones a tag holding different code, and the reader who followed the README gets that tag. The suite now checks them together.
 
-## v1.15.3 - The pin named a release that no longer contained the fixes
+## v1.15.3 - The pin named a release that no longer contained the fixes — and the docs site began checking itself
 
 - **Two guards compared the pin against the VERSION file.** Both were green. Both were also worthless: they are two literals agreeing with each other, and neither can see that the release they name stops several commits short of the code in this tree.
 - **The consequence was not cosmetic.** The one-liner runs the installer from main but clones the application from the tag. The named release was tagged before three fixes - the pre-auth slot exhaustion, the intent-group guard and the per-user prefix - so every fresh install since then ran today's installer over an application that still had all three, and the one-liner reported success. The new guards compare the pin against CODE: the named tag must exist, and the product files inside it must be byte-identical to this tree's.
+- **Five endpoints were documented nowhere:** /api/ai/test, /api/telegram/test, /api/api-tokens/self-test, /api/blocklist/porn and /api/tunnel-settings all existed, all had a button in the panel, and none of them appeared in the API reference. The prose described what they do; a bot author had no endpoint to call.
+- **Seventeen of the nineteen server settings were named only by their label:** the page said &#8220;Obfuscated host&#8221;, &#8220;REALITY SNI list&#8221; and &#8220;Block direct IP&#8221;, so the name you need for GET /api/settings, a backup or a hand-edited row — obfuscated_host, reality_sni, block_direct_ip — appeared nowhere. Configuration now carries a table of all nineteen, with defaults and what each one changes.
+- **The admin dashboard was not written down at all:** the five cards, what &#8220;Active&#8221; counts and — the part that surprises everyone — what the small line under it counts instead (expiring within 7 days, not started, out of volume), the CPU/memory/disk card and the five newest accounts now have a section of their own.
+- **A suite reads the code and the site and compares them:** every sidebar section must have a docs destination that really exists, every registered /api endpoint must appear in the reference, and every stored setting key must appear by name. Adding an endpoint without writing it down now turns the suite red. It was proved by injection: a fake route and a fake setting key each fail the check, and the restored tree passes again.
 
 ## v1.15.2 - The installer asked you for a port and a database, then ignored you
 

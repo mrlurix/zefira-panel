@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleUsers">Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=82">
+<link rel="stylesheet" href="assets/style.css?v=87">
 </head>
 <body>
 <header class="topbar">
@@ -110,12 +110,35 @@
 <p><span data-i18n="usr.mcpA">The</span> <b>MCP</b> <span data-i18n="usr.mcpB">section lets an AI client drive this panel. It is a door, not a new authority: an MCP token is an ordinary</span> <code>full</code> <span data-i18n="usr.mcpC">API token, so anything a client can reach, a token you already had could reach too. Three things are added on top:</span></p>
 
 <ul>
-<li><span data-i18n="usr.mcpL1">Every tool call writes an audit row, so the log shows what the agent did.</span></li>
+<li><span data-i18n="usr.mcpL1">On the HTTP transport, every tool call writes an audit row, so the log shows what the agent did.</span></li>
 <li><span data-i18n="usr.mcpL2">Destructive tools - deleting a customer, deleting a token - refuse to run unless the call carries the exact confirmation string the refusal names.</span></li>
-<li><span data-i18n="usr.mcpL3">Calls per minute, per token, on a budget you set.</span></li>
+<li><span data-i18n="usr.mcpL3">On the HTTP transport, calls per minute, per token, on a budget you set.</span></li>
 </ul>
 
 <p><span data-i18n="usr.mcpD">Create a</span> <code>zfp_…</code> <span data-i18n="usr.mcpE">token under Developer API, then point your client at</span> <code>POST /api/mcp</code> <span data-i18n="usr.mcpF">with</span> <code>Authorization: Bearer …</code><span data-i18n="usr.mcpG">. No CSRF header and no cookie: a cookie is refused outright, because a browser cookie driving an agent would be a cross-site request with a budget attached. Every tool, its arguments and the confirmation strings are in the</span> <a href="api.html">endpoint reference</a>.</p>
+
+<h3 data-i18n="usr.mcpWhatTitle" id="what-mcp-is">What MCP is</h3>
+<p data-i18n="usr.mcpWhat">MCP (Model Context Protocol) is the small standard that lets an AI client discover the tools a server offers and call them with typed arguments instead of guessing at HTTP. Zefira speaks protocol version 2026-07-28 over two transports: stdio for a client on the same machine, and HTTP for a client that reaches the panel over the network. The client gets 25 tools - not a shell, a database, or a new privilege.</p>
+
+<h3 data-i18n="usr.mcpSetupTitle" id="connect-a-client">Connect a client</h3>
+<ol>
+<li data-i18n="usr.mcpS1">Create a full-scope API token under <b>Developer API &rarr; API Tokens</b>. MCP adds no new permission: the token is the ceiling.</li>
+<li data-i18n="usr.mcpS2">Open the <b>MCP</b> section in the panel. For the HTTP transport, switch <b>Enable MCP</b> and <b>HTTP transport</b> on. The stdio server is a local process that forwards to the panel's ordinary API with the token, so it needs no HTTP switch and no inbound port.</li>
+<li data-i18n="usr.mcpS3">For stdio, point the client at <code>python mcp_server.py --base-url https://panel.example.com --token zfp_&hellip;</code>, or set <code>ZEFIRA_URL</code> and <code>ZEFIRA_TOKEN</code>. The client launches the process; stdout is the protocol channel, so diagnostics go to stderr.</li>
+<li data-i18n="usr.mcpS4">For HTTP, POST JSON-RPC to <code>/api/mcp</code> with <code>Authorization: Bearer zfp_&hellip;</code>. A cookie is refused; no CSRF header is required or accepted.</li>
+<li data-i18n="usr.mcpS5">Press <b>Test</b> in the MCP card. It forwards the request's own bearer, so a cookie-only browser session gets an honest no-bearer answer instead of a false green; from a terminal, <code>POST /api/mcp/test</code> with the same bearer exercises <code>panel_stats</code> end to end.</li>
+</ol>
+
+<h3 data-i18n="usr.mcpToolsTitle" id="the-tool-catalog">The tool catalog</h3>
+<p><span data-i18n="usr.mcpToolsA">The server offers 25 tools: reads for customers, stats, nodes, inbounds, tunnels, templates, tokens, settings and the audit tail; writes to create or delete a customer, extend or top up a plan, reset usage, pause or enable an account, reset a subscription token, register a server node, and create or delete an API token; and one composed tool that builds a subscription link (HTTP transport only). Six tools are destructive - delete customer, delete token, replace settings, restore backup, create token and apply update - and each refuses to run without the exact</span> <code>confirm</code> <span data-i18n="usr.mcpToolsB">string named in the refusal. The full table, with arguments and confirmation strings, is generated from the same table the server serves.</span></p>
+
+<h3 data-i18n="usr.mcpBoundsTitle" id="what-bounds-it">What bounds it</h3>
+<ul>
+<li data-i18n="usr.mcpB1">Over HTTP, a full-scope token is required: a bot token gets 403, and a cookie is refused outright. The stdio server forwards the token to the panel's ordinary API, so the token's own scope still applies to every call.</li>
+<li data-i18n="usr.mcpB2">On the HTTP transport, a per-token budget of 60 calls per minute by default, set in the same MCP card.</li>
+<li data-i18n="usr.mcpB3">On the HTTP transport, every call writes one <code>MCP_CALL</code> audit row with the caller's real address, including calls that fail. On stdio, the forwarded API call still writes its own audit row (customer created, settings changed, and so on).</li>
+<li data-i18n="usr.mcpB4">The token is the authority: revoke it and the agent stops at once on either transport. Disabling MCP closes the HTTP transport immediately.</li>
+</ul>
 <h2 id="panel-updates" data-i18n="usr.upd">Panel updates</h2>
 <p><b data-i18n="usr.updB1">Update</b> <span data-i18n="usr.updA">(left menu, above Settings) compares this server with GitHub: current vs latest commit, and the exact incoming changes.</span> <b data-i18n="usr.updB2">Update now</b> <span data-i18n="usr.updC">asks for your password, then pulls the code, reinstalls dependencies and restarts the panel — watch it poll until it reports the new version. Updates are refused if you have local code changes, and every step is audit-logged.</span></p>
 
@@ -162,8 +185,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=82"></script>
-<script src="assets/docs.js?v=82"></script>
-<script src="assets/support-ai.js?v=82"></script>
+<script src="assets/i18n.js?v=87"></script>
+<script src="assets/docs.js?v=87"></script>
+<script src="assets/support-ai.js?v=87"></script>
 </body>
 </html>

@@ -737,7 +737,9 @@ def build_call(tool, args):
     for key in tool.get("path_params", {}):
         if key not in args:
             raise ValueError("%s needs %r" % (tool["name"], key))
-        path = path.replace("{%s}" % key,
+        # The brace is a separate literal so this file never contains a
+        # Liquid tag opener; GitHub Pages used to run Jekyll over docs/*.md.
+        path = path.replace("{" "%s}" % key,
                             urllib.parse.quote(str(args[key]), safe=""))
 
     query = {}

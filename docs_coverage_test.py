@@ -13,6 +13,7 @@ import io
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -160,6 +161,45 @@ check("every server setting key is documented by name in configuration.html",
 # weaker copy of that check would be a guard that can pass while the real one
 # fails. This file only asks the question docs *coverage* owns: is the feature
 # written down at all.
+
+# ---------------------------------------------------------------- deploy ---
+# GitHub Pages used to run Jekyll over docs/*.md. One unclosed Liquid tag in
+# an internal plan file aborted every build from Oct 17 on, and the live site
+# silently stopped at v1.15.43. `.nojekyll` turns Jekyll off; the scan keeps a
+# future edit from reintroducing the exact failure.
+LIQUID_SUFFIXES = {".md", ".markdown", ".html", ".htm", ".txt"}
+
+
+def liquid_hits(root):
+    hits = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or p.suffix.lower() not in LIQUID_SUFFIXES:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for no, line in enumerate(text.splitlines(), 1):
+            if "{%" in line:
+                hits.append(f"{p.relative_to(root)}:{no}")
+    return hits
+
+
+check("docs/.nojekyll exists (Pages serves the tree without Jekyll)",
+      (DOCS / ".nojekyll").is_file())
+
+liquid = liquid_hits(DOCS)
+check("no docs file contains a Liquid tag opener", not liquid,
+      f"{len(liquid)} found: {liquid[:4]}")
+
+# Prove the scan is not vacuous: plant the exact kind of string that broke the
+# build in a throwaway tree and require the same function to see it.
+with tempfile.TemporaryDirectory() as td:
+    probe = Path(td) / "probe.md"
+    probe.write_text("before {% if x %} after\n", encoding="utf-8")
+    found = liquid_hits(Path(td))
+check("the Liquid scan sees a planted opener", len(found) == 1,
+      f"planted one, saw {found}")
 
 print(f"  === {n - len(fails)}/{n} checks passed ===")
 sys.exit(1 if fails else 0)
