@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleChangelog">Changelog — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=79">
+<link rel="stylesheet" href="assets/style.css?v=82">
 </head>
 <body>
 <header class="topbar">
@@ -54,6 +54,17 @@
   <li><b data-i18n="chg.dc4_lead">A suite reads the code and the site and compares them: </b><span data-i18n="chg.dc4">every sidebar section must have a docs destination that really exists, every registered <code>/api</code> endpoint must appear in the reference, and every stored setting key must appear by name. Adding an endpoint without writing it down now turns the suite red. It was proved by injection: a fake route and a fake setting key each fail the check, and the restored tree passes again.</span></li>
 </ul>
 
+
+
+<ul>
+
+<h2 id="v11556"><span>v1.15.56</span> <span data-i18n="chg.v11556">&#8212; The changelog that was missing twenty-four releases</span></h2>
+<li><b data-i18n="chg.v11556a_lead">Twenty-four releases had no public entry at all. </b><span data-i18n="chg.v11556a">v1.15.3 through v1.15.26 shipped with their only record in a commit subject nobody outside the repository could read - among them the updater guard that refused every update since v1.0.0, the root escalation through the installer's .env symlink write, the unbounded customer-credential enumeration, and the database password passed in argv. The roadmap said so in its own words, under <i>Being worked on</i>. They are written now, in four languages.</span></li>
+<li><b data-i18n="chg.v11556b_lead">Three headings carried the wrong id. </b><span data-i18n="chg.v11556b">The sections for v1.15.27, v1.15.28 and v1.15.29 were given the ids v1127, v1128 and v1129 - one digit short - so the anchor a reader copies for those three releases reached nothing, and the tool that reports undocumented releases could not see them and counted them as missing. A heading's id is the version it shows, and a guard says so.</span></li>
+<li><b data-i18n="chg.v11556c_lead">MCP is in the pages an operator actually reads. </b><span data-i18n="chg.v11556c">The API reference lists the twenty-five tools, the user guide explains the model and the FAQ answers the question - but the three pages an operator reads while deciding whether to switch the thing on said nothing at all: the security page, the configuration page and the setup guides. MCP is in all three now, in four languages, and on the roadmap's own <i>Shipped</i> list.</span></li>
+<li><b data-i18n="chg.v11556d_lead">A tool that prints a gap does not close it. </b><span data-i18n="chg.v11556d">The gap was open for twenty-four releases while the reporting tool sat in the repository naming every one of them. The suite fails now instead, and the failure names the releases it is missing, so a release cannot ship undocumented again.</span></li>
+
+</ul>
 
 <h2 id="v11555"><span>v1.15.55</span> <span data-i18n="chg.v11555">&#8212; The reference promised a tool reference, and had none</span></h2>
 
@@ -340,28 +351,245 @@
   <li><b data-i18n="chg.v11530d_lead">And the genuinely unencrypted material is named: </b><span data-i18n="chg.v11530d">display names, notes, usage counters and timestamps are billing data rather than credentials, and are readable in an unencrypted backup by design. Saying so is more useful than leaving the reader to guess which fields are safe to handle loosely.</span></li>
 </ul>
 
-<h2 id="v1129"><span>v1.15.29</span> <span data-i18n="chg.v1129">&#8212; One stolen file used to hand over every customer at once</span></h2>
+<h2 id="v11529"><span>v1.15.29</span> <span data-i18n="chg.v11529">&#8212; One stolen file used to hand over every customer at once</span></h2>
 <ul>
-  <li><b data-i18n="chg.v1129a_lead">It was measured, not suspected: </b><span data-i18n="chg.v1129a">a subscription token read straight out of instance/zefira.db answered GET /sub/{token} with 200 and the customer's WireGuard private key - no session cookie, no password, no credential of any kind. An unencrypted POST /api/backup carried that same token in cleartext, so the token column was a customer list of logins sitting in the database file.</span></li>
-  <li><b data-i18n="chg.v1129b_lead">The lookup stays indexed, the stored value does not: </b><span data-i18n="chg.v1129b">the token column now holds a Fernet blob under the panel key and a new token_sha column holds an HMAC of the token, so /sub/{token} is still a single indexed equality lookup instead of a decrypt-every-row scan. A write hook seals any bare token on its way in, which is what keeps the rotation paths correct - "reset token" assigns a fresh value and the old digest would otherwise sit beside it, 404ing every customer.</span></li>
-  <li><b data-i18n="chg.v1129c_lead">Upgrading does not invalidate anyone's URL: </b><span data-i18n="chg.v1129c">an existing panel migrates in place, sealing each row in its own transaction. The seeded pre-upgrade row in the test still answered /sub/{token} with 200 afterwards - nobody is re-provisioned, and a backup taken by an older panel still restores, because the reader accepts both the bare-hex shape and the ciphertext.</span></li>
-  <li><b data-i18n="chg.v1129d_lead">Rewriting a column does not erase what it held: </b><span data-i18n="chg.v1129d">SQLite freed the pages the plaintext occupied and left them on the freelist - 242 of 330 pages still held the pre-upgrade tokens while no row referenced them. The migration now rebuilds the file and truncates the WAL, after which the token's bytes are absent from the file entirely. One subtlety worth recording: that first attempt went through the SQLAlchemy engine and did nothing, and only reading the raw file showed it.</span></li>
+  <li><b data-i18n="chg.v11529a_lead">It was measured, not suspected: </b><span data-i18n="chg.v11529a">a subscription token read straight out of instance/zefira.db answered GET /sub/{token} with 200 and the customer's WireGuard private key - no session cookie, no password, no credential of any kind. An unencrypted POST /api/backup carried that same token in cleartext, so the token column was a customer list of logins sitting in the database file.</span></li>
+  <li><b data-i18n="chg.v11529b_lead">The lookup stays indexed, the stored value does not: </b><span data-i18n="chg.v11529b">the token column now holds a Fernet blob under the panel key and a new token_sha column holds an HMAC of the token, so /sub/{token} is still a single indexed equality lookup instead of a decrypt-every-row scan. A write hook seals any bare token on its way in, which is what keeps the rotation paths correct - "reset token" assigns a fresh value and the old digest would otherwise sit beside it, 404ing every customer.</span></li>
+  <li><b data-i18n="chg.v11529c_lead">Upgrading does not invalidate anyone's URL: </b><span data-i18n="chg.v11529c">an existing panel migrates in place, sealing each row in its own transaction. The seeded pre-upgrade row in the test still answered /sub/{token} with 200 afterwards - nobody is re-provisioned, and a backup taken by an older panel still restores, because the reader accepts both the bare-hex shape and the ciphertext.</span></li>
+  <li><b data-i18n="chg.v11529d_lead">Rewriting a column does not erase what it held: </b><span data-i18n="chg.v11529d">SQLite freed the pages the plaintext occupied and left them on the freelist - 242 of 330 pages still held the pre-upgrade tokens while no row referenced them. The migration now rebuilds the file and truncates the WAL, after which the token's bytes are absent from the file entirely. One subtlety worth recording: that first attempt went through the SQLAlchemy engine and did nothing, and only reading the raw file showed it.</span></li>
 </ul>
 
-<h2 id="v1128"><span>v1.15.28</span> <span data-i18n="chg.v1128">&#8212; Two routes handed out secrets with no budget at all</span></h2>
+<h2 id="v11528"><span>v1.15.28</span> <span data-i18n="chg.v11528">&#8212; Two routes handed out secrets with no budget at all</span></h2>
 <ul>
-  <li><b data-i18n="chg.v1128a_lead">The guide was not rate-limited: </b><span data-i18n="chg.v1128a">POST /api/nodes/{id}/reveal-token decrypts and returns the BackPack token, and so does GET /api/nodes/{id}/guide - but only the first was budgeted. Measured before the fix: reveal-token answered 429 after ten, the guide answered 200 thirty times out of thirty.</span></li>
-  <li><b data-i18n="chg.v1128b_lead">Neither was the customer credential dump: </b><span data-i18n="chg.v1128b">GET /api/users/{id}/config returns the entire bundle - WireGuard private key, OpenVPN client key and certificate, L2TP PSK, every per-protocol password - with no limiter at all. A hijacked session could exfiltrate every customer in one loop. It now shares the same ten-per-600s budget as every other secret-disclosure route.</span></li>
-  <li><b data-i18n="chg.v1128c_lead">An empty token scope meant full access: </b><span data-i18n="chg.v1128c">_token_scope_allowed denied every scope it did not recognise, except the empty one, which was treated as `full`. A row whose scope was NULL or blank - reachable through a hand-edited database - silently received every privilege. Unknown now means denied.</span></li>
-  <li><b data-i18n="chg.v1128d_lead">The restore transaction claimed a guard it never ran: </b><span data-i18n="chg.v1128d">_apply_restore_tx's docstring promised "scrypt-strong admin hashes" and "bot/full token scopes", checked by _is_strong_scrypt_hash. That function had zero call sites in the repository. The docstring was wrong - not the behaviour, which is stronger: the admins and api_tokens arrays are refused outright. The dead checker is gone and the docstring now says what actually happens.</span></li>
+  <li><b data-i18n="chg.v11528a_lead">The guide was not rate-limited: </b><span data-i18n="chg.v11528a">POST /api/nodes/{id}/reveal-token decrypts and returns the BackPack token, and so does GET /api/nodes/{id}/guide - but only the first was budgeted. Measured before the fix: reveal-token answered 429 after ten, the guide answered 200 thirty times out of thirty.</span></li>
+  <li><b data-i18n="chg.v11528b_lead">Neither was the customer credential dump: </b><span data-i18n="chg.v11528b">GET /api/users/{id}/config returns the entire bundle - WireGuard private key, OpenVPN client key and certificate, L2TP PSK, every per-protocol password - with no limiter at all. A hijacked session could exfiltrate every customer in one loop. It now shares the same ten-per-600s budget as every other secret-disclosure route.</span></li>
+  <li><b data-i18n="chg.v11528c_lead">An empty token scope meant full access: </b><span data-i18n="chg.v11528c">_token_scope_allowed denied every scope it did not recognise, except the empty one, which was treated as `full`. A row whose scope was NULL or blank - reachable through a hand-edited database - silently received every privilege. Unknown now means denied.</span></li>
+  <li><b data-i18n="chg.v11528d_lead">The restore transaction claimed a guard it never ran: </b><span data-i18n="chg.v11528d">_apply_restore_tx's docstring promised "scrypt-strong admin hashes" and "bot/full token scopes", checked by _is_strong_scrypt_hash. That function had zero call sites in the repository. The docstring was wrong - not the behaviour, which is stronger: the admins and api_tokens arrays are refused outright. The dead checker is gone and the docstring now says what actually happens.</span></li>
 </ul>
 
-<h2 id="v1127"><span>v1.15.27</span> <span data-i18n="chg.v1127">&#8212; Customer credentials were readable by anyone holding the database file</span></h2>
+<h2 id="v11527"><span>v1.15.27</span> <span data-i18n="chg.v11527">&#8212; Customer credentials were readable by anyone holding the database file</span></h2>
 <ul>
-  <li><b data-i18n="chg.v1127a_lead">The one column that had to stay secret was not: </b><span data-i18n="chg.v1127a">the bundle holding each customer's WireGuard private key, OpenVPN client keypair and L2TP PSK was written as bare JSON. Reading the SQLite file, or an unencrypted backup, handed over every customer's connection credentials at a glance. It is now encrypted under the panel's own key - the key that already protected the AI key, the Telegram bot token and the REALITY private key. Nothing is re-provisioned: a row written before this release is still read as-is, so upgrades and restores from older backups both keep working.</span></li>
-  <li><b data-i18n="chg.v1127b_lead">Restoring could have invalidated every live config: </b><span data-i18n="chg.v1127b">the restore path decoded that column with json.loads directly. A backup taken on an encrypted panel therefore raised there, and the surrounding handler turned that into a silent re-provision - so restoring a backup would have stripped the credentials of every customer on the panel, at exactly the moment they could least afford it. It now goes through the reader that accepts both forms.</span></li>
-  <li><b data-i18n="chg.v1127c_lead">The change is checked, not asserted: </b><span data-i18n="chg.v1127c">a new suite asserts the stored bundle is not bare JSON, contains no WireGuard key, round-trips through the reader, and still loads a legacy plaintext row. Each assertion was proven by breaking the fix and watching it go red - a guard that cannot fail proves nothing.</span></li>
-  <li><b data-i18n="chg.v1127d_lead">The docs now say what is deliberately not coming: </b><span data-i18n="chg.v1127d">a Roadmap page lists what is finished, what is being worked on, and the limits that are real and not planned away - one worker, serialised SQLite writes, and no hardware key storage - with the reason each is the way it is. All four languages.</span></li>
+  <li><b data-i18n="chg.v11527a_lead">The one column that had to stay secret was not: </b><span data-i18n="chg.v11527a">the bundle holding each customer's WireGuard private key, OpenVPN client keypair and L2TP PSK was written as bare JSON. Reading the SQLite file, or an unencrypted backup, handed over every customer's connection credentials at a glance. It is now encrypted under the panel's own key - the key that already protected the AI key, the Telegram bot token and the REALITY private key. Nothing is re-provisioned: a row written before this release is still read as-is, so upgrades and restores from older backups both keep working.</span></li>
+  <li><b data-i18n="chg.v11527b_lead">Restoring could have invalidated every live config: </b><span data-i18n="chg.v11527b">the restore path decoded that column with json.loads directly. A backup taken on an encrypted panel therefore raised there, and the surrounding handler turned that into a silent re-provision - so restoring a backup would have stripped the credentials of every customer on the panel, at exactly the moment they could least afford it. It now goes through the reader that accepts both forms.</span></li>
+  <li><b data-i18n="chg.v11527c_lead">The change is checked, not asserted: </b><span data-i18n="chg.v11527c">a new suite asserts the stored bundle is not bare JSON, contains no WireGuard key, round-trips through the reader, and still loads a legacy plaintext row. Each assertion was proven by breaking the fix and watching it go red - a guard that cannot fail proves nothing.</span></li>
+  <li><b data-i18n="chg.v11527d_lead">The docs now say what is deliberately not coming: </b><span data-i18n="chg.v11527d">a Roadmap page lists what is finished, what is being worked on, and the limits that are real and not planned away - one worker, serialised SQLite writes, and no hardware key storage - with the reason each is the way it is. All four languages.</span></li>
+</ul>
+
+
+<ul>
+
+<h2 id="v11526"><span>v1.15.26</span> <span data-i18n="chg.v11526">&#8212; The installer no longer runs its own comments as root</span></h2>
+<li><b data-i18n="chg.v11526a_lead">An unexplained error, solved. </b><span data-i18n="chg.v11526a">A real Ubuntu 24.04 install printed <code>line 698: +: command not found</code> and <code>Too few arguments.</code>, then finished with rc=0 and a working panel. The systemd unit is written with an UNQUOTED here-document, and bash performs command substitution in an unquoted heredoc body - including on text that reads like a comment. Three backticks in two comments were meant as quotation marks, and bash executed them. Reproduced under bash 5.3 before the fix; rc=0 with no output after it.</span></li>
+<li><b data-i18n="chg.v11526b_lead">Three more guards that read as protection. </b><span data-i18n="chg.v11526b">The verification block printed <i>Port not listening</i> and then, three lines later, a green <i>Installed.</i> - <code>fail()</code> is an echo, so it returned 0. <code>[[ -d .venv ]]</code> follows a symlink, so a planted .venv passed the guard and had <code>chmod -R</code> write inside it as root. And <code>find ... -exec chown -R</code> dereferences a symlink it is handed, so a planted <code>/opt/zefira/pwn -&gt; /etc/sudoers</code> had its target chowned. Each is fixed, and each guard was proved red.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11525"><span>v1.15.25</span> <span data-i18n="chg.v11525">&#8212; The settings section is grouped, and every card is tested end to end</span></h2>
+<li><b data-i18n="chg.v11525a_lead">The settings section was reorganised. </b><span data-i18n="chg.v11525a">It carried 39 fields across 7 cards with no thematic grouping, so <i>Server / Hosts</i>, <i>SSL</i>, <i>Telegram</i> and <i>AI Assistant</i> sat in one flat grid and the operator had to know which of them was which. Now three labelled groups, and every card keeps its exact original lines - only its position and the heading above it changed.</span></li>
+<li><b data-i18n="chg.v11525b_lead">Every card now has a test that reads it, changes it, reads it back and puts it back. </b><span data-i18n="chg.v11525b">Two facts shaped it: <code>PUT /api/settings</code> is a FULL REPLACE, not a merge, so a field left out of the body is written as its default - a partial body is refused with 422 rather than merged. And the cards that reach outside the panel are probed with input the schema rejects BEFORE the side effect, so certbot never runs and no Let's Encrypt quota is touched.</span></li>
+<li><b data-i18n="chg.v11525c_lead">The grouping nearly shipped broken. </b><span data-i18n="chg.v11525c">The first attempt dropped 25 controls - srv-form, pw-form and every AI, Telegram and SSL field - because the parse counted <code>&lt;div</code> per LINE, so a card whose opening tag and whose header sit on different lines hit depth zero after two lines and was copied as just its header. The ids were never deleted, only not copied, and the diff looked unremarkable until the id sets were compared.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11524"><span>v1.15.24</span> <span data-i18n="chg.v11524">&#8212; The site assistant stopped answering 'what is new?' with a 21-release-old answer</span></h2>
+<li><b data-i18n="chg.v11524a_lead">Three inconsistent answers to one question. </b><span data-i18n="chg.v11524a">A visitor asking the public site what had changed got a confident <i>v1.13.3</i> while the panel was on v1.15.23 - twenty-one releases of security work the assistant would confidently not mention - and it linked to a changelog page whose newest entry was v1.15.2.</span></li>
+<li><b data-i18n="chg.v11524b_lead">The gap is made loud instead of silent. </b><span data-i18n="chg.v11524b">The assistant's knowledge file is hand-maintained, which is why it drifted. The assistant's newest version must now equal the repository VERSION, in every locale it is written in, and <code>docs/release_notes.py</code> prints the same gap with the commit subjects needed to close it.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11523"><span>v1.15.23</span> <span data-i18n="chg.v11523">&#8212; An empty restore is refused, and the harness can reach its own admin</span></h2>
+<li><b data-i18n="chg.v11523a_lead">An empty restore was a delete-everything. </b><span data-i18n="chg.v11523a">A restore REPLACES the customer table, and <code>users: List[dict] = Field(max_length=10000)</code> had no minimum - so an empty list was valid input meaning <i>delete every customer</i>, reached by pasting a settings-only export. Now refused with 400, before the delete, on both the plaintext and the encrypted path.</span></li>
+<li><b data-i18n="chg.v11523b_lead">The undo path was silent when it failed. </b><span data-i18n="chg.v11523b"><code>_snapshot_db_before_restore()</code> is the operator's only undo path, and its SQLite branch logged the failure at DEBUG while the logging level is INFO, so the message was dropped entirely - every other branch of the same snapshot already logged at error or warning. And the test harness started a panel with no admin, so its failures looked like broken suites.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11522"><span>v1.15.22</span> <span data-i18n="chg.v11522">&#8212; The settings port check, and the fail-open config download</span></h2>
+<li><b data-i18n="chg.v11522a_lead">A port check that only asked 'is it a number'. </b><span data-i18n="chg.v11522a"><code>Number.isFinite(0)</code> is true, so 0 passed - and so did 70000 and 443.5. The schema is <code>StrictInt(ge=1, le=65535)</code> on all eight ports, so any of those produced a 422 - and a 422 discards the WHOLE save, taking the domain, the DNS and every other setting changed on the same screen with it. The failure was invisible until someone noticed the domain never applied.</span></li>
+<li><b data-i18n="chg.v11522b_lead">A download that failed open. </b><span data-i18n="chg.v11522b">The WireGuard pre-check had <code>catch (_) {}</code>, so a 500, a 429 or a dropped connection left <code>blocked</code> false and the download still ran - the operator shipped a customer a config with no server public key in it, and no warning at all. The download now fails closed and says why.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11521"><span>v1.15.21</span> <span data-i18n="chg.v11521">&#8212; Least-privilege tokens that reach what they promise, a labelled audit log, LF endings</span></h2>
+<li><b data-i18n="chg.v11521a_lead">The least-privilege token was unreachable. </b><span data-i18n="chg.v11521a">The schema declares <code>scopes: Literal["full","bot"]</code> and the reference tells the operator to create a token with scope <code>bot</code> - but the create form had only a name field and never sent <code>scopes</code>, so the default applied to every token. Every token an operator could mint was a <code>full</code> credential able to delete users, restore backups and change settings.</span></li>
+<li><b data-i18n="chg.v11521b_lead">The audit log showed constants. </b><span data-i18n="chg.v11521b">21 of the 54 audit events had no label in any locale, and the renderer returns the raw constant when the key is absent, so the Security Events list showed operators <code>USERS_LIST</code> and <code>PW_CHANGE</code>. Every event the panel emits now has a label in all four languages.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11520"><span>v1.15.20</span> <span data-i18n="chg.v11520">&#8212; Telegram's 'chat not found' now says which of four causes it is</span></h2>
+<li><b data-i18n="chg.v11520a_lead">One message, four different mistakes. </b><span data-i18n="chg.v11520a"><i>chat not found</i> is Telegram's answer for a chat id that belongs to a different bot, a user who never sent <code>/start</code>, an <code>@channel</code> the bot does not administer, and an id that is simply wrong. They need four different fixes, and the operator was told none of them.</span></li>
+<li><b data-i18n="chg.v11520b_lead">The id's shape picks the answer. </b><span data-i18n="chg.v11520b">A numeric id without a leading minus is recognised as a user id and gets the <code>/start</code> answer; an <code>@channel</code> gets the admin answer; anything else gets the token-mismatch answer, which names the usual cause outright - the token was changed after the chat id was recorded.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11519"><span>v1.15.19</span> <span data-i18n="chg.v11519">&#8212; The subscription feed's own rule is documented</span></h2>
+<li><b data-i18n="chg.v11519a_lead">The rule the feed follows was documented nowhere. </b><span data-i18n="chg.v11519a">The site documented the <i>Download config</i> button, and that text was still accurate. It never said what the feed itself follows, and that changed: the feed carries share links and nothing else. WireGuard, OpenVPN, L2TP/IPsec and Cisco AnyConnect are file protocols, so they arrive as files - and a plan made only of them answers 422 with that reason, which was documented nowhere.</span></li>
+<li><b data-i18n="chg.v11519b_lead">The same rule applies to Clash. </b><span data-i18n="chg.v11519b">Mihomo has no proxy type for those protocols either, so <code>?format=clash</code> answers 422 for the same reason - equally undocumented. The new section states both.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11518"><span>v1.15.18</span> <span data-i18n="chg.v11518">&#8212; The README in the other three languages, and the English file's missing language line</span></h2>
+<li><b data-i18n="chg.v11518a_lead">Translated from the corrected English, not from the stale version. </b><span data-i18n="chg.v11518a">The Persian, Chinese and Russian files were translated from a document that said 13/13 suites and pinned v1.14.0. Translating a stale document just produces a stale document in another script. All three now state the fact that was missing everywhere: the subscription feed carries share links and nothing else, the four file protocols arrive as files, and a plan made only of those answers 422 - with what the old inline behaviour did to a client, because <i>we removed something</i> is not an explanation an operator can act on.</span></li>
+<li><b data-i18n="chg.v11518b_lead">The English file had no language line at all. </b><span data-i18n="chg.v11518b">Each file now links to the other three at the top and the bottom, and the English one says which language it is. The new guard readme_i18n_test.py compares the four files against each other instead of trusting a read-through, because the specific failure of a translation is invisible to the person who wrote it.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11517"><span>v1.15.17</span> <span data-i18n="chg.v11517">&#8212; The README described a panel two dozen fixes behind</span></h2>
+<li><b data-i18n="chg.v11517a_lead">Numbers a reader would act on were wrong. </b><span data-i18n="chg.v11517a">The file said a green run ends with 13/13 suites passed - nine live plus four - and the per-suite harness list gained entries the file listed none of, so a reader could not run the suite that covers the updater guard, the migration steps, the installer's symlink refusal or the docs asset bump. The pentest badge read 117/117; the attack suite is 129 checks as measured. The read-before-you-run example pinned v1.14.0, eleven releases back.</span></li>
+<li><b data-i18n="chg.v11517b_lead">One thing the README should have said since v1.15.8 and did not. </b><span data-i18n="chg.v11517b">The subscription feed carries share links and nothing else. WireGuard, OpenVPN, L2TP/IPsec and Cisco AnyConnect are file protocols - a .conf or .ovpn is not a URI, so no link importer can read one - and they are delivered as files, through the dashboard card, the per-user Download config button, or the ZIP. A plan made only of file protocols therefore has no share link at all.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11516"><span>v1.15.16</span> <span data-i18n="chg.v11516">&#8212; The installer's .env backup was briefly world-readable</span></h2>
+<li><b data-i18n="chg.v11516a_lead">cp -a preserves the SOURCE mode. </b><span data-i18n="chg.v11516a">The installer backs up an existing .env before rewriting it, and a legacy 0644 .env therefore produced a 0644 backup - a world-readable copy of the admin password and the database credentials - and the chmod that followed left a window in which any local account could read it. The install directory is mode 0755 by default, so <i>world-readable</i> was not theoretical.</span></li>
+<li><b data-i18n="chg.v11516b_lead">The backup is now written to a mktemp file, chmodded 0600, and renamed into place. </b><span data-i18n="chg.v11516b">It never carries the .bak name at any mode but 0600. Dropping the chmod-after-copy also removes a second slip: it globbed over every .env.bak-* in the directory, so it restyled backups from earlier runs as a side effect, and did nothing at all when the glob matched none - the same <i>a guard that cannot fail</i> shape, here in the quiet form of an operator convenience that quietly did something else.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11515"><span>v1.15.15</span> <span data-i18n="chg.v11515">&#8212; The retry a comment promised was not in the code</span></h2>
+<li><b data-i18n="chg.v11515a_lead">A guard that read as protection and measured out as something else. </b><span data-i18n="chg.v11515a">The attack suite probes every admin endpoint unauthenticated and fails if any does not answer 401/403/405. When its request helper returned 0 - the catch-all for <i>no HTTP response at all</i> - the probe recorded a transport failure and the check went red. The comment right above that code said a reset connection is not evidence about the panel, and that the probe should retry once. There was no retry.</span></li>
+<li><b data-i18n="chg.v11515b_lead">It was observed as a red suite, once, with no reproduction. </b><span data-i18n="chg.v11515b">A guard that has never been seen to fail is not evidence, so this one is proved red by putting the missing retry back and removing it again.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11514"><span>v1.15.14</span> <span data-i18n="chg.v11514">&#8212; One backslash in the version corrupted every asset URL in the site</span></h2>
+<li><b data-i18n="chg.v11514a_lead">The version went straight into a regex replacement. </b><span data-i18n="chg.v11514a">Measured against a copy of the real docs tree, passing <code>9\1</code> turned every <code>?v=34</code> into <code>?v=9assets/style.css?v=82</code> - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.</span></li>
+<li><b data-i18n="chg.v11514b_lead">The version is now digits-only, and the directory cannot be given at all. </b><span data-i18n="chg.v11514b">A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11513"><span>v1.15.13</span> <span data-i18n="chg.v11513">&#8212; The installer's SSL block appended to .env through a symlink, as root</span></h2>
+<li><b data-i18n="chg.v11513a_lead">The window was between two guards. </b><span data-i18n="chg.v11513a">The installer writes the three SSL settings with an append, and the install directory is owned by the service account - and the panel runs as that account. A compromised panel can therefore replace .env with a symlink to any path on the host, and the next install runs as root and follows the link, writing operator-supplied and certificate-derived lines into a root-owned target. /etc/cron.d/ is the obvious one.</span></li>
+<li><b data-i18n="chg.v11513b_lead">The file already knew this shape. </b><span data-i18n="chg.v11513b">The .env block refuses to write through a symlink and says so in as many words. But that guard covered only the earlier move, and it ran before certbot - so the window between the two is exactly when the attack lands. The SSL block refuses to follow a link too.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11512"><span>v1.15.12</span> <span data-i18n="chg.v11512">&#8212; One failed migration step could roll back every step before it</span></h2>
+<li><b data-i18n="chg.v11512a_lead">All the schema steps shared one transaction. </b><span data-i18n="chg.v11512a">Both column helpers are idempotent, but the column add deliberately lets a failed ALTER propagate, and so does the final backfill. A single failure therefore raised out of the block - and on a database where DDL is transactional, that rolls back every step before it. The panel then starts against a schema older than the one it already had, the ORM's SELECTs name columns that do not exist, and it is dead - identically dead on every later boot, because the same step keeps failing.</span></li>
+<li><b data-i18n="chg.v11512b_lead">Each step now gets its own transaction. </b><span data-i18n="chg.v11512b">The statements, their order and the dialect-dependent DDL literals are unchanged; only the transaction boundary moved. What was measured, and what was not, matters more than the fix: the failure above needs DDL inside the transaction, and on the only engine available here it is not - so the suite measures the transaction boundary rather than claiming the rollback it cannot produce.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11511"><span>v1.15.11</span> <span data-i18n="chg.v11511">&#8212; The customer list handed out 500 credentials a call, unbounded</span></h2>
+<li><b data-i18n="chg.v11511a_lead">The list returned working credentials. </b><span data-i18n="chg.v11511a">The customer list serialises each row, and that row carries the subscription token - not an identifier but a working credential: anyone holding it can use that customer's VPN and drain their quota. One call returned up to 500 of them, and the pages offset to 1,000,000. The scope check decided the severity: listing is allowed for the least-privilege token, so a reseller bot could walk the entire customer base collecting subscription tokens, with no rate limit and no audit row.</span></li>
+<li><b data-i18n="chg.v11511b_lead">It is bounded and recorded now. </b><span data-i18n="chg.v11511b">The list shares the existing per-route budget with the QR endpoint, at the same magnitude, and every call leaves an audit row. The scope's own comment promises <i>list users</i>, not <i>list users' credentials</i> - and the panel already knew the shape: the QR endpoint discloses ONE customer's subscription URL to the same scope and is bounded. The bulk equivalent was left open.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v11510"><span>v1.15.10</span> <span data-i18n="chg.v11510">&#8212; The pre-restore dump put the database password in argv</span></h2>
+<li><b data-i18n="chg.v11510a_lead">The snapshot was built as a command line with the URL in it. </b><span data-i18n="chg.v11510a">The URL is DATABASE_URL, password included, and on Linux /proc/&lt;pid&gt;/cmdline is world-readable - so any unprivileged local account on the host could read the operator's database password from ps for as long as the dump ran. And that dump is of the COMPLETE database: the admin password hash, every customer's WireGuard private key, every API token hash.</span></li>
+<li><b data-i18n="chg.v11510b_lead">The secret moved to a channel each tool actually supports. </b><span data-i18n="chg.v11510b">postgres takes PGPASSWORD in the environment, with the password removed from the DSN in argv, which is where libpq reads it from. mysql takes a 0600 defaults file that is removed once the dump finishes - NOT MYSQL_PWD, which mysqldump documents as insecure and warns about on every invocation. The invariant is extracted into one function, so it can be asserted without a database server running.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1159"><span>v1.15.9</span> <span data-i18n="chg.v1159">&#8212; Two guards that could not fail, and one of them blocked every update</span></h2>
+<li><b data-i18n="chg.v1159a_lead">The updater refused EVERY update, on every release since v1.0.0. </b><span data-i18n="chg.v1159a">The guard fed a tuple of prefixes to str.startswith, and '.env' was applied as a PREFIX - so the .env.example template that every release ships was matched as an intrusion and the update was refused. It also matched '*.db' as a literal prefix rather than as a pattern. Two more guards measured out as something else: the verification block's fail() was an echo, so it returned 0 and the success banner still printed.</span></li>
+<li><b data-i18n="chg.v1159b_lead">Both are now proved red before being trusted. </b><span data-i18n="chg.v1159b">The guard compares the path against the tree rather than against a prefix, and the update path is exercised end to end. A guard that reads as protection and measures out as something else is the reason a regression survives - which is why every guard in this repository has to be seen to fail.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1158"><span>v1.15.8</span> <span data-i18n="chg.v1158">&#8212; A customer's subscription served 91 unparseable lines around 1 real link</span></h2>
+<li><b data-i18n="chg.v1158a_lead">Every capability was walked at once. </b><span data-i18n="chg.v1158a">11 protocols, each through the customer's subscription, the Clash output, the dashboard page and the admin QR endpoint - because nothing checked the whole matrix together. The first walk reported 11 broken cells and every one was the walk's own bug; fixed, all 11 came back clean.</span></li>
+<li><b data-i18n="chg.v1158b_lead">Then it surfaced something real. </b><span data-i18n="chg.v1158b">Counting what a link importer actually receives, decoded from the base64 body: a VLESS-only plan was one line, and an OpenVPN-only plan was 91 lines of which none could be imported. The file protocols had been arriving inside the feed as text. A plan made only of file protocols therefore served a subscription no client could read - and the site never said the feed carries share links and nothing else.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1157"><span>v1.15.7</span> <span data-i18n="chg.v1157">&#8212; A restore that mints OpenVPN keys was cut off at nginx's 60s default</span></h2>
+<li><b data-i18n="chg.v1157a_lead">Found by a suite failure I did not believe at first. </b><span data-i18n="chg.v1157a">The security audit reported that the restore endpoint timed out and that the panel answered 'Restore in progress...'. Measured against a running panel, with the suite's own backup shape - 240 OpenVPN rows, empty secret data so each is re-provisioned, a mint budget of 200 - the restore took 159.9 seconds and answered 200.</span></li>
+<li><b data-i18n="chg.v1157b_lead">nginx's default is 60 seconds. </b><span data-i18n="chg.v1157b">The installer writes three location blocks and no proxy read timeout, so every operator on the recommended nginx path loses the connection at 60 seconds while the panel carries on and finishes - and cannot learn whether it worked. Their next click gets 'Restore in progress, try again', or re-imports everything. At the measured ~0.8s per minted row, 60 seconds is crossed at about 75 OpenVPN users, which is not an edge case for a reseller.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1156"><span>v1.15.6</span> <span data-i18n="chg.v1156">&#8212; Three checks that could not fail, and a half-kept promise</span></h2>
+<li><b data-i18n="chg.v1156a_lead">A guard that reports success without looking at anything is why a regression survives - and two of the three install bugs got through a green suite. </b><span data-i18n="chg.v1156a">The i18n check carried a hand-copied list of menu section ids. It had already gone stale: the Developer API section is in the app's own menu list, so the sidebar asks for its translation on every panel load, and 'api' was missing from the copy - so a missing translation for a sidebar entry was invisible to every other check in the file. The list is now READ out of the code.</span></li>
+<li><b data-i18n="chg.v1156b_lead">Each check is verified by injection to be red on the fault and green otherwise. </b><span data-i18n="chg.v1156b">Two more were in the same shape: a request port inherited by the config, and a promise the code did not keep - a comment saying a retry was there, with no retry in the code.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1155"><span>v1.15.5</span> <span data-i18n="chg.v1155">&#8212; An unconfigured reverse proxy locked the operator out of login</span></h2>
+<li><b data-i18n="chg.v1155a_lead">The scheme and the address disagreed about what a trusted peer is. </b><span data-i18n="chg.v1155a">The scheme has always honoured X-Forwarded-Proto from a loopback peer; the address honoured X-Forwarded-For only from an explicitly configured proxy. So a panel behind a local reverse proxy the operator never listed believed the scheme - so cookies got Secure - but not the address, and every visitor collapsed onto a single key.</span></li>
+<li><b data-i18n="chg.v1155b_lead">Measured against a running panel. </b><span data-i18n="chg.v1155b">16 wrong passwords from an anonymous client and then the operator's own correct password: with no trusted proxy configured the answer was 429 - locked out of their own panel - and with 127.0.0.1 trusted it was 200. The bucket is cleared only by a successful login, which is the very request being refused, so it repeats every window for as long as the flood continues.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1154"><span>v1.15.4</span> <span data-i18n="chg.v1154">&#8212; The pin and VERSION move together</span></h2>
+<li><b data-i18n="chg.v1154a_lead">The tag for a release must be cut after the release commit. </b><span data-i18n="chg.v1154a">The installer clones the tag, and the guard compares the tag's product files with this tree. A tag placed on the previous commit would have shipped the pin bump's own installer - the class of bug that guard exists to stop.</span></li>
+<li><b data-i18n="chg.v1154b_lead">And the pins are one fact, not four. </b><span data-i18n="chg.v1154b">VERSION, the installer's pin and the README examples all name the same release. A release that moves one without the others ships an installer that clones a tag holding different code, and the reader who followed the README gets that tag. The suite now checks them together.</span></li>
+
+</ul>
+
+
+<ul>
+
+<h2 id="v1153"><span>v1.15.3</span> <span data-i18n="chg.v1153">&#8212; The pin named a release that no longer contained the fixes</span></h2>
+<li><b data-i18n="chg.v1153a_lead">Two guards compared the pin against the VERSION file. </b><span data-i18n="chg.v1153a">Both were green. Both were also worthless: they are two literals agreeing with each other, and neither can see that the release they name stops several commits short of the code in this tree.</span></li>
+<li><b data-i18n="chg.v1153b_lead">The consequence was not cosmetic. </b><span data-i18n="chg.v1153b">The one-liner runs the installer from main but clones the application from the tag. The named release was tagged before three fixes - the pre-auth slot exhaustion, the intent-group guard and the per-user prefix - so every fresh install since then ran today's installer over an application that still had all three, and the one-liner reported success. The new guards compare the pin against CODE: the named tag must exist, and the product files inside it must be byte-identical to this tree's.</span></li>
+
 </ul>
 
 <h2 id="v1152"><span>v1.15.2</span> <span data-i18n="chg.v1152">&#8212; The installer asked you for a port and a database, then ignored you</span></h2>
@@ -380,8 +608,8 @@
   <li><b data-i18n="chg.v1151d_lead">The guard was written wrong first: </b> <span data-i18n="chg.v1151d">the test that watches the lock began as <i>“at least 4 hashes per package on average”</i>, and it <b>missed the exact regression it was written for</b> — cutting <code>cffi</code> from 100 hashes to 1 removes 1% of the file and barely moves an average. Tightened to the invariant that is actually visible offline: <b>no entry may have a single hash</b>, because one hash <i>is</i> a single-platform lock. The first tightening then failed on <code>anyio</code> and <code>annotated-types</code>, which are correct at two artifacts (one wheel, one sdist) — so the rule stayed at <i>“more than one, not at least N”</i>. All four regressions are now caught by fault injection.</span></li>
   <li><b data-i18n="chg.v1151e_lead">The one-liner was installing the wrong release: </b> <span data-i18n="chg.v1151e">while chasing the hash error above, a second and worse bug turned up in install.sh. The version it clones comes from <code>cat VERSION || cat $TARGET/VERSION || echo &lt;literal&gt;</code> &#8212; and under the documented <code>curl &#8230; | sudo bash</code> <b>both</b> <code>cat</code>s fail: there is no checkout in the CWD, and <code>/opt/zefira</code> does not exist yet on a first install, because the clone that fills it happens some 330 lines further down. The literal is therefore not a fallback, it is the only value that ever survives &#8212; and it still said <code>1.14.2</code>. Since the <code>v1.14.2</code> tag exists, the clone <i>succeeded</i>: the one-liner quietly installed v1.14.2 and skipped <b>v1.14.3's security fixes and all of v1.15.0</b>. Nothing errors and nothing warns &#8212; you get an old panel and a plausible-looking service.</span></li>
   <li><b data-i18n="chg.v1151f_lead">The test that should have caught it could not: </b> <span data-i18n="chg.v1151f">it asserted <code>|| echo 1.14.2</code>, restating the number it was meant to be checking. It read no <code>VERSION</code> file and consulted no tag, so it stayed green through two releases while the value it encoded went stale &#8212; a test that cannot fail. It now reads the <code>VERSION</code> file and compares, so bumping one without the other is a red build. Verified by putting the stale literal back.</span></li>
-  <li><b data-i18n="chg.v1151g_lead">The docs served themselves a stale search index: </b> <span data-i18n="chg.v1151g">the asset cache-bust lived in fourteen places &#8212; twelve pages carrying <code>assets/i18n.js?v=79?v=N</code>, plus <code>docs.js</code> and <code>support-ai.js</code> fetching the search index and the AI knowledge base. Raising it on the pages alone leaves the two fetchers asking for the old JSON, so a visitor loads new HTML and then gets yesterday's <b>Ctrl+K results</b> and <b>wrong answers from the support bot</b>, with nothing on the page to say so. It happened here while fixing the installer, and the only reason it was caught before release is that <code>frontend_bugs_test.py</code> already insisted all the versions matched. <code>docs/build_index.py</code> now calls the existing <code>docs/bump_assets.py</code> itself, so the single documented step is actually sufficient &#8212; the separate bump step was simply the kind of thing that gets forgotten. A first attempt at that wiring re-implemented the bump and <i>refused to run</i> when the numbers disagreed, which is worse: a mixed set is the recoverable state, and not being able to build is not.</span></li>
-  <li><b data-i18n="chg.v1151h_lead">Six translations were empty and five attributes were misspelled: </b> <span data-i18n="chg.v1151h">found by a new harness that loads <code>docs/assets/i18n.js?v=79</code> and inspects the resulting object rather than the source text, because <code>node --check</code> and a regex both pass on a dictionary that is wrong. Two keys &#8212; <code>usr.aiA</code> and <code>usr.appA</code>, both the word <i>&ldquo;The&rdquo;</i> &#8212; were <code>""</code> in Persian, Chinese and Russian, so those pages rendered a missing word. The tell was in the neighbouring value: Persian <code>usr.appC</code> <b>begins with a space</b>, because the sentence had been written expecting the missing word to arrive ahead of it. Separately, five <code>data-i14n</code> attributes in the changelog were a typo for <code>data-i18n</code>; the keys were translated in all four languages and the markup never asked for them, so those lines had been showing English permanently. Both classes fail now, and the attribute check derives the list of attributes <code>applyI18n</code> really reads rather than trusting a hand-written one &#8212; which is what made its first version report a false positive on <code>data-i18n-alt</code>.</span></li>
+  <li><b data-i18n="chg.v1151g_lead">The docs served themselves a stale search index: </b> <span data-i18n="chg.v1151g">the asset cache-bust lived in fourteen places &#8212; twelve pages carrying <code>assets/i18n.js?v=82?v=N</code>, plus <code>docs.js</code> and <code>support-ai.js</code> fetching the search index and the AI knowledge base. Raising it on the pages alone leaves the two fetchers asking for the old JSON, so a visitor loads new HTML and then gets yesterday's <b>Ctrl+K results</b> and <b>wrong answers from the support bot</b>, with nothing on the page to say so. It happened here while fixing the installer, and the only reason it was caught before release is that <code>frontend_bugs_test.py</code> already insisted all the versions matched. <code>docs/build_index.py</code> now calls the existing <code>docs/bump_assets.py</code> itself, so the single documented step is actually sufficient &#8212; the separate bump step was simply the kind of thing that gets forgotten. A first attempt at that wiring re-implemented the bump and <i>refused to run</i> when the numbers disagreed, which is worse: a mixed set is the recoverable state, and not being able to build is not.</span></li>
+  <li><b data-i18n="chg.v1151h_lead">Six translations were empty and five attributes were misspelled: </b> <span data-i18n="chg.v1151h">found by a new harness that loads <code>docs/assets/i18n.js?v=82</code> and inspects the resulting object rather than the source text, because <code>node --check</code> and a regex both pass on a dictionary that is wrong. Two keys &#8212; <code>usr.aiA</code> and <code>usr.appA</code>, both the word <i>&ldquo;The&rdquo;</i> &#8212; were <code>""</code> in Persian, Chinese and Russian, so those pages rendered a missing word. The tell was in the neighbouring value: Persian <code>usr.appC</code> <b>begins with a space</b>, because the sentence had been written expecting the missing word to arrive ahead of it. Separately, five <code>data-i14n</code> attributes in the changelog were a typo for <code>data-i18n</code>; the keys were translated in all four languages and the markup never asked for them, so those lines had been showing English permanently. Both classes fail now, and the attribute check derives the list of attributes <code>applyI18n</code> really reads rather than trusting a hand-written one &#8212; which is what made its first version report a false positive on <code>data-i18n-alt</code>.</span></li>
 </ul>
 
 <h2 id="v1150"><span>v1.15.0</span> <span data-i18n="chg.v1150">&#8212; Developer API: a section in the panel, a base URL you can finally see, and a token test that is allowed to fail</span></h2>
@@ -649,8 +877,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=79"></script>
-<script src="assets/docs.js?v=79"></script>
-<script src="assets/support-ai.js?v=79"></script>
+<script src="assets/i18n.js?v=82"></script>
+<script src="assets/docs.js?v=82"></script>
+<script src="assets/support-ai.js?v=82"></script>
 </body>
 </html>

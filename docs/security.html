@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSecurity">Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=79">
+<link rel="stylesheet" href="assets/style.css?v=82">
 </head>
 <body>
 <header class="topbar">
@@ -84,6 +84,13 @@
       <tr><td><span data-i18n="sec.encNot"></span></td><td><span data-i18n="sec.encHost"></span></td></tr>
       </tbody>
     </table>
+<h2 id="the-mcp-transport" data-i18n="sec.mcpTitle">The MCP transport</h2>
+<ul>
+  <li data-i18n="sec.mcpA">An MCP token is an ordinary <code>full</code> API token, so it reaches exactly what an API token could reach &mdash; it is not a new door into the panel. The transport takes a <code>Bearer</code> token and nothing else: a cookie is refused outright, because a browser cookie driving an agent would be a cross-site request with a spending limit attached.</li>
+  <li data-i18n="sec.mcpB">Every tool call writes an audit row, so the log shows what the agent did.</li>
+  <li data-i18n="sec.mcpC">The destructive tools refuse to run unless the call carries the exact confirmation string the refusal names, and each token has a calls-per-minute budget you set.</li>
+</ul>
+
 <h2 id="operator-checklist" data-i18n="sec.checkTitle">Operator checklist</h2>
 <ul>
   <li><span data-i18n="sec.op1A">Change the password right after first login (the installer password is auto-scrubbed from</span> <code>.env</code> <span data-i18n="sec.op1B">on first boot, but rotate it anyway).</span></li>
@@ -98,8 +105,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=79"></script>
-<script src="assets/docs.js?v=79"></script>
-<script src="assets/support-ai.js?v=79"></script>
+<script src="assets/i18n.js?v=82"></script>
+<script src="assets/docs.js?v=82"></script>
+<script src="assets/support-ai.js?v=82"></script>
 </body>
 </html>

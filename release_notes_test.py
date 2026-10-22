@@ -23,6 +23,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import importlib.util
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -151,6 +152,16 @@ def checks(kb, version, changelog):
     out["the changelog runs newest first"] = _descending(shown)
     out["every changelog heading shows a version number"] = (
         len(shown) == len(re.findall(r'<h2 id="v\d+">', changelog)))
+    # The id has to BE the version it displays. It is what a reader copies
+    # into a link, what the search index points at, and what the gap tool
+    # matches against a release tag. Three headings were hand-typed one digit
+    # short - v1127, v1128, v1129 for v1.15.27, v1.15.28 and v1.15.29 - so
+    # the natural anchor for those three reached nothing, and the tool that
+    # reports undocumented releases could not see them.
+    _bad_ids = [(a, b) for a, b in re.findall(
+        r'<h2 id="(v\d+)"><span>(v[\d.]+)</span>', changelog)
+        if a != "v" + b[1:].replace(".", "")]
+    out["every changelog heading's id is the version it shows"] = not _bad_ids
     return out
 
 
@@ -183,13 +194,30 @@ def main():
             failures.append(name)
 
     print()
+    print("== 2b. every release the public never heard of ==")
+    # A tool that PRINTS a gap does not make anyone close it: the gap was
+    # open for twenty-seven releases while the tool sat in the repository
+    # naming every one of them. This makes it fail the suite instead.
+    _tags = [t.strip() for t in subprocess.run(
+        ["git", "tag", "--list", "v*", "--sort=-v:refname"],
+        capture_output=True, text=True, encoding="utf-8").stdout.splitlines()
+        if re.match(r"^v\d+\.\d+\.\d+$", t.strip())]
+    _present = set(re.findall(r'<h2 id="v(\d+)">', changelog))
+    _missing = [t for t in _tags if t[1:].replace(".", "") not in _present]
+    _name = "every release tag has a changelog entry (%d tag(s))" % len(_tags)
+    _ok = not _missing
+    print("   %-46s %s" % (_name, "ok" if _ok else "FAIL"))
+    if not _ok:
+        failures.append(_name)
+        print("      %d release(s) shipped with no public entry: %s"
+              % (len(_missing), ", ".join(_missing[:8])))
+    print()
     print("== 3. the gap is reportable, so it can be closed ==")
     ok = os.path.exists(RELEASE_NOTES)
     print("   %-46s %s" % ("docs/release_notes.py exists", "ok" if ok else "FAIL"))
     if not ok:
         failures.append("no tool to list the undocumented releases")
     else:
-        import subprocess
         out = subprocess.run(["git", "tag", "--list", "v*", "--sort=-v:refname"],
                              cwd=ROOT, capture_output=True, text=True,
                              encoding="utf-8").stdout

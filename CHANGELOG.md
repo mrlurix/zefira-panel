@@ -3,6 +3,13 @@
 Every release, newest first. Generated from [`docs/changelog.html`](docs/changelog.html), which is the source of
 truth; run `python docs/gen_changelog.py` after editing that page.
 
+## v1.15.56 - The changelog that was missing twenty-four releases
+
+- **Twenty-four releases had no public entry at all.** v1.15.3 through v1.15.26 shipped with their only record in a commit subject nobody outside the repository could read - among them the updater guard that refused every update since v1.0.0, the root escalation through the installer's .env symlink write, the unbounded customer-credential enumeration, and the database password passed in argv. The roadmap said so in its own words, under Being worked on. They are written now, in four languages.
+- **Three headings carried the wrong id.** The sections for v1.15.27, v1.15.28 and v1.15.29 were given the ids v1127, v1128 and v1129 - one digit short - so the anchor a reader copies for those three releases reached nothing, and the tool that reports undocumented releases could not see them and counted them as missing. A heading's id is the version it shows, and a guard says so.
+- **MCP is in the pages an operator actually reads.** The API reference lists the twenty-five tools, the user guide explains the model and the FAQ answers the question - but the three pages an operator reads while deciding whether to switch the thing on said nothing at all: the security page, the configuration page and the setup guides. MCP is in all three now, in four languages, and on the roadmap's own Shipped list.
+- **A tool that prints a gap does not close it.** The gap was open for twenty-four releases while the reporting tool sat in the repository naming every one of them. The suite fails now instead, and the failure names the releases it is missing, so a release cannot ship undocumented again.
+
 ## v1.15.55 - The reference promised a tool reference, and had none
 
 - **The reference promised a tool reference, and had none.** It said that every tool, its arguments and the confirmation strings were in the endpoint reference - and not one of the twenty-five tool names was there. A bot author following that sentence found nothing. The table is now GENERATED from mcp_tools.TOOLS, so the table the panel serves to an AI client is the table the reference prints: a tool added without a doc line fails the suite, and a tool whose arguments changed updates the page or fails it.
@@ -209,6 +216,127 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 - **Restoring could have invalidated every live config:** the restore path decoded that column with json.loads directly. A backup taken on an encrypted panel therefore raised there, and the surrounding handler turned that into a silent re-provision - so restoring a backup would have stripped the credentials of every customer on the panel, at exactly the moment they could least afford it. It now goes through the reader that accepts both forms.
 - **The change is checked, not asserted:** a new suite asserts the stored bundle is not bare JSON, contains no WireGuard key, round-trips through the reader, and still loads a legacy plaintext row. Each assertion was proven by breaking the fix and watching it go red - a guard that cannot fail proves nothing.
 - **The docs now say what is deliberately not coming:** a Roadmap page lists what is finished, what is being worked on, and the limits that are real and not planned away - one worker, serialised SQLite writes, and no hardware key storage - with the reason each is the way it is. All four languages.
+
+## v1.15.26 - The installer no longer runs its own comments as root
+
+- **An unexplained error, solved.** A real Ubuntu 24.04 install printed line 698: +: command not found and Too few arguments., then finished with rc=0 and a working panel. The systemd unit is written with an UNQUOTED here-document, and bash performs command substitution in an unquoted heredoc body - including on text that reads like a comment. Three backticks in two comments were meant as quotation marks, and bash executed them. Reproduced under bash 5.3 before the fix; rc=0 with no output after it.
+- **Three more guards that read as protection.** The verification block printed Port not listening and then, three lines later, a green Installed. - fail() is an echo, so it returned 0. [[ -d .venv ]] follows a symlink, so a planted .venv passed the guard and had chmod -R write inside it as root. And find ... -exec chown -R dereferences a symlink it is handed, so a planted /opt/zefira/pwn -> /etc/sudoers had its target chowned. Each is fixed, and each guard was proved red.
+
+## v1.15.25 - The settings section is grouped, and every card is tested end to end
+
+- **The settings section was reorganised.** It carried 39 fields across 7 cards with no thematic grouping, so Server / Hosts, SSL, Telegram and AI Assistant sat in one flat grid and the operator had to know which of them was which. Now three labelled groups, and every card keeps its exact original lines - only its position and the heading above it changed.
+- **Every card now has a test that reads it, changes it, reads it back and puts it back.** Two facts shaped it: PUT /api/settings is a FULL REPLACE, not a merge, so a field left out of the body is written as its default - a partial body is refused with 422 rather than merged. And the cards that reach outside the panel are probed with input the schema rejects BEFORE the side effect, so certbot never runs and no Let's Encrypt quota is touched.
+- **The grouping nearly shipped broken.** The first attempt dropped 25 controls - srv-form, pw-form and every AI, Telegram and SSL field - because the parse counted <div per LINE, so a card whose opening tag and whose header sit on different lines hit depth zero after two lines and was copied as just its header. The ids were never deleted, only not copied, and the diff looked unremarkable until the id sets were compared.
+
+## v1.15.24 - The site assistant stopped answering 'what is new?' with a 21-release-old answer
+
+- **Three inconsistent answers to one question.** A visitor asking the public site what had changed got a confident v1.13.3 while the panel was on v1.15.23 - twenty-one releases of security work the assistant would confidently not mention - and it linked to a changelog page whose newest entry was v1.15.2.
+- **The gap is made loud instead of silent.** The assistant's knowledge file is hand-maintained, which is why it drifted. The assistant's newest version must now equal the repository VERSION, in every locale it is written in, and docs/release_notes.py prints the same gap with the commit subjects needed to close it.
+
+## v1.15.23 - An empty restore is refused, and the harness can reach its own admin
+
+- **An empty restore was a delete-everything.** A restore REPLACES the customer table, and users: List[dict] = Field(max_length=10000) had no minimum - so an empty list was valid input meaning delete every customer, reached by pasting a settings-only export. Now refused with 400, before the delete, on both the plaintext and the encrypted path.
+- **The undo path was silent when it failed.** _snapshot_db_before_restore() is the operator's only undo path, and its SQLite branch logged the failure at DEBUG while the logging level is INFO, so the message was dropped entirely - every other branch of the same snapshot already logged at error or warning. And the test harness started a panel with no admin, so its failures looked like broken suites.
+
+## v1.15.22 - The settings port check, and the fail-open config download
+
+- **A port check that only asked 'is it a number'.** Number.isFinite(0) is true, so 0 passed - and so did 70000 and 443.5. The schema is StrictInt(ge=1, le=65535) on all eight ports, so any of those produced a 422 - and a 422 discards the WHOLE save, taking the domain, the DNS and every other setting changed on the same screen with it. The failure was invisible until someone noticed the domain never applied.
+- **A download that failed open.** The WireGuard pre-check had catch (_) {}, so a 500, a 429 or a dropped connection left blocked false and the download still ran - the operator shipped a customer a config with no server public key in it, and no warning at all. The download now fails closed and says why.
+
+## v1.15.21 - Least-privilege tokens that reach what they promise, a labelled audit log, LF endings
+
+- **The least-privilege token was unreachable.** The schema declares scopes: Literal["full","bot"] and the reference tells the operator to create a token with scope bot - but the create form had only a name field and never sent scopes, so the default applied to every token. Every token an operator could mint was a full credential able to delete users, restore backups and change settings.
+- **The audit log showed constants.** 21 of the 54 audit events had no label in any locale, and the renderer returns the raw constant when the key is absent, so the Security Events list showed operators USERS_LIST and PW_CHANGE. Every event the panel emits now has a label in all four languages.
+
+## v1.15.20 - Telegram's 'chat not found' now says which of four causes it is
+
+- **One message, four different mistakes.** chat not found is Telegram's answer for a chat id that belongs to a different bot, a user who never sent /start, an @channel the bot does not administer, and an id that is simply wrong. They need four different fixes, and the operator was told none of them.
+- **The id's shape picks the answer.** A numeric id without a leading minus is recognised as a user id and gets the /start answer; an @channel gets the admin answer; anything else gets the token-mismatch answer, which names the usual cause outright - the token was changed after the chat id was recorded.
+
+## v1.15.19 - The subscription feed's own rule is documented
+
+- **The rule the feed follows was documented nowhere.** The site documented the Download config button, and that text was still accurate. It never said what the feed itself follows, and that changed: the feed carries share links and nothing else. WireGuard, OpenVPN, L2TP/IPsec and Cisco AnyConnect are file protocols, so they arrive as files - and a plan made only of them answers 422 with that reason, which was documented nowhere.
+- **The same rule applies to Clash.** Mihomo has no proxy type for those protocols either, so ?format=clash answers 422 for the same reason - equally undocumented. The new section states both.
+
+## v1.15.18 - The README in the other three languages, and the English file's missing language line
+
+- **Translated from the corrected English, not from the stale version.** The Persian, Chinese and Russian files were translated from a document that said 13/13 suites and pinned v1.14.0. Translating a stale document just produces a stale document in another script. All three now state the fact that was missing everywhere: the subscription feed carries share links and nothing else, the four file protocols arrive as files, and a plan made only of those answers 422 - with what the old inline behaviour did to a client, because we removed something is not an explanation an operator can act on.
+- **The English file had no language line at all.** Each file now links to the other three at the top and the bottom, and the English one says which language it is. The new guard readme_i18n_test.py compares the four files against each other instead of trusting a read-through, because the specific failure of a translation is invisible to the person who wrote it.
+
+## v1.15.17 - The README described a panel two dozen fixes behind
+
+- **Numbers a reader would act on were wrong.** The file said a green run ends with 13/13 suites passed - nine live plus four - and the per-suite harness list gained entries the file listed none of, so a reader could not run the suite that covers the updater guard, the migration steps, the installer's symlink refusal or the docs asset bump. The pentest badge read 117/117; the attack suite is 129 checks as measured. The read-before-you-run example pinned v1.14.0, eleven releases back.
+- **One thing the README should have said since v1.15.8 and did not.** The subscription feed carries share links and nothing else. WireGuard, OpenVPN, L2TP/IPsec and Cisco AnyConnect are file protocols - a .conf or .ovpn is not a URI, so no link importer can read one - and they are delivered as files, through the dashboard card, the per-user Download config button, or the ZIP. A plan made only of file protocols therefore has no share link at all.
+
+## v1.15.16 - The installer's .env backup was briefly world-readable
+
+- **cp -a preserves the SOURCE mode.** The installer backs up an existing .env before rewriting it, and a legacy 0644 .env therefore produced a 0644 backup - a world-readable copy of the admin password and the database credentials - and the chmod that followed left a window in which any local account could read it. The install directory is mode 0755 by default, so world-readable was not theoretical.
+- **The backup is now written to a mktemp file, chmodded 0600, and renamed into place.** It never carries the .bak name at any mode but 0600. Dropping the chmod-after-copy also removes a second slip: it globbed over every .env.bak-* in the directory, so it restyled backups from earlier runs as a side effect, and did nothing at all when the glob matched none - the same a guard that cannot fail shape, here in the quiet form of an operator convenience that quietly did something else.
+
+## v1.15.15 - The retry a comment promised was not in the code
+
+- **A guard that read as protection and measured out as something else.** The attack suite probes every admin endpoint unauthenticated and fails if any does not answer 401/403/405. When its request helper returned 0 - the catch-all for no HTTP response at all - the probe recorded a transport failure and the check went red. The comment right above that code said a reset connection is not evidence about the panel, and that the probe should retry once. There was no retry.
+- **It was observed as a red suite, once, with no reproduction.** A guard that has never been seen to fail is not evidence, so this one is proved red by putting the missing retry back and removing it again.
+
+## v1.15.14 - One backslash in the version corrupted every asset URL in the site
+
+- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=82 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
+- **The version is now digits-only, and the directory cannot be given at all.** A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.
+
+## v1.15.13 - The installer's SSL block appended to .env through a symlink, as root
+
+- **The window was between two guards.** The installer writes the three SSL settings with an append, and the install directory is owned by the service account - and the panel runs as that account. A compromised panel can therefore replace .env with a symlink to any path on the host, and the next install runs as root and follows the link, writing operator-supplied and certificate-derived lines into a root-owned target. /etc/cron.d/ is the obvious one.
+- **The file already knew this shape.** The .env block refuses to write through a symlink and says so in as many words. But that guard covered only the earlier move, and it ran before certbot - so the window between the two is exactly when the attack lands. The SSL block refuses to follow a link too.
+
+## v1.15.12 - One failed migration step could roll back every step before it
+
+- **All the schema steps shared one transaction.** Both column helpers are idempotent, but the column add deliberately lets a failed ALTER propagate, and so does the final backfill. A single failure therefore raised out of the block - and on a database where DDL is transactional, that rolls back every step before it. The panel then starts against a schema older than the one it already had, the ORM's SELECTs name columns that do not exist, and it is dead - identically dead on every later boot, because the same step keeps failing.
+- **Each step now gets its own transaction.** The statements, their order and the dialect-dependent DDL literals are unchanged; only the transaction boundary moved. What was measured, and what was not, matters more than the fix: the failure above needs DDL inside the transaction, and on the only engine available here it is not - so the suite measures the transaction boundary rather than claiming the rollback it cannot produce.
+
+## v1.15.11 - The customer list handed out 500 credentials a call, unbounded
+
+- **The list returned working credentials.** The customer list serialises each row, and that row carries the subscription token - not an identifier but a working credential: anyone holding it can use that customer's VPN and drain their quota. One call returned up to 500 of them, and the pages offset to 1,000,000. The scope check decided the severity: listing is allowed for the least-privilege token, so a reseller bot could walk the entire customer base collecting subscription tokens, with no rate limit and no audit row.
+- **It is bounded and recorded now.** The list shares the existing per-route budget with the QR endpoint, at the same magnitude, and every call leaves an audit row. The scope's own comment promises list users, not list users' credentials - and the panel already knew the shape: the QR endpoint discloses ONE customer's subscription URL to the same scope and is bounded. The bulk equivalent was left open.
+
+## v1.15.10 - The pre-restore dump put the database password in argv
+
+- **The snapshot was built as a command line with the URL in it.** The URL is DATABASE_URL, password included, and on Linux /proc/<pid>/cmdline is world-readable - so any unprivileged local account on the host could read the operator's database password from ps for as long as the dump ran. And that dump is of the COMPLETE database: the admin password hash, every customer's WireGuard private key, every API token hash.
+- **The secret moved to a channel each tool actually supports.** postgres takes PGPASSWORD in the environment, with the password removed from the DSN in argv, which is where libpq reads it from. mysql takes a 0600 defaults file that is removed once the dump finishes - NOT MYSQL_PWD, which mysqldump documents as insecure and warns about on every invocation. The invariant is extracted into one function, so it can be asserted without a database server running.
+
+## v1.15.9 - Two guards that could not fail, and one of them blocked every update
+
+- **The updater refused EVERY update, on every release since v1.0.0.** The guard fed a tuple of prefixes to str.startswith, and '.env' was applied as a PREFIX - so the .env.example template that every release ships was matched as an intrusion and the update was refused. It also matched '*.db' as a literal prefix rather than as a pattern. Two more guards measured out as something else: the verification block's fail() was an echo, so it returned 0 and the success banner still printed.
+- **Both are now proved red before being trusted.** The guard compares the path against the tree rather than against a prefix, and the update path is exercised end to end. A guard that reads as protection and measures out as something else is the reason a regression survives - which is why every guard in this repository has to be seen to fail.
+
+## v1.15.8 - A customer's subscription served 91 unparseable lines around 1 real link
+
+- **Every capability was walked at once.** 11 protocols, each through the customer's subscription, the Clash output, the dashboard page and the admin QR endpoint - because nothing checked the whole matrix together. The first walk reported 11 broken cells and every one was the walk's own bug; fixed, all 11 came back clean.
+- **Then it surfaced something real.** Counting what a link importer actually receives, decoded from the base64 body: a VLESS-only plan was one line, and an OpenVPN-only plan was 91 lines of which none could be imported. The file protocols had been arriving inside the feed as text. A plan made only of file protocols therefore served a subscription no client could read - and the site never said the feed carries share links and nothing else.
+
+## v1.15.7 - A restore that mints OpenVPN keys was cut off at nginx's 60s default
+
+- **Found by a suite failure I did not believe at first.** The security audit reported that the restore endpoint timed out and that the panel answered 'Restore in progress...'. Measured against a running panel, with the suite's own backup shape - 240 OpenVPN rows, empty secret data so each is re-provisioned, a mint budget of 200 - the restore took 159.9 seconds and answered 200.
+- **nginx's default is 60 seconds.** The installer writes three location blocks and no proxy read timeout, so every operator on the recommended nginx path loses the connection at 60 seconds while the panel carries on and finishes - and cannot learn whether it worked. Their next click gets 'Restore in progress, try again', or re-imports everything. At the measured ~0.8s per minted row, 60 seconds is crossed at about 75 OpenVPN users, which is not an edge case for a reseller.
+
+## v1.15.6 - Three checks that could not fail, and a half-kept promise
+
+- **A guard that reports success without looking at anything is why a regression survives - and two of the three install bugs got through a green suite.** The i18n check carried a hand-copied list of menu section ids. It had already gone stale: the Developer API section is in the app's own menu list, so the sidebar asks for its translation on every panel load, and 'api' was missing from the copy - so a missing translation for a sidebar entry was invisible to every other check in the file. The list is now READ out of the code.
+- **Each check is verified by injection to be red on the fault and green otherwise.** Two more were in the same shape: a request port inherited by the config, and a promise the code did not keep - a comment saying a retry was there, with no retry in the code.
+
+## v1.15.5 - An unconfigured reverse proxy locked the operator out of login
+
+- **The scheme and the address disagreed about what a trusted peer is.** The scheme has always honoured X-Forwarded-Proto from a loopback peer; the address honoured X-Forwarded-For only from an explicitly configured proxy. So a panel behind a local reverse proxy the operator never listed believed the scheme - so cookies got Secure - but not the address, and every visitor collapsed onto a single key.
+- **Measured against a running panel.** 16 wrong passwords from an anonymous client and then the operator's own correct password: with no trusted proxy configured the answer was 429 - locked out of their own panel - and with 127.0.0.1 trusted it was 200. The bucket is cleared only by a successful login, which is the very request being refused, so it repeats every window for as long as the flood continues.
+
+## v1.15.4 - The pin and VERSION move together
+
+- **The tag for a release must be cut after the release commit.** The installer clones the tag, and the guard compares the tag's product files with this tree. A tag placed on the previous commit would have shipped the pin bump's own installer - the class of bug that guard exists to stop.
+- **And the pins are one fact, not four.** VERSION, the installer's pin and the README examples all name the same release. A release that moves one without the others ships an installer that clones a tag holding different code, and the reader who followed the README gets that tag. The suite now checks them together.
+
+## v1.15.3 - The pin named a release that no longer contained the fixes
+
+- **Two guards compared the pin against the VERSION file.** Both were green. Both were also worthless: they are two literals agreeing with each other, and neither can see that the release they name stops several commits short of the code in this tree.
+- **The consequence was not cosmetic.** The one-liner runs the installer from main but clones the application from the tag. The named release was tagged before three fixes - the pre-auth slot exhaustion, the intent-group guard and the per-user prefix - so every fresh install since then ran today's installer over an application that still had all three, and the one-liner reported success. The new guards compare the pin against CODE: the named tag must exist, and the product files inside it must be byte-identical to this tree's.
 
 ## v1.15.2 - The installer asked you for a port and a database, then ignored you
 

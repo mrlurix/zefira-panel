@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSetup">Setup guides — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=79">
+<link rel="stylesheet" href="assets/style.css?v=82">
 </head>
 <body>
 <header class="topbar">
@@ -77,14 +77,21 @@
 <li><b data-i18n="stg.diagnose">Diagnose 404s:</b> <span data-i18n="stg.diagnoseRest">user expired/disabled/out-of-volume? Then Settings domain/ports, server firewall ports, REALITY keys / WireGuard public key. Sub loads but clients can't connect = server-side ports or keys, almost always.</span></li>
 </ol>
 
+<h2 id="point-an-ai-client" data-i18n="stg.mcpTitle">Point an AI client at the panel</h2>
+<ol>
+  <li data-i18n="stg.mcpA">Switch the MCP server on in the panel, and create a token with the <code>full</code> scope under Developer API.</li>
+  <li data-i18n="stg.mcpB">Point the client at <code>POST /api/mcp</code> with <code>Authorization: Bearer …</code>. No cookie and no CSRF header: a cookie is refused outright.</li>
+  <li data-i18n="stg.mcpC">The client lists the 25 tools it can call. The destructive ones refuse to run until the call carries the exact confirmation string the refusal names.</li>
+</ol>
+
 <h2 id="ask-the-ai" data-i18n="stg.aiTitle">Ask the AI</h2>
 <p><span data-i18n="stg.aiA">The panel</span> <b>?</b> <span data-i18n="stg.aiB">assistant knows all of the above and</span> <b data-i18n="stg.actsToo">acts too</b><span data-i18n="stg.aiColon">:</span> <i>“make user ali 50 gig 30 days vless”</i>, <i>“top up reza 20 gig”</i>, <i>“how do I tunnel Kharej?”</i> <span data-i18n="stg.aiD">— setup answers plus real operations, audit-logged. Full list in</span> <a href="user-guide.html#ai-assistant" data-i18n="stg.aiLink">Users &amp; Plans → AI assistant</a><span data-i18n="stg.aiDot">.</span></p>
 
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=79"></script>
-<script src="assets/docs.js?v=79"></script>
-<script src="assets/support-ai.js?v=79"></script>
+<script src="assets/i18n.js?v=82"></script>
+<script src="assets/docs.js?v=82"></script>
+<script src="assets/support-ai.js?v=82"></script>
 </body>
 </html>
