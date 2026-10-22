@@ -23,10 +23,13 @@ import io
 import json
 import os
 import re
+import importlib.util
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 KNOWLEDGE = os.path.join(ROOT, "docs", "assets", "site-knowledge.json")
 CHANGELOG = os.path.join(ROOT, "docs", "changelog.html")
+CHANGELOG_MD = os.path.join(ROOT, "CHANGELOG.md")
+GEN_CHANGELOG = os.path.join(ROOT, "docs", "gen_changelog.py")
 VERSION = os.path.join(ROOT, "VERSION")
 RELEASE_NOTES = os.path.join(ROOT, "docs", "release_notes.py")
 LOCALES = ("text", "fa", "zh", "ru")
@@ -82,6 +85,29 @@ def _descending(shown):
         return (int(a), int(b), int(c))
     return bool(shown) and all(key(shown[i]) < key(shown[i - 1])
                                for i in range(1, len(shown)))
+
+
+def render_expected():
+    """The markdown docs/gen_changelog.py would produce for the page.
+
+    Loaded by path rather than imported by name, so this suite does not put
+    docs/ on sys.path for the whole run.
+    """
+    spec = importlib.util.spec_from_file_location("gen_changelog_under_test",
+                                                  GEN_CHANGELOG)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    with io.open(CHANGELOG, encoding="utf-8") as fh:
+        return mod.render_changelog(fh.read())
+
+
+def changelog_md_checks(on_disk, expected):
+    """Is the repository's CHANGELOG.md the generated one?"""
+    out = {}
+    out["the repository has a CHANGELOG.md"] = on_disk is not None
+    out["CHANGELOG.md is what the generator produces"] = (
+        on_disk is not None and on_disk == expected)
+    return out
 
 
 def checks(kb, version, changelog):
@@ -145,7 +171,19 @@ def main():
             failures.append(name)
 
     print()
-    print("== 2. the gap is reportable, so it can be closed ==")
+    print("== 2. the repository's CHANGELOG.md is the generated one ==")
+    expected = render_expected()
+    on_disk = None
+    if os.path.exists(CHANGELOG_MD):
+        with io.open(CHANGELOG_MD, encoding="utf-8") as fh:
+            on_disk = fh.read()
+    for name, ok in sorted(changelog_md_checks(on_disk, expected).items()):
+        print("   %-46s %s" % (name, "ok" if ok else "FAIL"))
+        if not ok:
+            failures.append(name)
+
+    print()
+    print("== 3. the gap is reportable, so it can be closed ==")
     ok = os.path.exists(RELEASE_NOTES)
     print("   %-46s %s" % ("docs/release_notes.py exists", "ok" if ok else "FAIL"))
     if not ok:
@@ -162,7 +200,7 @@ def main():
             failures.append("no tags to compare against")
 
     print()
-    print("== 3. each assertion can fail: roll the file back, it must go red ==")
+    print("== 4. each assertion can fail: roll the file back, it must go red ==")
     # Five mutations, all on copies: the two knowledge-base ones, and three
     # that relabel a heading the way a reader would notice.
     import copy
@@ -253,6 +291,27 @@ def main():
                         '<h2 id="%s">' % newer_id, 1)
     mutations.append(("leave the newest heading unlabelled", kb, bare,
                       ["every changelog heading shows a version number"]))
+
+    # The generated file is only honest if something checks it. Mutate it the
+    # way a stale file actually goes stale - the page gains a release and
+    # nobody re-ran the generator - and the check must notice.
+    if on_disk is not None:
+        _newest = re.search(r"^## (v[\d.]+)", on_disk, re.M)
+        assert _newest, "the CHANGELOG.md has no version heading"
+        # The heading the file starts with, so the mutation follows the
+        # newest release instead of a version frozen into the test.
+        _head = "## " + _newest.group(1)
+        stale = on_disk.replace(_head, _head + " ", 1)
+        assert stale != on_disk, "the CHANGELOG.md mutation did not apply"
+        assert stale != on_disk, "the CHANGELOG.md mutation did not apply"
+        after = changelog_md_checks(stale, expected)
+        must = "CHANGELOG.md is what the generator produces"
+        if after[must]:
+            print("   %-30s FAIL (stayed green)" % "let CHANGELOG.md go stale")
+            failures.append("let CHANGELOG.md go stale: cannot fail")
+        else:
+            print("   %-30s ok (goes red: %s)"
+                  % ("let CHANGELOG.md go stale", must))
 
     for name, mutated, mutated_changelog, must_go_red in mutations:
         after = checks(mutated, version, mutated_changelog)

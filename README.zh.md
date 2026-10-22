@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # 只有你自己能读的私有目录
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.54/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.55/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.54` 这个 tag 固定了安装脚本本身。
+> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.55` 这个 tag 固定了安装脚本本身。
 >
 > 随后安装脚本会按它自带的发布 tag 克隆面板源码。如果你想更严格地固定到具体提交：
 >
@@ -113,10 +113,10 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### 运行测试
 
 这些测试套件从外部打击运行中的面板。先启动面板，然后逐个运行（套件之间重启面板）。也可以一次跑完：`python run_all_tests.py admin YOURPASS`。各套件之间互不依赖顺序，结束时都会把面板恢复到出厂默认设置。
-共 60 套测试：17 套在线（需要正在运行的面板），43 套静态守卫（无需任何东西）。
+共 61 套测试：17 套在线（需要正在运行的面板），44 套静态守卫（无需任何东西）。
 
 
-**在线套件（10 个）**——需要正在运行的面板：
+**在线套件**——需要正在运行的面板：
 
 ```bash
 python security_test.py      http://127.0.0.1:8000 admin YOURPASS  # 滥用/防御
@@ -133,9 +133,9 @@ python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conf
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS  # 逐一端到端验证每张设置卡片
 ```
 
-`feature_test.py` 走遍 11 个面板分区里的全部 67 条 API 路由，并断言每项能力**确实可用**（订阅里有真实链接、二维码可解码、配置压缩包可用、机器人 scope 矩阵、备份/恢复往返等），而不只是「能访问」。`attack_test.py` 会自己发起攻击流量：请求头伪造、存储型 XSS、路径穿越、超大/深层嵌套请求体、Unicode/编码技巧、时间侧信道、登录洪水、限流器逐出尝试，以及完整的鉴权矩阵。
+`feature_test.py` 逐个分区走遍面板的各项能力，并断言每项能力**确实可用**（订阅里有真实链接、二维码可解码、配置压缩包可用、机器人 scope 矩阵、备份/恢复往返等），而不只是「能访问」。`attack_test.py` 会自己发起攻击流量：请求头伪造、存储型 XSS、路径穿越、超大/深层嵌套请求体、Unicode/编码技巧、时间侧信道、登录洪水、限流器逐出尝试，以及完整的鉴权矩阵。
 
-**无需服务器（30 个套件）**——它们执行真实代码而不是只读代码，因为下面每一个缺陷都通过了源码级审查：
+**无需服务器**——它们执行真实代码而不是只读代码，因为下面每一个缺陷都通过了源码级审查：
 
 ```bash
 python installer_test.py          # 安装脚本的保证，做成静态守卫
@@ -186,6 +186,7 @@ python restore_report_test.py                       # the restore report says wh
 python mcp_client_ip_test.py                       # an MCP call is attributed to its caller
 python client_ip_test.py                            # who a request is counted as
 python mcp_tools_test.py                                 # the MCP tool table
+python mcp_docs_test.py                              # the MCP tool table in the reference
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor
 python mcp_protocol_test.py                              # MCP JSON-RPC dispatch

@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # پوشه‌ای خصوصی که فقط خودتان می‌خوانید
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.54/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.55/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.54` خودِ نصب‌کننده را pin می‌کند.
+> هر دو کار می‌کنند. حالت یک‌خطی هرچه upstream در آن لحظه سرو می‌دهد را مستقیم به یک shell ریشه می‌فرستد، پس اگر برایتان مهم است که **چه** کدی به‌عنوان root اجرا شود، حالت دوم را به کار ببرید: در پوشه‌ای فرود می‌آید که `mktemp` همین الان برای شما ساخته (یک مسیر ثابت مثل `/tmp/zefira-inst` را کاربر محلی دیگری می‌تواند از قبل ساخته باشد و `mkdir -p` بی‌سروصدا روی پوشه‌ای که مالکش نیست موفق می‌شود)، و تگ `v1.15.55` خودِ نصب‌کننده را pin می‌کند.
 >
 > سپس نصب‌کننده کد پنل را از تگ انتشاری که همراهش می‌آید clone می‌کند. اگر می‌خواهید سخت‌گیرانه‌تر pin کنید و کامیت دقیق را نام ببرید:
 >
@@ -113,12 +113,12 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000 --no-server-header --no-
 ### اجرای تست‌ها
 
 [مجموعه‌های تست](#اجرای-تستها) از بیرون به پنل در حال اجرا ضربه می‌زنند. پنل را بالا بیاورید، سپس هرکدام را اجرا کنید (بین مجموعه‌ها پنل را ری‌استارت کنید). برای اجرای همه با هم: `python run_all_tests.py admin YOURPASS`. مجموعه‌ها مستقل از ترتیب‌اند و در پایان همه به تنظیمات پیش‌فرض کارخانه برمی‌گردند.
-در مجموع 60 مجموعهٔ تست هست: 17 تا زنده که به پنل در حال اجرا نیاز دارند و 43 تا ایستا که به چیزی نیاز ندارند.
+در مجموع 61 مجموعهٔ تست هست: 17 تا زنده که به پنل در حال اجرا نیاز دارند و 44 تا ایستا که به چیزی نیاز ندارند.
 
 
 **فهرست کامل مجموعه‌ها و آنچه پوشش می‌دهند**
 
-**زنده (10 مجموعه)** — به پنل در حال اجرا نیاز دارند:
+**زنده** — به پنل در حال اجرا نیاز دارند:
 
 ```bash
 python security_test.py      http://127.0.0.1:8000 admin YOURPASS  # سوءاستفاده/دفاع
@@ -135,9 +135,9 @@ python mcp_conformance_test.py http://127.0.0.1:8000 admin YOURPASS   # MCP conf
 python settings_cards_test.py http://127.0.0.1:8000 admin YOURPASS  # هر کارت تنظیمات، سرتاسری
 ```
 
-`feature_test.py` همهٔ ۷۷ مسیر API را در ۱۱ بخش پنل پیمایش می‌کند و ادعا می‌کند هر قابلیت واقعاً **قابل استفاده** است (لینک واقعی در اشتراک، QR قابل رمزگشایی، آرشیو کانفیگ کارکننده، ماتریس scope ربات، round-trip پشتیبان/بازیابی…) نه صرفاً در دسترس. `attack_test.py` خودش ترافیک خصمانه را شلیک می‌کند: جعل هدر، XSS ذخیره‌شده، path traversal، بدنه‌های بیش‌ازحد/تودرتو، ترفندهای یونیکد/encoding، timing oracle، سیل ورود، تلاش برای بیرون‌انداختن limiter، و کل ماتریس احراز هویت.
+`feature_test.py` قابلیت‌های پنل را بخش‌بخش پیمایش می‌کند و ادعا می‌کند هر قابلیت واقعاً **قابل استفاده** است (لینک واقعی در اشتراک، QR قابل رمزگشایی، آرشیو کانفیگ کارکننده، ماتریس scope ربات، round-trip پشتیبان/بازیابی…) نه صرفاً در دسترس. `attack_test.py` خودش ترافیک خصمانه را شلیک می‌کند: جعل هدر، XSS ذخیره‌شده، path traversal، بدنه‌های بیش‌ازحد/تودرتو، ترفندهای یونیکد/encoding، timing oracle، سیل ورود، تلاش برای بیرون‌انداختن limiter، و کل ماتریس احراز هویت.
 
-**بدون سرور (30 مجموعه)** — کد واقعی را اجرا می‌کنند نه اینکه بخوانند، چون هر نقص زیر از بازبینی در سطح منبع رد شده بود:
+**بدون سرور** — کد واقعی را اجرا می‌کنند نه اینکه بخوانند، چون هر نقص زیر از بازبینی در سطح منبع رد شده بود:
 
 ```bash
 python installer_test.py         # تضمین‌های نصب‌کننده، به‌صورت گارد ایستا
@@ -188,6 +188,7 @@ python restore_report_test.py                       # the restore report says wh
 python mcp_client_ip_test.py                       # an MCP call is attributed to its caller
 python client_ip_test.py                            # who a request is counted as
 python mcp_tools_test.py                                 # the MCP tool table
+python mcp_docs_test.py                              # the MCP tool table in the reference
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor
 python mcp_protocol_test.py                              # MCP JSON-RPC dispatch

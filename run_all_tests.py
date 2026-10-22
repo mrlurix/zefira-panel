@@ -186,6 +186,12 @@ OFFLINE_SUITES = [
     ("__NODE__ i18n_dict_check.js", "docs i18n coverage"),
     ("__NODE__ i18n_render_check.js", "docs i18n renderer safety"),
     ("mcp_tools_test.py", "the MCP tool table"),
+    # The reference promised that every tool, its arguments and the
+    # confirmation strings were in the endpoint reference - and none of
+    # the twenty-five tool names was there. The table is now GENERATED
+    # from mcp_tools.TOOLS, and this regenerates it and compares it with
+    # the page, so a tool added without a doc line fails the suite.
+    ("mcp_docs_test.py", "the MCP tool table in the reference"),
     ("mcp_exec_test.py", "MCP call building and the HTTP executor"),
     ("mcp_asgi_exec_test.py", "the in-panel MCP executor"),
     ("mcp_protocol_test.py", "MCP JSON-RPC dispatch"),

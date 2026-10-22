@@ -59,6 +59,25 @@ def routes():
     return sorted(set(found))
 
 
+def endpoint_paths(doc):
+    """The panel endpoints the reference's ENDPOINT TABLE documents.
+
+    The generated MCP tool table names panel endpoints too - a tool that
+    calls DELETE /api/users/{id} prints that path - so scanning the whole
+    page made this check weaker: a route could be deleted from the endpoint
+    table and still count as documented, because the tool table mentioned
+    it. The endpoint table is what this check is about.
+
+    Both the parent and its child have to use the SAME definition, or the
+    child's mutation proves nothing.
+    """
+    _b = doc.find("<!-- MCP-TOOLS:BEGIN -->")
+    _e = doc.find("<!-- MCP-TOOLS:END -->")
+    if _b >= 0 and _e > _b:
+        doc = doc[:_b] + doc[_e:]
+    return set(re.findall(r"<code>(/api/[a-zA-Z0-9/_{}\-]+)</code>", doc))
+
+
 def block_end(text, brace_open):
     depth, i, n = 0, brace_open, len(text)
     while i < n:
@@ -87,7 +106,7 @@ def block_end(text, brace_open):
 def main():
     rs = routes()
     doc = io.open(DOC, encoding="utf-8", errors="replace").read()
-    documented = set(re.findall(r"<code>(/api/[a-zA-Z0-9/_{}\-]+)</code>", doc))
+    documented = endpoint_paths(doc)
 
     missing = [(m, p) for m, p in rs if p not in documented]
     check("every /api route in main.py appears in the API reference "
@@ -153,7 +172,7 @@ def main():
 def child():
     doc = io.open(DOC, encoding="utf-8", newline="").read()
     rs = routes()
-    documented = set(re.findall(r"<code>(/api/[a-zA-Z0-9/_{}\-]+)</code>", doc))
+    documented = endpoint_paths(doc)
     miss = [(m, p) for m, p in rs if p not in documented]
     if miss:
         print("[FAIL] GUARD:coverage %d route(s) no longer documented: %s"

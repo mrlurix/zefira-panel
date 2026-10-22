@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=78">
+<link rel="stylesheet" href="assets/style.css?v=79">
 </head>
 <body>
 <header class="topbar">
@@ -140,6 +140,39 @@
 <tr><td><span class="badge get">GET</span></td><td><code>/api/audit</code> · <code>/api/system</code> · <code>/api/telegram…</code> · <code>/api/telegram/test</code></td><td data-i18n="api.auditSys">Logs, CPU/RAM/disk, notifications. <code>/api/telegram/test</code> POSTs the token and chat id you are about to save and reports what the Bot API answered, so a bad chat id surfaces as a message from Telegram instead of as silence later.</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/tunnel-settings</code></td><td data-i18n="api.tunnelSettings">The two BackPack fields: <code>public_url</code> (the address the outer server dials back on) and <code>trusted_proxies</code> (CIDRs whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs). Same page as Settings → Tunnel; a mis-set proxy list makes every client look like one address.</td></tr>
 </table>
+
+<!-- MCP-TOOLS:BEGIN -->
+<h2 id="mcp-tools" data-i18n="api.hMcpTools">MCP tools</h2>
+<p><span data-i18n="api.mcpToolsIntro">Every tool below is one call to the panel, forwarded with the caller's own token - so an MCP token reaches exactly what that token could reach. The descriptions are the ones your client is given, verbatim. Destructive tools need the exact confirmation string the refusal names.</span></p>
+<table>
+<tr><th data-i18n="api.mcpThTool">Tool</th><th data-i18n="api.mcpThWhat">What it does</th><th data-i18n="api.mcpThArgs">Arguments</th><th data-i18n="api.mcpThCalls">It calls</th></tr>
+<tr><td><code>add_volume</code></td><td>Add gigabytes to a customer's quota.</td><td><code>add_volume_gb</code> (number) &mdash; GB to add.<br><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge post">PATCH</span> <code>/api/users/{user_id}</code></td></tr>
+<tr><td><code>apply_update</code></td><td>Apply the update the Update section is offering. Needs an exact confirmation. The panel restarts.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>confirm</code> (string) &mdash; The word APPLY.</td><td><span class="badge post">POST</span> <code>/api/update/apply</code></td></tr>
+<tr><td><code>audit_tail</code></td><td>The 50 most recent audit rows, newest first: what happened and when. Fixed length, this panel keeps the tail only.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/audit</code></td></tr>
+<tr><td><code>create_api_token</code></td><td>Mint a new API token. The value is returned once and never again. Needs the operator's password and an exact confirmation.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>confirm</code> (string) &mdash; The token name again.<br><code>name</code> (string) &mdash; Token name.<br><code>password_confirm</code> (string) &mdash; The admin password.<br><code>scopes</code> (string) &mdash; full or bot.</td><td><span class="badge post">POST</span> <code>/api/api-tokens</code></td></tr>
+<tr><td><code>create_server_node</code></td><td>Register a remote VPN server.</td><td><code>address</code> (string) &mdash; IP address or domain.<br><code>name</code> (string) &mdash; Node name.<br><code>note</code> (string) &mdash; Optional note.<br><code>ssh_port</code> (integer) &mdash; SSH port. Default 22.</td><td><span class="badge post">POST</span> <code>/api/server-nodes</code></td></tr>
+<tr><td><code>create_user</code></td><td>Create a customer. Give protocols, volume_gb and days.</td><td><code>days</code> (integer) &mdash; Days of access. Omit with start_on_first_use instead of passing 0.<br><code>note</code> (string) &mdash; Optional note.<br><code>protocols</code> (array of string) &mdash; Protocols, e.g. ["vless", "trojan"].<br><code>start_on_first_use</code> (boolean) &mdash; Do not count down until the first fetch.<br><code>username</code> (string) &mdash; Username, 3-32 characters.<br><code>volume_gb</code> (number) &mdash; Traffic allowance in GB.</td><td><span class="badge post">POST</span> <code>/api/users</code></td></tr>
+<tr><td><code>delete_api_token</code></td><td>Delete an API token. Anything using it stops working immediately. Needs an exact confirmation.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>confirm</code> (string) &mdash; The id again, as a string.<br><code>token_id</code> (integer) &mdash; Token id.</td><td><span class="badge del">DELETE</span> <code>/api/api-tokens/{token_id}</code></td></tr>
+<tr><td><code>delete_user</code></td><td>Delete a customer and everything belonging to them. Needs an exact confirmation.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>confirm</code> (string) &mdash; The id again, as a string.<br><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge del">DELETE</span> <code>/api/users/{user_id}</code></td></tr>
+<tr><td><code>extend_user</code></td><td>Add days to a customer's expiry, measured from today or from their current expiry, whichever is later.</td><td><code>extend_days</code> (integer) &mdash; Days to add.<br><code>user_id</code> (integer) &mdash; Customer id from find_user.</td><td><span class="badge post">PATCH</span> <code>/api/users/{user_id}</code></td></tr>
+<tr><td><code>find_user</code></td><td>Look one customer up by exact username and get their id.</td><td><code>username</code> (string) &mdash; Exact username.</td><td><span class="badge get">GET</span> <code>/api/users/by-username/{username}</code></td></tr>
+<tr><td><code>get_settings</code></td><td>Read the panel's server settings: domain, ports, DNS.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/settings</code></td></tr>
+<tr><td><code>list_api_tokens</code></td><td>List API tokens. Values are never returned - only names, prefixes and scopes.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/api-tokens</code></td></tr>
+<tr><td><code>list_inbounds</code></td><td>List the local listeners (inbounds) this panel serves.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/inbounds</code></td></tr>
+<tr><td><code>list_server_nodes</code></td><td>List the remote servers this panel manages.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/server-nodes</code></td></tr>
+<tr><td><code>list_templates</code></td><td>List the saved customer templates.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/templates</code></td></tr>
+<tr><td><code>list_tunnel_nodes</code></td><td>List the BackPack tunnel nodes.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/nodes</code></td></tr>
+<tr><td><code>list_users</code></td><td>List customers, newest first, optionally filtered by a substring of the username or note.</td><td><code>limit</code> (integer) &mdash; Maximum rows.<br><code>q</code> (string) &mdash; Substring match on username or note.</td><td><span class="badge get">GET</span> <code>/api/users</code></td></tr>
+<tr><td><code>panel_stats</code></td><td>Customer counts and totals: active, expired, disabled, expiring soon, pending activation, total volume.</td><td><span data-i18n="api.mcpNoArgs">none</span></td><td><span class="badge get">GET</span> <code>/api/stats</code></td></tr>
+<tr><td><code>reset_usage</code></td><td>Set a customer's used gigabytes back to zero.</td><td><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge post">POST</span> <code>/api/users/{user_id}/reset-usage</code></td></tr>
+<tr><td><code>reset_user_token</code></td><td>Issue a customer a new subscription token. Their old link stops working immediately.</td><td><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge post">POST</span> <code>/api/users/{user_id}/reset-token</code></td></tr>
+<tr><td><code>restore_backup</code></td><td>Restore customers from a backup file. This DELETES every existing customer before re-creating them. Needs an exact confirmation.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>backup</code> (object) &mdash; The backup payload.<br><code>confirm</code> (string) &mdash; The word RESTORE.<br><code>password_confirm</code> (string) &mdash; The operator's admin password.</td><td><span class="badge post">POST</span> <code>/api/restore</code></td></tr>
+<tr><td><code>set_active</code></td><td>Enable or disable a customer.</td><td><code>is_active</code> (boolean) &mdash; True to enable.<br><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge post">PATCH</span> <code>/api/users/{user_id}</code></td></tr>
+<tr><td><code>subscription_link</code></td><td>Build a customer's subscription link. Composed inside the panel, so it is available on the HTTP transport only.</td><td><code>username</code> (string) &mdash; Exact username.</td><td><span class="badge get">GET</span> <code>/api/users/by-username/{username}</code></td></tr>
+<tr><td><code>update_settings</code></td><td>Replace the server settings. This is a FULL REPLACE, not a merge: any key you omit is written as its default. Call get_settings first and send the whole object back.<br><span data-i18n="api.mcpNeedsConfirm">needs the exact confirmation string</span></td><td><code>confirm</code> (string) &mdash; The word REPLACE.<br><code>settings</code> (object) &mdash; The complete settings object, unchanged.</td><td><span class="badge put">PUT</span> <code>/api/settings</code></td></tr>
+<tr><td><code>user_config</code></td><td>Fetch one customer's full config bundle, including their private keys. Treat the result as a secret.</td><td><code>user_id</code> (integer) &mdash; Customer id.</td><td><span class="badge get">GET</span> <code>/api/users/{user_id}/config</code></td></tr>
+</table>
+<!-- MCP-TOOLS:END -->
 
 <h2 id="public" data-i18n="api.hPublic">Public</h2>
 <table>
@@ -288,8 +321,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=78"></script>
-<script src="assets/docs.js?v=78"></script>
-<script src="assets/support-ai.js?v=78"></script>
+<script src="assets/i18n.js?v=79"></script>
+<script src="assets/docs.js?v=79"></script>
+<script src="assets/support-ai.js?v=79"></script>
 </body>
 </html>

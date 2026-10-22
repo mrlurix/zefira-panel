@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.54/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.55/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.54` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.55` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -149,8 +149,8 @@ same code path if you need concurrent writers.
 
 ### Running the tests
 
-There are 60 test suites. 17 hit the running panel from the outside and
-43 are static guards that need nothing running. One command runs all 60:
+There are 61 test suites. 17 hit the running panel from the outside and
+44 are static guards that need nothing running. One command runs all 61:
 
 ```bash
 python run_all_tests.py http://127.0.0.1:8000 admin YOURPASS
@@ -202,6 +202,7 @@ python docs_coverage_test.py                               # docs cover the pane
 python i18n_dict_check.js                                  # docs i18n coverage
 python i18n_render_check.js                                # docs i18n renderer safety
 python mcp_tools_test.py                                 # the MCP tool table
+python mcp_docs_test.py                              # the MCP tool table in the reference
 python mcp_exec_test.py                                  # MCP call building and the HTTP executor
 python mcp_asgi_exec_test.py                             # the in-panel MCP executor
 python mcp_protocol_test.py                              # MCP JSON-RPC dispatch
@@ -209,7 +210,7 @@ python mcp_stdio_test.py                                 # the MCP stdio transpo
 python mcp_guards_test.py                                # MCP bug-hunt regression guards
 ```
 
-`feature_test.py` walks the panel's 67 API routes across its 11 sections and
+`feature_test.py` walks the panel's capabilities section by section and
 asserts each capability is actually usable (real links in a subscription, a
 decodable QR, a working config archive, the bot-scope matrix, backup/restore
 round-trips…), not merely reachable. `attack_test.py` fires the hostile

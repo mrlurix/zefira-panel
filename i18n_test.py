@@ -46,6 +46,7 @@ for tpl in ("login.html", "panel.html", "sub.html"):
 missing = sorted(u for u in used if u not in base)
 for k in missing:
     fail(f"template key missing from en dict: {k}")
+
 print(f"template keys used: {len(used)}")
 
 # ---- 3. every t("...") key used in panel JS exists in en ----
@@ -274,6 +275,26 @@ else:
         fail(f"only {_pairs} inline fallbacks state a pass-ratio; the scan is "
              f"probably not finding them any more")
     print(f"pass-ratio fallbacks compared: {_pairs}")
+
+# ---- 7. the changelog's lead and body must not share one key ----
+# The renderer does one thing per element:
+#     q("[data-i18n]").forEach((el) => { el.innerHTML = zRenderI18n(t(...)) })
+# so an element's text is whatever its OWN key says. Forty-four bullets
+# wrote the lead and the body with the SAME key, so the body element was
+# overwritten with the lead and the whole explanation vanished from the page
+# - for the last eleven releases. The key existed in every locale, so every
+# other check here passed straight over it: a key that is present and
+# translated is still the wrong key.
+_chg = (HERE / "docs" / "changelog.html").read_text(encoding="utf-8")
+_same = []
+for _m in re.finditer(r"<li>(.*?)</li>", _chg, re.S):
+    _keys = re.findall(r'data-i18n="([^"]+)"', _m.group(1))
+    if len(_keys) >= 2 and len(set(_keys)) == 1:
+        _same.append(_keys[0])
+for _k in sorted(set(_same)):
+    fail(f"changelog bullet: the lead and the body share the key {_k}, so "
+         f"the body is overwritten by the lead")
+print(f"changelog bullets sharing one key: {len(_same)}")
 
 print("i18n checks:", "ALL OK" if not fails else f"{len(fails)} FAILURES")
 sys.exit(1 if fails else 0)

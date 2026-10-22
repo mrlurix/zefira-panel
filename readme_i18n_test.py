@@ -167,10 +167,41 @@ for loc in ("en", "fa", "zh", "ru"):
     # A total written down that is not the runner's is the defect that shipped:
     # "36 ... all 35" in one file, "35 / 25" in three others.
     totals = {int(x) for x in re.findall(
-        r"(\d+)\s*(?:test suites|مجموعهٔ تست هست|套测试|наборов тестов)", body)}
+        r"(\d+)\s*(?:test suites|مجموعهٔ تست|套测试|набор\w*\s+тест\w*)", body)}
     check("%s states a total equal to the runner's" % loc,
           totals and totals <= {TOTAL},
           "says %s, runner has %d" % (sorted(totals), TOTAL))
+    # The split matters as much as the total: the README says 17 hit the
+    # running panel and 44 are static, and a reader deciding what to run
+    # first is reading exactly those two numbers.
+    #
+    # The SET of numbers in the paragraph, not the presence of the three.
+    # "There are 61 test suites ... One command runs all 61" states the total
+    # twice, so a check that only asks whether "61" appears still passes when
+    # the first mention has gone stale and the second has not - which is the
+    # mutation the guard has to catch.
+    _want = {ONLINE, OFFLINE, TOTAL}
+    _sets = [set(int(x) for x in re.findall(r"\d+", p))
+             for p in re.split(r"\n\s*\n", body) if p.strip()]
+    check("%s states the live/static split the runner has" % loc,
+          _want in _sets,
+          "no paragraph carries exactly %s" % sorted(_want))
+    # The feature_test.py sentence used to claim a route count and a section
+    # count: 67 across 11 in two languages, 77 across 11 in the other two,
+    # and feature_test.py's own docstring said 62 across 10. Measured: the
+    # panel registers 55 distinct /api paths across 12 sections, and
+    # feature_test.py touches 41 of them. None of the numbers was true, and
+    # the four files disagreed with each other. These READMEs say further
+    # down that a stale number is worse than no number - so the sentence
+    # carries no digits at all, and that is what is checked.
+    _i = body.find("`feature_test.py`")
+    _j = body.find("`attack_test.py`", _i)
+    if _j < 0:
+        _j = body.find("\n", _i)
+    _sent = body[_i:_j] if _i >= 0 else ""
+    check("%s states no route count for feature_test.py" % loc,
+          _i >= 0 and not re.search(r"\d", _sent),
+          "the sentence carries a number: %r" % _sent[:60])
     # The suite list belongs in the test section, not inside the install one.
     inst = body.find("install.sh | sudo bash")
     head = min((body.find(h) for h in ("### Running the tests",
@@ -229,10 +260,16 @@ if os.environ.get("ZEFIRA_README_CHILD") != "1":
     def _child():
         r = subprocess.run(
             [sys.executable, os.path.abspath(__file__)],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, timeout=180,
             cwd=_ROOT,
             env=dict(os.environ, ZEFIRA_README_CHILD="1"))
-        return r.stdout
+        # The child writes UTF-8 - it reconfigures its own stdout - and this
+        # machine's locale encoding is cp1252, which cannot decode the
+        # Chinese and Russian sentences these checks quote. With text=True
+        # the reader thread died on the first byte it could not decode and
+        # r.stdout came back None, so the proof reported a TypeError instead
+        # of the thing it was proving.
+        return r.stdout.decode("utf-8", "replace")
 
     def _prove(label, expect, fname, fn):
         path = os.path.join(_ROOT, fname)
@@ -286,6 +323,23 @@ if os.environ.get("ZEFIRA_README_CHILD") != "1":
            "[FAIL] en states a total equal to the runner's", "README.md",
            lambda t: t.replace("There are %d test suites." % TOTAL,
                                "There are %d test suites." % (TOTAL - 1), 1))
+    # The split, not the total: the total is stated twice in the paragraph,
+    # so a mutation that ages one mention still leaves the other.
+    _prove("goes red without this fix: a stale live/static split",
+           "[FAIL] en states the live/static split the runner has",
+           "README.md",
+           lambda t: t.replace("17 hit the running panel",
+                               "18 hit the running panel", 1))
+    # The route count, which is the number that was wrong in three
+    # different ways at once.
+    _prove("goes red without this fix: a route count for feature_test.py",
+           "[FAIL] ru states no route count for feature_test.py",
+           "README.ru.md",
+           lambda t: t.replace("обходит "
+                               "возможности "
+                               "панели",
+                               "обходит все 77 "
+                               "маршрутов API", 1))
     _prove("goes red without this fix: the test block in the install section",
            "[FAIL] fa introduces its install one-liner before the test section",
            "README.fa.md", _splice_install)

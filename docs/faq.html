@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleFaq">FAQ &amp; Troubleshooting — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=78">
+<link rel="stylesheet" href="assets/style.css?v=79">
 </head>
 <body>
 <header class="topbar">
@@ -83,14 +83,23 @@ ss -tlnp | grep 8000</pre>
   <li data-i18n="faq.clientsE">WireGuard shows a warning comment until you paste the server's public key in Settings.</li>
 </ul>
 
+<h2 id="ai-agents" data-i18n="faq.mcpTitle">Can an AI agent manage the panel?</h2>
+<h3 id="what-is-mcp" data-i18n="faq.mcpQ1">What is MCP?</h3>
+<p data-i18n="faq.mcpA1">MCP is the Model Context Protocol: a way for an AI client - a chat assistant, an IDE, a bot - to call tools instead of guessing. This panel speaks it, so a client can list your customers, create one, extend a plan, read a node's status, and more.</p>
+<h3 id="how-to-turn-on-mcp" data-i18n="faq.mcpQ2">How do I turn it on?</h3>
+<p><span data-i18n="faq.mcpA2">Open the MCP section in the panel and switch it on. Create a token with the full scope under Developer API, then point your client at</span> <code>POST /api/mcp</code> <span data-i18n="faq.mcpA2b">with</span> <code>Authorization: Bearer …</code><span data-i18n="faq.mcpA2c">. No CSRF header and no cookie: a cookie is refused outright, because a browser cookie driving an agent would be a cross-site request with a spending limit attached.</span></p>
+<h3 id="can-the-agent-delete-customers" data-i18n="faq.mcpQ3">Can it delete my customers?</h3>
+<p data-i18n="faq.mcpA3">Yes - and that is why three things are built on top. Every tool call writes an audit row, so the log shows exactly what the agent did. Destructive tools refuse to run unless the call carries the exact confirmation string the refusal names. And each token has a calls-per-minute budget you set.</p>
+<h3 id="what-can-the-agent-reach" data-i18n="faq.mcpQ4">What can it reach?</h3>
+<p data-i18n="faq.mcpA4">Exactly what its own token could reach. An MCP token is an ordinary API token, so this is not a new door into the panel - it is a door your token already had. A token whose scope is not full cannot use MCP at all.</p>
 <h2 id="do-i-have-to-pay-for-any-of-this" data-i18n="faq.payTitle">Do I have to pay for any of this?</h2>
 <p data-i18n="faq.payText">No. Zefira is MIT-licensed, the docs site is plain static files in this repo, and GitHub Pages hosting is free. Let's Encrypt certificates are free too.</p>
 
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=78"></script>
-<script src="assets/docs.js?v=78"></script>
-<script src="assets/support-ai.js?v=78"></script>
+<script src="assets/i18n.js?v=79"></script>
+<script src="assets/docs.js?v=79"></script>
+<script src="assets/support-ai.js?v=79"></script>
 </body>
 </html>
