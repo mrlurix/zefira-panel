@@ -3,6 +3,11 @@
 Every release, newest first. Generated from [`docs/changelog.html`](docs/changelog.html), which is the source of
 truth; run `python docs/gen_changelog.py` after editing that page.
 
+## v1.15.58 - The buttons that stretched and the symbols that didn't
+
+- **The two buttons under Recent changes were stretched to the height of the cards.** The call-to-action block sat inside the card grid because the grid's closing tag was missing, so the grid stretched it to the height of the fourth card and the buttons filled that height. It is a sibling of the grid now, outside it, and the buttons are their normal one-line height again. The reordered, taller cards made the missing tag visible.
+- **Translated text showed the HTML entity source instead of the symbol.** The i18n renderer decoded numeric entities and five XML named entities, but the dictionary also uses named forms for the middle dot, em dash, ellipsis and right arrow. Every one of those reached the page as the literal source string. The decoder now knows the named entities the docs use, so card titles show ·, bodies show —, MCP steps show … and →, and an unknown name still survives untouched. Nothing about the panel changed in this release.
+
 ## v1.15.57 - The site that was never deployed
 
 - **Every docs build since Oct 17 failed, so the public site was thirteen releases behind.** The live changelog stopped at v1.15.43 and the live user guide had no MCP section at all, while the repository had both. The cause was one unclosed Liquid tag opener in an internal plan file: GitHub Pages runs Jekyll over docs/*.md, and a template tag that never closes aborts the build. The site now ships docs/.nojekyll, so Pages serves these files as static HTML instead of running Jekyll, and the plan no longer contains a Liquid opener. A guard fails when either fact changes.
@@ -287,7 +292,7 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 
 ## v1.15.14 - One backslash in the version corrupted every asset URL in the site
 
-- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=87 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
+- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=89 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
 - **The version is now digits-only, and the directory cannot be given at all.** A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.
 
 ## v1.15.13 - The installer's SSL block appended to .env through a symlink, as root
