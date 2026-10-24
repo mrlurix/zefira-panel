@@ -1257,6 +1257,21 @@ async function loadSrvSettings() {
     const cs = document.querySelector('[name="cdn_sni"]');
     if (ce) ce.checked = String(srv.cdn_enabled) === "1" || srv.cdn_enabled === true;
     if (cs) cs.value = srv.cdn_sni || "";
+    // Transport hardening fields live outside #srv-form, like REALITY above,
+    // so the generic form loop above never sees them.
+    const fp = document.querySelector('[name="tls_fp"]');
+    const obfs = document.querySelector('[name="hy2_obfs_password"]');
+    const hop = document.querySelector('[name="hy2_hop_ports"]');
+    const hopInt = document.querySelector('[name="hy2_hop_interval"]');
+    const perUserSni = document.querySelector('[name="reality_sni_per_user"]');
+    if (fp) fp.value = srv.tls_fp || "chrome";
+    if (obfs) obfs.value = srv.hy2_obfs_password || "";
+    if (hop) hop.value = srv.hy2_hop_ports || "";
+    if (hopInt) hopInt.value = srv.hy2_hop_interval != null ? srv.hy2_hop_interval : 30;
+    if (perUserSni) {
+      perUserSni.checked = String(srv.reality_sni_per_user) === "1"
+        || srv.reality_sni_per_user === true;
+    }
     // The public key is not a secret: "Copy Both Keys" used to copy an EMPTY
     // public_key after a reload because only Generate ever filled it.
     const rpub = document.querySelector('[name="reality_pub"]') || $("#reality-pub");
@@ -1310,6 +1325,21 @@ async function saveAllSettings() {
   body.block_direct_ip = f.block_direct_ip.checked;
   body.cdn_enabled = document.querySelector('[name="cdn_enabled"]').checked;
   body.cdn_sni = document.querySelector('[name="cdn_sni"]').value.trim();
+  const fpSel = document.querySelector('[name="tls_fp"]');
+  const obfsIn = document.querySelector('[name="hy2_obfs_password"]');
+  const hopIn = document.querySelector('[name="hy2_hop_ports"]');
+  const hopIntIn = document.querySelector('[name="hy2_hop_interval"]');
+  const perUserSniIn = document.querySelector('[name="reality_sni_per_user"]');
+  if (fpSel) body.tls_fp = fpSel.value;
+  if (obfsIn) body.hy2_obfs_password = obfsIn.value.trim();
+  if (hopIn) body.hy2_hop_ports = hopIn.value.trim();
+  if (hopIntIn) {
+    const hi = numInput(hopIntIn.value);
+    // A cleared interval must not 422 the whole save: 30 is the protocol
+    // default and the only value used when port hopping is off.
+    body.hy2_hop_interval = Number.isFinite(hi) ? hi : 30;
+  }
+  if (perUserSniIn) body.reality_sni_per_user = perUserSniIn.checked;
   // A NaN port would be sent as null and 422 the whole save; say which field.
   // Number.isFinite alone is not enough: it accepts 0, 70000 and 443.5, and the
   // schema is StrictInt(ge=1, le=65535). A rejected field then 422s the ENTIRE
@@ -1324,6 +1354,13 @@ async function saveAllSettings() {
       return;
     }
   }
+  if (body.hy2_hop_interval !== undefined &&
+      (!Number.isFinite(body.hy2_hop_interval)
+       || body.hy2_hop_interval < 5 || body.hy2_hop_interval > 300
+       || !Number.isInteger(body.hy2_hop_interval))) {
+    toast(t("msg.badHopInterval"), false);
+    return;
+  }
   try {
     await api("/api/settings", { method: "PUT", body });
     toast(t("msg.srvSaved"));
@@ -1332,6 +1369,11 @@ async function saveAllSettings() {
   }
 }
 bind("#save-reality-btn", "click", async (e) => {
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  try { await saveAllSettings(); } finally { btn.disabled = false; }
+});
+bind("#save-hardening-btn", "click", async (e) => {
   const btn = e.currentTarget;
   if (!guardBtn(btn)) return;
   try { await saveAllSettings(); } finally { btn.disabled = false; }

@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.58/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.59/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.58` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.59` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -104,6 +104,7 @@ Default login: `http://YOUR_SERVER_IP:8000`
 - Inbounds: define extra ports/hosts per protocol and every user gets links for all of them. Pin inbounds to server nodes — offline nodes are auto-excluded from links.
 - Server nodes: register remote servers with 5-minute health checks, latency and uptime; on-demand check, enable/disable, safe delete.
 - Anti-censorship: generate REALITY keys inside the panel, links use `xtls-rprx-vision` and rotate SNI automatically.
+- Transport hardening: pick the uTLS fingerprint (default `chrome`) written into VLESS/VMess/Trojan/REALITY links and Clash, give Hysteria2 a Salamander obfs password or a port-hopping range, and let each user get a stable REALITY SNI. The two Hysteria2 options are off by default and need the server configured to match; the fingerprint and per-user SNI need no server change.
 - BackPack tunnel nodes: create tunnels for your Iran/Kharej servers, download the setup guide with the token already filled in, and check if the Iran side is reachable. The panel is pinned to BackPack **v1.8.5** and exposes its newer options as real fields: a per-tunnel **traffic cap**, a **restart schedule** for both ends, **backup addresses** that fail over when the Iran host stops answering, and a **performance preset** (`turbo` / `aggressive` / `conservative` / `custom`). Each tunnel also carries its own **SNI** for the spoofing carrier.
 - QR codes for every subscription, ZIP download for configs.
 - AI assistant bubble: panel-only helper (Groq-first, OpenAI/Anthropic/Gemini/Ollama) for beginners.

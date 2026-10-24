@@ -35,6 +35,8 @@ import sys
 import urllib.error
 import urllib.request
 
+from protocols import TLS_FINGERPRINTS
+
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000").rstrip("/")
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
 PASSWORD = sys.argv[3] if len(sys.argv) > 3 else "YOUR_PASSWORD"
@@ -103,6 +105,17 @@ orig = body_json(raw)
 orig0 = dict(orig)
 check("GET /api/settings returns the panel settings", st == 200 and orig.get("domain") is not None,
       "status=%d keys=%d" % (st, len(orig)))
+_hard_keys = ("tls_fp", "hy2_obfs_password", "hy2_hop_ports",
+              "hy2_hop_interval", "reality_sni_per_user")
+check("the transport-hardening keys are present", all(k in orig for k in _hard_keys),
+      str([k for k in _hard_keys if k not in orig]))
+check("the transport-hardening keys have the documented types",
+      orig.get("tls_fp") in TLS_FINGERPRINTS
+      and isinstance(orig.get("hy2_obfs_password"), str)
+      and isinstance(orig.get("hy2_hop_ports"), str)
+      and isinstance(orig.get("hy2_hop_interval"), int)
+      and isinstance(orig.get("reality_sni_per_user"), bool),
+      str({k: orig.get(k) for k in _hard_keys}))
 
 # A marker that is definitely NOT what the operator set, changed and restored.
 MARKER = "settingscards.example.com"
@@ -163,7 +176,12 @@ _full.update({"sub_port": orig.get("sub_port"),
                "wg_pub": "TEST-WIREGUARD-PUBLIC-KEY",
                "block_direct_ip": True,
                "cdn_enabled": True,
-               "per_user_subdomain": True})
+               "per_user_subdomain": True,
+               "tls_fp": "firefox",
+               "hy2_obfs_password": "SettingsSeed123",
+               "hy2_hop_ports": "20000:20005, 443",
+               "hy2_hop_interval": 45,
+               "reality_sni_per_user": True})
 st, _, _ = req("PUT", "/api/settings", json.dumps(_full), AUTH)
 check("the suite can seed a known state", st == 200, "status=%d" % st)
 st, _, rawS = req("GET", "/api/settings", headers=AUTH)
@@ -173,6 +191,13 @@ check("...and the seed took: the key is set and the switches are on",
       and seeded.get("block_direct_ip") is True,
       str({_k: seeded.get(_k) for _k in ("wg_pub",
                                     "block_direct_ip")}))
+check("...and the hardening seed took (with the range normalised)",
+      seeded.get("tls_fp") == "firefox"
+      and seeded.get("hy2_obfs_password") == "SettingsSeed123"
+      and seeded.get("hy2_hop_ports") == "20000-20005,443"
+      and seeded.get("hy2_hop_interval") == 45
+      and seeded.get("reality_sni_per_user") is True,
+      str({_k: seeded.get(_k) for _k in _hard_keys}))
 orig = seeded
 _seeded = {"sub_port": orig.get("sub_port"),
            "hy2_port": orig.get("hy2_port"),
@@ -191,17 +216,49 @@ check("...and it did NOT erase the WireGuard key",
       after_ports.get("wg_pub") == orig.get("wg_pub"),
       "the key is %r, it was %r" % (after_ports.get("wg_pub"),
                                    orig.get("wg_pub")))
-for _sw in ("block_direct_ip", "cdn_enabled", "per_user_subdomain"):
+for _sw in ("block_direct_ip", "cdn_enabled", "per_user_subdomain",
+            "reality_sni_per_user"):
     check("...and it did NOT switch %s off by omission" % _sw,
           after_ports.get(_sw) == orig.get(_sw),
           "%s is %r, it was %r" % (_sw, after_ports.get(_sw),
                                   orig.get(_sw)))
+for _k, _want in (("tls_fp", "firefox"),
+                  ("hy2_obfs_password", "SettingsSeed123"),
+                  ("hy2_hop_ports", "20000-20005,443"),
+                  ("hy2_hop_interval", 45)):
+    check("...and it did NOT reset %s by omission" % _k,
+          after_ports.get(_k) == _want,
+          "%s is %r, it was %r" % (_k, after_ports.get(_k), _want))
 # and the switches come back as BOOLEANS, not as the strings "1"/"0"
 check("the switches are returned as booleans, not as \"1\"/\"0\"",
       all(isinstance(after_ports.get(_sw), bool) for _sw in
-          ("block_direct_ip", "cdn_enabled", "per_user_subdomain")),
+          ("block_direct_ip", "cdn_enabled", "per_user_subdomain",
+           "reality_sni_per_user")),
       str({_sw: type(after_ports.get(_sw)).__name__ for _sw in
-           ("block_direct_ip", "cdn_enabled", "per_user_subdomain")}))
+           ("block_direct_ip", "cdn_enabled", "per_user_subdomain",
+            "reality_sni_per_user")}))
+
+# Bad hardening values must be refused before anything is written. Each of
+# these would otherwise produce a link every client rejects, or silently
+# disable the feature, and the operator would not know which.
+for _key, _value, _label in (
+        ("tls_fp", "netscape", "an unknown TLS fingerprint"),
+        ("hy2_hop_ports", "70000", "an out-of-range hop port"),
+        ("hy2_hop_interval", 4, "a hop interval below 5 seconds"),
+        ("hy2_obfs_password", "abc", "an obfs password shorter than 4")):
+    st, _, pb = req("PUT", "/api/settings",
+                    json.dumps({**orig, _key: _value}), AUTH)
+    check("%s is refused with 422" % _label, st == 422,
+          "status=%d %s" % (st, str(pb)[:70]))
+st, _, rawB = req("GET", "/api/settings", headers=AUTH)
+after_bad = body_json(rawB)
+check("the refused hardening PUTs changed nothing",
+      after_bad.get("tls_fp") == "firefox"
+      and after_bad.get("hy2_obfs_password") == "SettingsSeed123"
+      and after_bad.get("hy2_hop_ports") == "20000-20005,443"
+      and after_bad.get("hy2_hop_interval") == 45
+      and after_bad.get("reality_sni_per_user") is True,
+      str({_k: after_bad.get(_k) for _k in _hard_keys}))
 
 # Put the settings back exactly as they were. Without this the switch
 # stays on and the next run of ANY suite cannot log in over an IP host.
@@ -210,9 +267,14 @@ st, _, rawR = req("GET", "/api/settings", headers=AUTH)
 restored = body_json(rawR)
 check("the suite puts the settings back, switch and all",
       restored.get("block_direct_ip") == orig0.get("block_direct_ip")
-      and restored.get("wg_pub") == orig0.get("wg_pub"),
-      str({_k: restored.get(_k) for _k in ("block_direct_ip",
-                                       "wg_pub")}))
+      and restored.get("wg_pub") == orig0.get("wg_pub")
+      and restored.get("tls_fp") == orig0.get("tls_fp")
+      and restored.get("hy2_obfs_password") == orig0.get("hy2_obfs_password")
+      and restored.get("hy2_hop_ports") == orig0.get("hy2_hop_ports")
+      and restored.get("hy2_hop_interval") == orig0.get("hy2_hop_interval")
+      and restored.get("reality_sni_per_user") == orig0.get("reality_sni_per_user"),
+      str({_k: restored.get(_k) for _k in ("block_direct_ip", "wg_pub",
+                                          "tls_fp", "hy2_hop_ports")}))
 
 print("\n=== 3. AI Assistant ===")
 st, _, raw = req("GET", "/api/ai/settings", headers=AUTH)

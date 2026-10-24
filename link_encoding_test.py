@@ -25,7 +25,7 @@ spelling.
 import io
 import os
 import sys
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -209,6 +209,212 @@ for cand in ("a#b", "a b", "a\nb", "مشتری"):
         check(f"inbound name {cand!r} is refused", False, "it was ACCEPTED")
     except ValidationError:
         check(f"inbound name {cand!r} is refused", True)
+
+print()
+print("=== 6. transport hardening defaults keep the links byte-identical ===")
+# These five settings were added for operators who need more than the stock
+# profile. The invariant that matters on upgrade is the other direction: with
+# every default in place, the output must be exactly what the panel emitted
+# before the settings existed.
+DEF = P.resolve_srv({})
+check("resolve_srv fills every hardening key",
+      all(k in DEF for k in ("tls_fp", "hy2_obfs_password", "hy2_hop_ports",
+                             "hy2_hop_interval", "reality_sni_per_user")),
+      str(sorted(DEF)))
+check("the default fingerprint is chrome", DEF.get("tls_fp") == "chrome",
+      str(DEF.get("tls_fp")))
+check("Hysteria2 obfs is off by default", DEF.get("hy2_obfs_password") == "",
+      repr(DEF.get("hy2_obfs_password")))
+check("Hysteria2 port hopping is off by default", DEF.get("hy2_hop_ports") == "",
+      repr(DEF.get("hy2_hop_ports")))
+check("the default hop interval is 30 seconds", DEF.get("hy2_hop_interval") == 30,
+      str(DEF.get("hy2_hop_interval")))
+check("per-user REALITY SNI is off by default", DEF.get("reality_sni_per_user") == "0",
+      repr(DEF.get("reality_sni_per_user")))
+
+_D = DEF["domain"]
+_default_hy2 = f"hysteria2://{SEC}@{_D}:{DEF['hy2_port']}/?sni={_D}&insecure=0#alice"
+check("the default Hysteria2 link is unchanged",
+      P._v2ray_link("hysteria2", SEC, "alice", 1, DEF) == _default_hy2,
+      P._v2ray_link("hysteria2", SEC, "alice", 1, DEF))
+
+print()
+print("=== 7. the TLS fingerprint reaches every protocol and Clash ===")
+
+
+def clash_proxies(text):
+    """Parse the `  - {json}` proxy lines the builder emits."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith("  - {"):
+            out.append(json.loads(line.strip()[2:]))
+    return out
+
+
+FP_SRV = dict(SRV)
+FP_SRV["tls_fp"] = "firefox"
+vless_fp = P._v2ray_link("vless", SEC, "alice", 1, FP_SRV)
+check("VLESS carries the configured fingerprint", "&fp=firefox&" in vless_fp,
+      vless_fp)
+vmess_fp = P._v2ray_link("vmess", SEC, "alice", 1, FP_SRV)
+_vp = vmess_fp[len("vmess://"):]
+_vp += "=" * (-len(_vp) % 4)
+_vj = json.loads(base64.urlsafe_b64decode(_vp).decode("utf-8"))
+check("VMess carries the configured fingerprint in its JSON",
+      _vj.get("fp") == "firefox", str(_vj.get("fp")))
+trojan_fp = P._v2ray_link("trojan", SEC, "alice", 1, FP_SRV)
+check("Trojan carries the configured fingerprint", "&fp=firefox&" in trojan_fp,
+      trojan_fp)
+reality_fp = P._reality_link(SEC, "alice", 1, FP_SRV)
+check("REALITY carries the configured fingerprint", "&fp=firefox&" in reality_fp,
+      reality_fp)
+
+FP_USER = {
+    "username": "alice",
+    "protocols": ["vless", "vmess", "trojan", "reality", "hysteria2"],
+    "secret_map": {"vless": SEC, "vmess": SEC, "trojan": SEC,
+                   "reality": SEC, "hysteria2": SEC},
+}
+fp_proxies = clash_proxies(P.clash_yaml(FP_USER, FP_SRV))
+_fp_tls = [p for p in fp_proxies if p.get("type") in ("vless", "vmess", "trojan")]
+check("Clash carries the configured client fingerprint on every TLS proxy",
+      len(_fp_tls) == 4 and all(p.get("client-fingerprint") == "firefox"
+                                for p in _fp_tls),
+      str([p.get("client-fingerprint") for p in fp_proxies]))
+
+check("an unknown fingerprint is refused by resolve_srv",
+      P.resolve_srv({"tls_fp": "netscape"})["tls_fp"] == "chrome",
+      str(P.resolve_srv({"tls_fp": "netscape"})["tls_fp"]))
+check("a smuggled fingerprint cannot reach a query string",
+      P.resolve_srv({"tls_fp": "chrome&evil=1"})["tls_fp"] == "chrome",
+      str(P.resolve_srv({"tls_fp": "chrome&evil=1"})["tls_fp"]))
+
+print()
+print("=== 8. Hysteria2 obfs and port hopping are opt-in and encoded ===")
+HY = dict(SRV)
+HY.update({
+    "hy2_obfs_password": "p@ss word&x",
+    "hy2_hop_ports": "20000:20005, 443",
+    "hy2_hop_interval": 45,
+})
+hy_link = P._v2ray_link("hysteria2", SEC, "alice", 1, HY)
+_hy = urlsplit(hy_link)
+_hyq = parse_qs(_hy.query)
+check("the authority keeps a numeric port for older clients", _hy.port == 8443,
+      str(_hy.port))
+check("obfs=salamander is emitted only when a password is set",
+      _hyq.get("obfs") == ["salamander"], str(_hyq))
+check("the obfs password is percent-encoded and round-trips",
+      _hyq.get("obfs-password") == ["p@ss word&x"], str(_hyq.get("obfs-password")))
+check("a colon range is normalised for the link",
+      _hyq.get("mport") == ["20000-20005,443"], str(_hyq.get("mport")))
+check("hop-interval is emitted with port hopping",
+      _hyq.get("hop-interval") == ["45"], str(_hyq.get("hop-interval")))
+
+_obfs_only = dict(SRV, hy2_obfs_password="obfs-secret")
+_ol = P._v2ray_link("hysteria2", SEC, "alice", 1, _obfs_only)
+check("obfs alone does not enable port hopping",
+      "mport=" not in _ol and "hop-interval" not in _ol, _ol)
+_hop_only = dict(SRV, hy2_hop_ports="20000-20005")
+_hl = P._v2ray_link("hysteria2", SEC, "alice", 1, _hop_only)
+check("port hopping alone does not enable obfs",
+      "obfs=" not in _hl and "obfs-password" not in _hl, _hl)
+check("a default link carries no hardening parameters",
+      not any(k in _default_hy2 for k in ("obfs=", "mport=", "hop-interval")),
+      _default_hy2)
+
+hy_proxies = clash_proxies(P.clash_yaml(
+    {"username": "alice", "protocols": ["hysteria2"],
+     "secret_map": {"hysteria2": SEC}}, HY))
+check("Clash carries the Hysteria2 obfs fields",
+      hy_proxies and hy_proxies[0].get("obfs") == "salamander"
+      and hy_proxies[0].get("obfs-password") == "p@ss word&x",
+      str(hy_proxies[:1]))
+check("Clash carries ports and hop-interval, and keeps the anchor port",
+      hy_proxies[0].get("port") == 8443
+      and hy_proxies[0].get("ports") == "20000-20005,443"
+      and hy_proxies[0].get("hop-interval") == 45,
+      str(hy_proxies[:1]))
+check("a default Clash Hysteria2 proxy stays minimal",
+      not any(k in clash_proxies(P.clash_yaml(
+          {"username": "alice", "protocols": ["hysteria2"],
+           "secret_map": {"hysteria2": SEC}}, SRV))[0]
+          for k in ("obfs", "obfs-password", "ports", "hop-interval")))
+
+print()
+print("=== 9. per-user REALITY SNI agrees between links and Clash ===")
+PS = dict(SRV)
+PS["reality_sni"] = "one.example.com,two.example.com,three.example.com"
+PS["reality_sni_per_user"] = "1"
+_sni_pool = {"one.example.com", "two.example.com", "three.example.com"}
+_sni_user = P._reality_sni(PS, 1, SEC)
+check("the per-user SNI is stable across link indexes",
+      _sni_user == P._reality_sni(PS, 9, SEC), f"{_sni_user}")
+check("the per-user SNI comes from the configured list", _sni_user in _sni_pool,
+      _sni_user)
+_spread = {P._reality_sni(PS, 1, f"user-{i}") for i in range(64)}
+check("different users are spread across the list", len(_spread) > 1, str(_spread))
+check("every per-user choice stays inside the list", _spread <= _sni_pool,
+      str(_spread))
+
+OFF_SRV = dict(SRV)
+OFF_SRV["reality_sni_per_user"] = "0"
+check("with the option off, the first link uses the first SNI",
+      P._reality_sni(OFF_SRV, 1, SEC) == "a.example.com",
+      P._reality_sni(OFF_SRV, 1, SEC))
+
+_ps_link = P._reality_link(SEC, "alice", 1, PS)
+_ps_sni = parse_qs(urlsplit(_ps_link).query).get("sni", [""])[0]
+_ps_clash = clash_proxies(P.clash_yaml(
+    {"username": "alice", "protocols": ["reality"],
+     "secret_map": {"reality": SEC}}, PS))[0]
+check("the REALITY link and the Clash proxy pick the same per-user SNI",
+      _ps_sni == _ps_clash.get("servername") and _ps_sni in _sni_pool,
+      f"link={_ps_sni} clash={_ps_clash.get('servername')}")
+
+print()
+print("=== 10. hand-edited rows and backups are normalised at the builder ===")
+_BAD = P.resolve_srv({
+    "tls_fp": "netscape",
+    "hy2_obfs_password": "x",
+    "hy2_hop_ports": "70000",
+    "hy2_hop_interval": "999",
+    "reality_sni_per_user": "maybe",
+})
+check("a bad fingerprint falls back to chrome", _BAD["tls_fp"] == "chrome",
+      _BAD["tls_fp"])
+check("a too-short obfs password disables obfs", _BAD["hy2_obfs_password"] == "",
+      repr(_BAD["hy2_obfs_password"]))
+check("an unusable hop range disables hopping", _BAD["hy2_hop_ports"] == "",
+      repr(_BAD["hy2_hop_ports"]))
+check("an out-of-range hop interval falls back to 30",
+      _BAD["hy2_hop_interval"] == 30, str(_BAD["hy2_hop_interval"]))
+check("an unknown switch value is stored as off",
+      _BAD["reality_sni_per_user"] == "0", repr(_BAD["reality_sni_per_user"]))
+
+_GOOD = P.resolve_srv({
+    "tls_fp": " FIREFOX ",
+    "hy2_obfs_password": "  abcd  ",
+    "hy2_hop_ports": "20000:20005, 443",
+    "hy2_hop_interval": "45",
+    "reality_sni_per_user": "yes",
+})
+check("a valid fingerprint is lowercased and trimmed",
+      _GOOD["tls_fp"] == "firefox", _GOOD["tls_fp"])
+check("a valid obfs password is trimmed", _GOOD["hy2_obfs_password"] == "abcd",
+      repr(_GOOD["hy2_obfs_password"]))
+check("a valid hop range is canonicalised",
+      _GOOD["hy2_hop_ports"] == "20000-20005,443", _GOOD["hy2_hop_ports"])
+check("a numeric interval string becomes an int",
+      _GOOD["hy2_hop_interval"] == 45, str(_GOOD["hy2_hop_interval"]))
+check("a truthy switch is stored as \"1\"", _GOOD["reality_sni_per_user"] == "1",
+      repr(_GOOD["reality_sni_per_user"]))
+check("a boolean interval is refused rather than read as 1",
+      P._safe_hop_interval(True) == 30, str(P._safe_hop_interval(True)))
+check("normalize_hop_ports rejects a reversed range",
+      P.normalize_hop_ports("20000-19999") == "")
+check("normalize_hop_ports rejects an empty member",
+      P.normalize_hop_ports("1,,2") == "")
 
 print(f"  === {n - len(fails)}/{n} checks passed ===")
 sys.exit(1 if fails else 0)

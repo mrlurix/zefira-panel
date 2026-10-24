@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSetup">Setup guides — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=89">
+<link rel="stylesheet" href="assets/style.css?v=90">
 </head>
 <body>
 <header class="topbar">
@@ -77,6 +77,15 @@
 <li><b data-i18n="stg.diagnose">Diagnose 404s:</b> <span data-i18n="stg.diagnoseRest">user expired/disabled/out-of-volume? Then Settings domain/ports, server firewall ports, REALITY keys / WireGuard public key. Sub loads but clients can't connect = server-side ports or keys, almost always.</span></li>
 </ol>
 
+<h3 id="transport-hardening" data-i18n="stg.hardTitle">Transport hardening: server and client</h3>
+<p data-i18n="stg.hardIntro">The panel's Transport Hardening card changes what it writes into links and Clash profiles. Two of those settings need a matching server change before they can work; the TLS fingerprint and per-user REALITY SNI need none.</p>
+<ul>
+<li><b data-i18n="stg.hardObfsBold">Hysteria2 obfs (Salamander):</b> <span data-i18n="stg.hardObfs">set the same password on the server before enabling it in the panel. A minimal server fragment:</span><br><code>obfs: {type: salamander, salamander: {password: YOUR_PASSWORD}}</code><br><span data-i18n="stg.hardObfs2">Every Hysteria2 link then carries</span> <code>obfs=salamander&amp;obfs-password=…</code><span data-i18n="stg.hardObfs3">, and Clash carries the same two keys. A mismatched password fails the handshake, not the TCP connection — the client just times out.</span></li>
+<li><b data-i18n="stg.hardHopBold">Hysteria2 port hopping:</b> <span data-i18n="stg.hardHop">listen on the range (Hysteria's Linux server can do this directly) or DNAT the range to the normal port, then open the same UDP range in the firewall.</span><br><code>listen: :20000-50000</code><br><span data-i18n="stg.hardHop2">Manual DNAT fallback:</span> <code>iptables -t nat -A PREROUTING -p udp --dport 20000:50000 -j REDIRECT --to-ports 8443</code><br><span data-i18n="stg.hardHop3">Links use</span> <code>mport=…&amp;hop-interval=…</code><span data-i18n="stg.hardHop4"> and Clash uses</span> <code>ports:</code> <span data-i18n="stg.hardHop5">plus</span> <code>hop-interval:</code><span data-i18n="stg.hardHop6">. Port hopping does not help when the ISP blocks UDP entirely.</span></li>
+<li><b data-i18n="stg.hardFragBold">TLS fragmentation is a client setting:</b> <span data-i18n="stg.hardFrag">the panel cannot put it in a share link. Turn it on in the client when the TLS handshake itself is being blocked: sing-box</span> <code>tls.fragment</code><span data-i18n="stg.hardFrag2">, Hiddify's Fragment switch, or v2rayN/v2rayNG's Fragment option. It is not needed on a clean route and adds overhead.</span></li>
+</ul>
+<div class="callout warn"><span data-i18n="stg.hardWarn">Do not enable obfs or port hopping until the server matches.</span> <span data-i18n="stg.hardWarn2">Both are off by default for exactly that reason: turning them on without the server-side change breaks every Hysteria2 link while the panel still reports a healthy save.</span></div>
+
 <h2 id="point-an-ai-client" data-i18n="stg.mcpTitle">Point an AI client at the panel</h2>
 <ol>
   <li data-i18n="stg.mcpA">Switch the MCP server on in the panel, and create a token with the <code>full</code> scope under Developer API.</li>
@@ -90,8 +99,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=89"></script>
-<script src="assets/docs.js?v=89"></script>
-<script src="assets/support-ai.js?v=89"></script>
+<script src="assets/i18n.js?v=90"></script>
+<script src="assets/docs.js?v=90"></script>
+<script src="assets/support-ai.js?v=90"></script>
 </body>
 </html>

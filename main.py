@@ -211,7 +211,16 @@ SRV_KEYS = {
     "ovpn_port", "ovpn_proto", "reality_port", "reality_sni", "reality_pub",
     "l2tp_port", "cisco_port", "socks5_port",
     "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip",
+    "tls_fp", "hy2_obfs_password", "hy2_hop_ports", "hy2_hop_interval",
+    "reality_sni_per_user",
 }
+# Everything in SRV_KEYS except `reality_pub`, which is rotated by its own
+# endpoint and is never accepted in a settings PUT. One list, used by both the
+# write loop and the cache invalidation, so the two cannot drift apart.
+SRV_WRITE_KEYS = tuple(sorted(SRV_KEYS - {"reality_pub"}))
+SRV_SWITCH_KEYS = (
+    "per_user_subdomain", "cdn_enabled", "block_direct_ip", "reality_sni_per_user",
+)
 PENDING_YEAR = 2098
 
 sub_limiter = SlidingWindowLimiter(max_events=120, window_seconds=60)
@@ -2504,12 +2513,12 @@ def api_system(admin: Admin = Depends(require_admin)):
 def api_settings_get(admin: Admin = Depends(require_admin)):
     srv = load_srv()
     out = {k: srv[k] for k in sorted(SRV_KEYS)}
-    # The three switches are STORED as "1"/"0" but are DECLARED bool, so a
-    # client with a typed decoder was handed the string "0" where the model
-    # promised False. Hand back real booleans. The front end accepts both -
-    # it tests `String(v) === "1" || v === true` - and a bot author gets the
-    # type the reference documents.
-    for k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
+    # The switches are STORED as "1"/"0" but are DECLARED bool, so a client
+    # with a typed decoder was handed the string "0" where the model promised
+    # False. Hand back real booleans. The front end accepts both - it tests
+    # `String(v) === "1" || v === true` - and a bot author gets the type the
+    # reference documents.
+    for k in SRV_SWITCH_KEYS:
         if k in out:
             out[k] = out[k] in ("1", "true", "True", 1, True)
     return out
@@ -2518,14 +2527,14 @@ def api_settings_get(admin: Admin = Depends(require_admin)):
 @app.put("/api/settings")
 def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(require_admin)):
     with db.s() as s:
-        for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
+        for k in SRV_WRITE_KEYS:
             v = getattr(data, k)
             # None means the field was NOT sent, so the stored value stands.
             # Skipping it is the whole point: without this, a partial request
             # wrote the model's defaults over every switch it did not mention.
             if v is None:
                 continue
-            if k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip"):
+            if k in SRV_SWITCH_KEYS:
                 v = "1" if v else "0"
             row = s.get(Setting, k)
             if row is None:
@@ -2534,7 +2543,7 @@ def api_settings_put(data: SettingsIn, request: Request, admin: Admin = Depends(
                 row.value = str(v)
         audit(s, "SETTINGS_UPDATE", f"by {admin.username}", client_ip(request))
         _commit(s)
-    for k in ("domain", "sub_port", "hy2_port", "wg_port", "wg_pub", "dns", "ovpn_port", "ovpn_proto", "l2tp_port", "cisco_port", "socks5_port", "reality_port", "reality_sni", "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip"):
+    for k in SRV_WRITE_KEYS:
         _settings_cache.pop(k, None)
     log.info("Server settings updated by %s", admin.username)
     srv = load_srv()
@@ -5817,10 +5826,30 @@ def _apply_restore_tx_locked(data: RestoreIn, request: Request, admin: Admin):
                         ok = False
                 elif k in ("ovpn_proto",):
                     ok = sval in ("udp", "tcp")
-                elif k in ("per_user_subdomain", "cdn_enabled"):
+                elif k in ("per_user_subdomain", "cdn_enabled", "block_direct_ip",
+                           "reality_sni_per_user"):
                     ok = sval.lower() in ("0", "1", "true", "false", "yes", "no", "on", "off", "")
                     if ok:
                         sval = "1" if sval.lower() in ("1", "true", "yes", "on") else "0"
+                elif k == "tls_fp":
+                    ok = sval in protocols.TLS_FINGERPRINTS
+                elif k == "hy2_hop_interval":
+                    try:
+                        ok = 5 <= int(sval) <= 300
+                    except (TypeError, ValueError):
+                        ok = False
+                elif k == "hy2_hop_ports":
+                    # Normalise the same way the live API and resolve_srv do,
+                    # so a hand-written backup cannot plant "70000" or "1,,2".
+                    if sval:
+                        sval = protocols.normalize_hop_ports(sval)
+                        ok = bool(sval)
+                elif k == "hy2_obfs_password":
+                    ok = (
+                        len(sval) <= 128
+                        and not any(ord(ch) < 32 or ord(ch) == 127 for ch in sval)
+                        and (not sval or len(sval) >= 4)
+                    )
                 elif k in ("theme_accent", "theme_bg", "theme_card", "theme_text", "theme_muted"):
                     if sval and not re.fullmatch(r"#[0-9a-fA-F]{6}", sval):
                         ok = False

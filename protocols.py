@@ -33,6 +33,19 @@ TUNNEL_TRANSPORTS = ["tcp", "tcp-mux", "tcp-stealth", "tcp-pck", "udp", "kcp", "
 SINGLE_ENDPOINT = {"wireguard", "openvpn", "l2tp", "cisco", "socks5"}
 PENDING_SENTINEL = datetime(2099, 1, 1)
 
+# TLS fingerprints a client profile may request. This is the allowlist used by
+# the builders as well as the UI list: links and Clash profiles are generated
+# from DB rows and restored backups, so a value outside this tuple must never
+# reach a query string or a config.
+TLS_FINGERPRINTS = (
+    "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
+)
+# Hysteria2 port hopping is opt-in and server-dependent. 30s is the protocol
+# default and 5s its documented minimum.
+HY2_HOP_INTERVAL_DEFAULT = 30
+HY2_HOP_INTERVAL_MIN = 5
+HY2_HOP_INTERVAL_MAX = 300
+
 CA_CERT_PATH = INSTANCE_DIR / "ca.crt"
 CA_KEY_PATH = INSTANCE_DIR / "ca.key"
 
@@ -57,6 +70,14 @@ DEFAULT_SRV = {
     "cdn_enabled": "0",
     "cdn_sni": "",
     "block_direct_ip": "0",
+    # Transport hardening. Every default here preserves the links this panel
+    # emitted before the options existed; the server-dependent switches are
+    # off so an upgrade cannot break a working deployment.
+    "tls_fp": "chrome",
+    "hy2_obfs_password": "",
+    "hy2_hop_ports": "",
+    "hy2_hop_interval": HY2_HOP_INTERVAL_DEFAULT,
+    "reality_sni_per_user": "0",
 }
 
 
@@ -237,7 +258,89 @@ def resolve_srv(db_values: dict) -> dict:
         srv["domain"] = DOMAIN
     if srv.get("ovpn_proto") not in ("udp", "tcp"):
         srv["ovpn_proto"] = "udp"
+    # Hand-edited rows and restored backups bypass the API schema. Normalise
+    # the hardening values here, at the one place every generator reads, so a
+    # hostile or mistyped value cannot be interpolated into a link.
+    srv["tls_fp"] = _safe_fp(srv.get("tls_fp"))
+    srv["hy2_obfs_password"] = _safe_obfs_password(srv.get("hy2_obfs_password"))
+    srv["hy2_hop_ports"] = normalize_hop_ports(srv.get("hy2_hop_ports"))
+    srv["hy2_hop_interval"] = _safe_hop_interval(srv.get("hy2_hop_interval"))
+    srv["reality_sni_per_user"] = "1" if _truthy(srv.get("reality_sni_per_user")) else "0"
     return srv
+
+
+def _truthy(value) -> bool:
+    """The same switch spelling the rest of the panel accepts."""
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _safe_fp(value) -> str:
+    """A fingerprint from the allowlist, else the shipped default."""
+    v = str(value or "").strip().lower()
+    return v if v in TLS_FINGERPRINTS else "chrome"
+
+
+def _tls_fp(srv: dict) -> str:
+    return _safe_fp(srv.get("tls_fp"))
+
+
+def normalize_hop_ports(value) -> str:
+    """`20000-50000,443` from a stored value, or "" when it is unusable.
+
+    Hysteria2 clients, sing-box and Mihomo all accept comma-separated single
+    ports and inclusive ranges; the Hysteria server spells a range with a
+    colon (`listen: :20000-50000`), so that spelling is normalised too.
+    Invalid input disables hopping as a whole: emitting half a range would
+    send clients to ports nobody opened.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parts = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip().replace(":", "-")
+        m = re.fullmatch(r"(\d{1,5})(?:-(\d{1,5}))?", chunk)
+        if not m:
+            return ""
+        lo = int(m.group(1))
+        hi = int(m.group(2)) if m.group(2) else lo
+        if not (1 <= lo <= hi <= 65535):
+            return ""
+        parts.append(str(lo) if lo == hi else f"{lo}-{hi}")
+    out = ",".join(parts)
+    return out if len(out) <= 512 else ""
+
+
+def _safe_hop_interval(value) -> int:
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return HY2_HOP_INTERVAL_DEFAULT
+    if n < HY2_HOP_INTERVAL_MIN or n > HY2_HOP_INTERVAL_MAX:
+        return HY2_HOP_INTERVAL_DEFAULT
+    return n
+
+
+def _safe_obfs_password(value) -> str:
+    """The Salamander password, or "" (feature off) when it is unusable.
+
+    Control characters are refused rather than stripped: silently repairing
+    the password would hand the client a credential the server does not have,
+    and every Hysteria2 connection would fail with no clue why.
+    """
+    v = str(value or "")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+        return ""
+    v = v.strip()
+    # Salamander needs a non-trivial shared secret. Four is the floor used by
+    # the server implementations this panel targets.
+    if len(v) < 4 or len(v) > 128:
+        return ""
+    return v
 
 
 def _env_port(value) -> int | None:
@@ -343,10 +446,11 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     # today, but the fragment is the one unencoded interpolation left in the
     # link and a legacy row must not be able to inject a second line.
     name = _q(username, safe="")
+    fp = _tls_fp(srv)
     if protocol == "vless":
         return (
             f"vless://{secret}@{host}:{srv['sub_port']}?encryption=none&security=tls"
-            f"&sni={sni}&fp=chrome&type=ws&host={host}&path=%2Fzefira#{name}"
+            f"&sni={sni}&fp={fp}&type=ws&host={host}&path=%2Fzefira#{name}"
         )
     if protocol == "vmess":
         obj = {
@@ -363,12 +467,16 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
             "path": "/zefira",
             "tls": "tls",
             "sni": sni,
+            # v2rayN's JSON schema carries the uTLS fingerprint here. It was
+            # absent before, so every VMess client used its own default and
+            # the panel could not make the profile match the other protocols.
+            "fp": fp,
         }
         return "vmess://" + _b64(json.dumps(obj, separators=(",", ":")))
     if protocol == "trojan":
         return (
             f"trojan://{secret}@{host}:{srv['sub_port']}?security=tls&sni={sni}"
-            f"&type=ws&host={host}&path=%2Fzefira&allowInsecure=0#{name}"
+            f"&fp={fp}&type=ws&host={host}&path=%2Fzefira&allowInsecure=0#{name}"
         )
     if protocol == "ss":
         # SIP002 mandates URL-safe base64 without padding (strict clients
@@ -380,9 +488,23 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     if protocol == "hysteria2":
         # The spec's grammar has the slash before the query ("host:port/?..."):
         # importers that split on "/?" lost the port and SNI.
+        query = [f"sni={sni}", "insecure=0"]
+        obfs = _safe_obfs_password(srv.get("hy2_obfs_password"))
+        if obfs:
+            # Official URI parameters (Salamander). The server must be started
+            # with the same obfs type and password or every connection dies.
+            query.append("obfs=salamander")
+            query.append("obfs-password=" + _q(obfs, safe=""))
+        hop_ports = normalize_hop_ports(srv.get("hy2_hop_ports"))
+        if hop_ports:
+            # The official multi-port form lives in the authority, but v2rayN,
+            # Xray-core, Shadowrocket and Sub-Store all read `mport`, while a
+            # numeric authority port keeps the URL parseable by older clients.
+            query.append("mport=" + _q(hop_ports, safe=","))
+            query.append(f"hop-interval={_safe_hop_interval(srv.get('hy2_hop_interval'))}")
         return (
-            f"hysteria2://{secret}@{host}:{srv['hy2_port']}/"
-            f"?sni={sni}&insecure=0#{_q(username, safe='')}"
+            f"hysteria2://{secret}@{host}:{srv['hy2_port']}/?"
+            f"{'&'.join(query)}#{_q(username, safe='')}"
         )
     return None
 
@@ -395,18 +517,32 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
 DEFAULT_REALITY_SNI = "www.yahoo.com,www.samsung.com,www.microsoft.com"
 
 
-def _reality_sni(srv: dict, index: int = 1) -> str:
+def _reality_sni(srv: dict, index: int = 1, secret: str = "") -> str:
     """The SNI for REALITY link `index`, rotating through the stored list.
 
     Both the share links and the Clash config call this, so the two can never
     disagree about which servername a given link uses (the Clash builder used
     to hard-pin the first entry).
+
+    With `reality_sni_per_user` on, a stable per-user choice replaces the
+    index rotation: two customers no longer share the same servername, which
+    makes traffic correlation harder. The choice is derived from the secret,
+    so the share link, the Clash profile and every later subscription fetch
+    agree. The option is off by default because every listed SNI must exist in
+    the server's REALITY `serverNames`.
     """
     raw = (srv.get("reality_sni") or "").strip() or DEFAULT_REALITY_SNI
     sni_list = [s.strip() for s in raw.split(",") if s.strip()]
     if not sni_list:
         sni_list = [s.strip() for s in DEFAULT_REALITY_SNI.split(",") if s.strip()]
-    return sni_list[(max(1, int(index or 1)) - 1) % len(sni_list)]
+    if secret and _truthy(srv.get("reality_sni_per_user")):
+        digest = hashlib.sha256(f"zefira-reality-sni:{secret}".encode()).digest()
+        return sni_list[int.from_bytes(digest[:4], "big") % len(sni_list)]
+    try:
+        i = max(1, int(index or 1))
+    except (TypeError, ValueError):
+        i = 1
+    return sni_list[(i - 1) % len(sni_list)]
 
 
 def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | None:
@@ -419,14 +555,14 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
     # rather than ship a guaranteed-dead link to the customer.
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", pub or ""):
         return None
-    sni = _reality_sni(srv, index)
+    sni = _reality_sni(srv, index, secret)
     sni = _q(sni, safe="")
     sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
     name = _q(username, safe="")
     return (
         f"vless://{secret}@{host}:{srv['reality_port']}?"
         f"encryption=none&security=reality&pbk={pub}&sid={sid}"
-        f"&sni={sni}&fp=chrome&type=tcp&flow=xtls-rprx-vision"
+        f"&sni={sni}&fp={_tls_fp(srv)}&type=tcp&flow=xtls-rprx-vision"
         f"&headerType=none#{name}"
     )
 
@@ -567,6 +703,7 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
                 "name": n, "type": "vmess", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "uuid": sec, "alterId": 0, "cipher": "auto",
                 "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff),
+                "client-fingerprint": _tls_fp(vsrv),
             })
     if "vless" in protos and secrets_map.get("vless"):
         sec = secrets_map["vless"]
@@ -577,7 +714,8 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             proxies.append({
                 "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "uuid": sec, "tls": True, "servername": sni_eff,
-                "network": "ws", "ws-opts": ws_opts(host_eff), "client-fingerprint": "chrome",
+                "network": "ws", "ws-opts": ws_opts(host_eff),
+                "client-fingerprint": _tls_fp(vsrv),
             })
     if "reality" in protos and secrets_map.get("reality"):
         sec = secrets_map["reality"]
@@ -589,7 +727,7 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             # Clash entry used to hard-pin the first SNI while the vless://
             # link for the same user rotated, so one customer got two
             # different REALITY servernames.
-            sni = _reality_sni(vsrv, r_idx)
+            sni = _reality_sni(vsrv, r_idx, sec)
             sid = hashlib.sha1(f"{sec}:{r_idx}".encode()).hexdigest()[:8]
             # Same 43-char allowlist as the link builder: skip misconfigured
             # REALITY here too instead of shipping a dead proxy.
@@ -601,7 +739,7 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             proxies.append({
                 "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["reality_port"]),
                 "uuid": sec, "flow": "xtls-rprx-vision",
-                "tls": True, "servername": sni, "client-fingerprint": "chrome",
+                "tls": True, "servername": sni, "client-fingerprint": _tls_fp(vsrv),
                 "reality-opts": {"public-key": rpub, "short-id": sid},
             })
     if "trojan" in protos and secrets_map.get("trojan"):
@@ -614,6 +752,7 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
                 "name": n, "type": "trojan", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "password": sec, "sni": sni_eff, "udp": True,
                 "network": "ws", "ws-opts": ws_opts(host_eff),
+                "client-fingerprint": _tls_fp(vsrv),
             })
     if "ss" in protos and secrets_map.get("ss"):
         sec = secrets_map["ss"]
@@ -631,10 +770,22 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             host_eff, sni_eff = _hs(sec, vsrv)
             n = f"Zefira-{u['username']}-Hy2{_sfx(ilabel)}"
             names.append(n)
-            proxies.append({
+            proxy = {
                 "name": n, "type": "hysteria2", "server": host_eff, "port": int(vsrv["hy2_port"]),
                 "password": sec, "sni": sni_eff,
-            })
+            }
+            obfs = _safe_obfs_password(vsrv.get("hy2_obfs_password"))
+            if obfs:
+                proxy["obfs"] = "salamander"
+                proxy["obfs-password"] = obfs
+            hop_ports = normalize_hop_ports(vsrv.get("hy2_hop_ports"))
+            if hop_ports:
+                # Mihomo spells the range `ports` and takes seconds, not a
+                # duration string. `port` stays the anchor the server listens
+                # on so clients that ignore `ports` still connect.
+                proxy["ports"] = hop_ports
+                proxy["hop-interval"] = _safe_hop_interval(vsrv.get("hy2_hop_interval"))
+            proxies.append(proxy)
     if "socks5" in protos and secrets_map.get("socks5"):
         sec = secrets_map["socks5"]
         host_eff = _effective_host(sec, srv)

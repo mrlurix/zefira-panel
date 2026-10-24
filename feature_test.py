@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlsplit
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://127.0.0.1:8000"
 ADMIN = sys.argv[2] if len(sys.argv) > 2 else "admin"
@@ -95,6 +96,18 @@ def decode_sub(body: bytes) -> str:
         return base64.b64decode(body).decode("utf-8", "replace")
     except Exception:
         return txt
+
+
+def clash_proxies(text: str) -> list:
+    """Parse the `  - {json}` proxy lines the panel emits."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith("  - {"):
+            try:
+                out.append(json.loads(line.strip()[2:]))
+            except ValueError:
+                pass
+    return out
 
 
 BROWSER_UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"}
@@ -528,6 +541,8 @@ SAVE["settings"].update({
     "socks5_port": 1080, "reality_port": 443, "reality_pub": "",
     "obfuscated_host": "", "cdn_enabled": False, "cdn_sni": "",
     "per_user_subdomain": False,
+    "tls_fp": "chrome", "hy2_obfs_password": "", "hy2_hop_ports": "",
+    "hy2_hop_interval": 30, "reality_sni_per_user": False,
 })
 check("settings: read", st == 200 and "sub_port" in s0 and "reality_sni" in s0, f"{st}")
 snew = dict(s0)
@@ -535,12 +550,30 @@ snew.update({"domain": "panel.example.com", "sub_port": 8443, "hy2_port": 8444,
              "wg_port": 51821, "ovpn_port": 1195, "l2tp_port": 1702,
              "cisco_port": 444, "socks5_port": 1081, "reality_port": 445,
              "cdn_enabled": True, "cdn_sni": "cdn.example.com",
-             "obfuscated_host": "obf.example.com", "per_user_subdomain": True})
+             "obfuscated_host": "obf.example.com", "per_user_subdomain": True,
+             # A fixed 43-char key: the REALITY link only needs a well-formed
+             # public key here, and the restore below empties it again.
+             "reality_pub": "OhuXKHlnnUbaD2kyV93XpMMS9-UcVUtr_LyYNsIFugU",
+             "reality_sni": "one.example.com,two.example.com,three.example.com",
+             "tls_fp": "firefox",
+             "hy2_obfs_password": "feature-obfs-secret",
+             "hy2_hop_ports": "20000:20005, 443",
+             "hy2_hop_interval": 45,
+             "reality_sni_per_user": True})
 st, d = js("PUT", "/api/settings", snew, AUTH)
 check("settings: save all fields", st == 200, f"{st} {str(d)[:80]}")
 st, s1 = js("GET", "/api/settings", headers=AUTH)
 check("settings: values persisted", st == 200 and s1.get("sub_port") == 8443
       and s1.get("cdn_sni") == "cdn.example.com", f"{st} {s1}")
+check("settings: hardening values persisted and normalised",
+      s1.get("tls_fp") == "firefox"
+      and s1.get("hy2_obfs_password") == "feature-obfs-secret"
+      and s1.get("hy2_hop_ports") == "20000-20005,443"
+      and s1.get("hy2_hop_interval") == 45
+      and s1.get("reality_sni_per_user") is True,
+      str({k: s1.get(k) for k in ("tls_fp", "hy2_obfs_password",
+                                  "hy2_hop_ports", "hy2_hop_interval",
+                                  "reality_sni_per_user")}))
 st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
 # obfuscated_host + per_user_subdomain are ON in this block, so the links
 # must carry the obfuscated host (with the per-user prefix), not the domain.
@@ -549,15 +582,76 @@ check("settings: obfuscated host (+ per-user prefix) used in links",
 st, hd, body = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
 check("settings: cdn sni reaches the links",
       st == 200 and "cdn.example.com" in decode_sub(body), f"{st} {decode_sub(body)[:100]}")
+
+# Live transport-hardening output. This is the end-to-end half of
+# link_encoding_test.py: the same settings must survive the database, the
+# subscription route and the Clash renderer.
+sub_txt = decode_sub(body)
+check("settings: the TLS fingerprint reaches the links",
+      st == 200 and sub_txt.count("&fp=firefox&") >= 3,
+      "fp=firefox count=%d" % sub_txt.count("&fp=firefox&"))
+hy_line = next((ln for ln in sub_txt.splitlines() if ln.startswith("hysteria2://")), "")
+hyq = parse_qs(urlsplit(hy_line).query)
+check("settings: Hysteria2 obfs reaches the link",
+      bool(hy_line) and hyq.get("obfs") == ["salamander"]
+      and hyq.get("obfs-password") == ["feature-obfs-secret"], hy_line[:140])
+check("settings: Hysteria2 port hopping reaches the link",
+      hyq.get("mport") == ["20000-20005,443"]
+      and hyq.get("hop-interval") == ["45"], str(hyq))
+reality_line = next((ln for ln in sub_txt.splitlines()
+                     if ln.startswith("vless://") and "security=reality" in ln), "")
+_re_sni = parse_qs(urlsplit(reality_line).query).get("sni", [""])[0]
+_sni_pool = {"one.example.com", "two.example.com", "three.example.com"}
+check("settings: the per-user REALITY SNI is used in the link",
+      bool(reality_line) and _re_sni in _sni_pool, _re_sni or reality_line[:120])
+st, hd, body2 = req("GET", f"/sub/{tok}", headers=CLIENT_UA, raw=True)
+_re_sni2 = parse_qs(urlsplit(next(
+    (ln for ln in decode_sub(body2).splitlines()
+     if ln.startswith("vless://") and "security=reality" in ln), "")).query).get("sni", [""])[0]
+check("settings: the per-user REALITY SNI is stable across fetches",
+      _re_sni2 == _re_sni, "%s -> %s" % (_re_sni, _re_sni2))
+
+st, hd, cbody = req("GET", f"/sub/{tok}?format=clash", headers=CLIENT_UA, raw=True)
+cps = clash_proxies(cbody.decode("utf-8", "replace"))
+_tls_cps = [p for p in cps if p.get("type") in ("vless", "vmess", "trojan")]
+check("settings: every Clash TLS proxy follows tls_fp",
+      st == 200 and len(_tls_cps) >= 3
+      and all(p.get("client-fingerprint") == "firefox" for p in _tls_cps),
+      str([p.get("client-fingerprint") for p in _tls_cps]))
+_hy_cp = next((p for p in cps if p.get("type") == "hysteria2"), None)
+check("settings: Clash carries Hysteria2 obfs and hopping",
+      _hy_cp is not None and _hy_cp.get("obfs") == "salamander"
+      and _hy_cp.get("obfs-password") == "feature-obfs-secret"
+      and _hy_cp.get("ports") == "20000-20005,443"
+      and _hy_cp.get("hop-interval") == 45, str(_hy_cp))
+_rp = next((p for p in cps if "reality-opts" in p), None)
+check("settings: the Clash REALITY proxy matches the link SNI",
+      _rp is not None and _rp.get("servername") == _re_sni,
+      "clash=%s link=%s" % (_rp and _rp.get("servername"), _re_sni))
+
 st, d = js("PUT", "/api/settings", SAVE["settings"], AUTH)
 check("settings: restored to defaults", st == 200, f"{st}")
 st, s2 = js("GET", "/api/settings", headers=AUTH)
-check("settings: restore verified", st2 == 200 and s2.get("sub_port") == SAVE["settings"]["sub_port"]
-      and not s2.get("obfuscated_host"), f"{st2} {s2.get('sub_port')}")
+check("settings: restore verified", st == 200 and s2.get("sub_port") == SAVE["settings"]["sub_port"]
+      and not s2.get("obfuscated_host"), f"{st} {s2.get('sub_port')}")
+check("settings: hardening restored to defaults",
+      s2.get("tls_fp") == "chrome" and s2.get("hy2_obfs_password") == ""
+      and s2.get("hy2_hop_ports") == "" and s2.get("hy2_hop_interval") == 30
+      and s2.get("reality_sni_per_user") is False,
+      str({k: s2.get(k) for k in ("tls_fp", "hy2_obfs_password",
+                                  "hy2_hop_ports", "hy2_hop_interval",
+                                  "reality_sni_per_user")}))
 st, d = js("PUT", "/api/settings", {**SAVE["settings"], "sub_port": True}, AUTH)
 check("settings: boolean port rejected", st == 422, f"{st}")
 st, d = js("PUT", "/api/settings", {**SAVE["settings"], "sub_port": 99999}, AUTH)
 check("settings: out-of-range port rejected", st == 422, f"{st}")
+for _key, _value, _label in (
+        ("tls_fp", "netscape", "unknown fingerprint"),
+        ("hy2_hop_ports", "70000", "out-of-range hop port"),
+        ("hy2_hop_interval", 4, "hop interval below 5"),
+        ("hy2_obfs_password", "abc", "obfs password shorter than 4")):
+    st, d = js("PUT", "/api/settings", {**SAVE["settings"], _key: _value}, AUTH)
+    check("settings: %s rejected" % _label, st == 422, f"{st} {d}")
 
 st, t0 = js("GET", "/api/tunnel-settings", headers=AUTH)
 SAVE["tunnel"] = t0

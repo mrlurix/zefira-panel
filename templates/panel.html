@@ -269,6 +269,41 @@
           <button type="button" id="save-reality-btn" class="btn btn-primary mt-10" data-i18n="reality.saveBtn">Save Anti-Censorship Settings</button>
         </div>
 
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="reality.hardTitle">Transport Hardening</h2></div>
+          <p class="hint mt-0" data-i18n="reality.hardHint">Make the generated profiles harder to fingerprint and block. Every default keeps the links this panel already emits; the options marked "server-side" break connections until the server is configured to match.</p>
+          <div class="field-row">
+            <label class="field"><span data-i18n="reality.fpLabel">TLS fingerprint (uTLS)</span>
+              <select name="tls_fp">
+                <option value="chrome">Chrome</option>
+                <option value="firefox">Firefox</option>
+                <option value="safari">Safari</option>
+                <option value="ios">iOS</option>
+                <option value="android">Android</option>
+                <option value="edge">Edge</option>
+                <option value="360">360</option>
+                <option value="qq">QQ</option>
+                <option value="random">Random</option>
+              </select>
+            </label>
+            <label class="field"><span data-i18n="reality.hopInterval">Port-hopping interval (seconds)</span>
+              <input type="number" name="hy2_hop_interval" min="5" max="300" step="1" value="30">
+            </label>
+          </div>
+          <p class="hint mt-0" data-i18n="reality.fpHint">Applied to VLESS, VMess, Trojan and REALITY links and to the Clash client fingerprint. Chrome is the default and needs no server change.</p>
+          <label class="field"><span data-i18n="reality.obfsLabel">Hysteria2 obfs password (empty = off)</span>
+            <input type="text" name="hy2_obfs_password" maxlength="128" autocomplete="new-password" spellcheck="false" placeholder="salamander shared secret">
+          </label>
+          <p class="hint warn-text mt-0" data-i18n="reality.obfsHint">Server-side: start Hysteria2 with Salamander obfs and the same password first. Enabling this without it makes every Hysteria2 link fail.</p>
+          <label class="field"><span data-i18n="reality.hopPorts">Hysteria2 port-hopping range (empty = off)</span>
+            <input type="text" name="hy2_hop_ports" maxlength="512" spellcheck="false" placeholder="20000-50000,443">
+          </label>
+          <p class="hint warn-text mt-0" data-i18n="reality.hopHint">Server-side: listen on the range (or DNAT it to the Hysteria2 port) and open the same UDP ports in the firewall. Enabling this without it makes every Hysteria2 link fail.</p>
+          <label class="proto-check wide"><input type="checkbox" name="reality_sni_per_user"><span data-i18n="reality.perUserSni">Use a stable, per-user REALITY SNI</span></label>
+          <p class="hint mt-0" data-i18n="reality.perUserSniHint">Every SNI in the list must also be present in the server's REALITY serverNames. Off by default: all users then use the first SNI.</p>
+          <button type="button" id="save-hardening-btn" class="btn btn-primary mt-10" data-i18n="reality.hardSaveBtn">Save Transport Hardening</button>
+        </div>
+
       </div>
     </section>
 

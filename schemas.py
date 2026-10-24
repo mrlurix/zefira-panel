@@ -4,6 +4,8 @@ from typing import List, Literal, Optional
 from pydantic import (BaseModel, ConfigDict, Field, StrictBool, StrictInt,
                        field_validator, model_validator)
 
+from protocols import normalize_hop_ports
+
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
 
 
@@ -391,6 +393,47 @@ class SettingsIn(BaseModel):
     cdn_enabled: Optional[bool] = None
     cdn_sni: Optional[str] = Field(default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z")
     block_direct_ip: Optional[bool] = None
+
+    # Transport hardening. Optional with None = "not sent", like every other
+    # non-port field, so an old integration that knows nothing about these
+    # settings keeps working and cannot erase them by omission.
+    tls_fp: Optional[Literal[
+        "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
+    ]] = None
+    hy2_obfs_password: Optional[str] = Field(default=None, max_length=128)
+    hy2_hop_ports: Optional[str] = Field(default=None, max_length=512)
+    hy2_hop_interval: Optional[StrictInt] = Field(default=None, ge=5, le=300)
+    reality_sni_per_user: Optional[bool] = None
+
+    @field_validator("hy2_obfs_password", mode="after")
+    @classmethod
+    def _check_obfs_password(cls, v):
+        # Empty is the documented "off" value, so it must stay accepted.
+        if v is None:
+            return None
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError("hy2_obfs_password must not contain control characters")
+        if v and len(v) < 4:
+            raise ValueError("hy2_obfs_password must be at least 4 characters")
+        return v
+
+    @field_validator("hy2_hop_ports", mode="after")
+    @classmethod
+    def _check_hop_ports(cls, v):
+        # `normalize_hop_ports` is the same function resolve_srv uses on rows
+        # and backups, so the API cannot accept a range the generators would
+        # later refuse (or vice versa).
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return ""
+        normalized = normalize_hop_ports(cleaned)
+        if not normalized:
+            raise ValueError(
+                "hy2_hop_ports must be comma-separated ports or ranges between 1 and 65535"
+            )
+        return normalized
 
 
 class SslIssueIn(BaseModel):

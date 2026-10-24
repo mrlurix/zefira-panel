@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleUsers">Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=89">
+<link rel="stylesheet" href="assets/style.css?v=90">
 </head>
 <body>
 <header class="topbar">
@@ -166,6 +166,10 @@
 <tr><th data-i18n="usr.antiSet">Setting</th><th data-i18n="usr.antiEff">Effect</th></tr>
 <tr><td data-i18n="usr.setReality">REALITY keys</td><td data-i18n="usr.setRealityD">Generate an X25519 keypair; private key stays encrypted, reveal is audit-logged.</td></tr>
 <tr><td data-i18n="usr.setSni">REALITY SNI list</td><td data-i18n="usr.setSniD">Comma-separated SNIs, rotated across the generated links.</td></tr>
+<tr><td data-i18n="usr.setTlsFp">TLS fingerprint</td><td data-i18n="usr.setTlsFpD">Chooses the uTLS fingerprint for VLESS, VMess, Trojan and REALITY links (and the Clash client fingerprint). Chrome is the default; changing it does not require a server change.</td></tr>
+<tr><td data-i18n="usr.setPerUserSni">Per-user REALITY SNI</td><td data-i18n="usr.setPerUserSniD">Gives each user a stable SNI from the list instead of always the first one. Every SNI must be present in the server's REALITY serverNames.</td></tr>
+<tr><td data-i18n="usr.setHy2Obfs">Hysteria2 obfs</td><td data-i18n="usr.setHy2ObfsD">A non-empty password enables Salamander obfuscation in every Hysteria2 link and Clash profile. The server must run Hysteria2 with the same password first.</td></tr>
+<tr><td data-i18n="usr.setHy2Hop">Hysteria2 port hopping</td><td data-i18n="usr.setHy2HopD">A range such as 20000-50000,443 makes clients rotate Hysteria2 ports. The server must listen on the range (or DNAT it) and the firewall must allow the same UDP ports.</td></tr>
 <tr><td data-i18n="usr.setObf">Obfuscated host</td><td data-i18n="usr.setObfD">Replaces the real domain inside configs with a decoy host.</td></tr>
 <tr><td data-i18n="usr.setPer">Per-user subdomain</td><td><span data-i18n="usr.setPerA">Prefixes a per-user hash (</span><code>a1b2c3d4.domain</code><span data-i18n="usr.setPerB">) so links are not correlatable.</span></td></tr>
 <tr><td data-i18n="usr.setCdn">CDN SNI spoofing</td><td data-i18n="usr.setCdnD">Uses a separate CDN domain for TLS SNI.</td></tr>
@@ -185,8 +189,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=89"></script>
-<script src="assets/docs.js?v=89"></script>
-<script src="assets/support-ai.js?v=89"></script>
+<script src="assets/i18n.js?v=90"></script>
+<script src="assets/docs.js?v=90"></script>
+<script src="assets/support-ai.js?v=90"></script>
 </body>
 </html>
