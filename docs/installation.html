@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleInstall">Installation — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=90">
+<link rel="stylesheet" href="assets/style.css?v=92">
 </head>
 <body>
 <header class="topbar">
@@ -80,6 +80,15 @@
   <li data-i18n="inst.w7">Optionally configures Nginx and issues the SSL certificate with auto-renew cron</li>
 </ol>
 
+<h2 id="runtime-versions" data-i18n="inst.runtimeTitle">Runtime versions and what uses them</h2>
+<table>
+<tr><th data-i18n="inst.thComponent">Component</th><th data-i18n="inst.thVersionPolicy">Used by the panel, and the version policy</th></tr>
+<tr><td>Python</td><td data-i18n="inst.rtPython">Yes - the panel itself. Python 3.10 or newer (3.14 tested); dependencies are exact pins installed from a hash-locked requirements.lock.</td></tr>
+<tr><td>PHP</td><td data-i18n="inst.rtPhp">No - no PHP files and no PHP runtime. The installer never installs or configures PHP.</td></tr>
+<tr><td>Node.js</td><td data-i18n="inst.rtNode">Only the optional Telegram example bot: Node.js 24 LTS or newer with node-telegram-bot-api 2.1.0. The panel itself does not use Node.js.</td></tr>
+<tr><td>nginx</td><td data-i18n="inst.rtNginx">Optional reverse proxy: the distribution package with security backports. The installer upgrades it, prints nginx -v and repeats the version in the summary; it does not add nginx.org's third-party repository.</td></tr>
+</table>
+
 <h2 id="after-install" data-i18n="inst.afterInstall">After install</h2>
 <pre># your URL, login and paths are printed at the end, e.g.
 # URL   : https://vpn.example.com
@@ -113,8 +122,8 @@ unset ZEFIRA_ADMIN_PASSWORD</pre>
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=90"></script>
-<script src="assets/docs.js?v=90"></script>
-<script src="assets/support-ai.js?v=90"></script>
+<script src="assets/i18n.js?v=92"></script>
+<script src="assets/docs.js?v=92"></script>
+<script src="assets/support-ai.js?v=92"></script>
 </body>
 </html>

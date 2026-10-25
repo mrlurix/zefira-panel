@@ -4,7 +4,14 @@
   "private": true,
   "description": "Zefira reseller bot (Telegram)",
   "main": "bot.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node bot.js",
+    "check": "node --check bot.js"
+  },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "2.1.0"
   }
 }

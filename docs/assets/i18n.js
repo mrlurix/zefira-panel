@@ -2513,6 +2513,108 @@ Object.assign(Z_STRINGS.ru, {
   "api.srvHardening": "Тот же объект содержит ключи усиления транспорта: <code>tls_fp</code> (по умолчанию chrome), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> и <code>hy2_hop_interval</code>. Оставь последние три по умолчанию, если сервер Hysteria2 не настроен так же: включённый пароль obfs или диапазон портов ломает все ссылки Hysteria2, пока сервер не использует те же значения. <code>tls_fp</code> принимает chrome, firefox, safari, ios, android, edge, 360, qq и random."
 });
 
+/* Dependency and runtime security (v1.15.60) */
+Object.assign(Z_STRINGS.en, {
+  "chg.v11560": "&#8212; The stack that was older than the panel",
+  "chg.v11560a_lead": "The Python dependencies were current in name only. ",
+  "chg.v11560a": "The panel's own pins had drifted: PyJWT 2.13.0 carried 29 advisories in OSV, all fixed in 2.14 and 2.15, while FastAPI, SQLAlchemy, pydantic, uvicorn, cryptography and PyMySQL were behind their latest stable releases. v1.15.60 pins PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3. The hash-locked requirements.lock was regenerated with 32 entries covering every artifact, verify_lock_hashes.py passes, and the full suite runs on the new set. The JWT format, claims, cookie name and session lifetime are unchanged, so existing sessions and every API client keep working; the session test still forges alg=none, tampered and bad-signature tokens and all are refused.",
+  "chg.v11560b_lead": "The Node.js example bot was on the old v1 API. ",
+  "chg.v11560b": "Node.js is not a panel runtime: the only JavaScript in the repository is examples/telegram-bot-node. It now requires Node.js 24 LTS or newer and pins node-telegram-bot-api 2.1.0, the current stable v2 rewrite, with a package-lock.json and npm ci. The bot was rewritten for the new Bot/Context API; its commands, private-chat-only rule, panel calls and subscription output are unchanged. npm run check parses it and a smoke test builds the bot without a network token.",
+  "chg.v11560c_lead": "nginx stays the distribution package, and the installer now says which one. ",
+  "chg.v11560c": "The panel does not bundle nginx; it is an optional reverse proxy installed from the distribution repository, which is where security backports for that release arrive. The installer now upgrades an existing nginx explicitly after package installation, prints nginx -v, and carries the version in the final summary. It does not add nginx.org's third-party repository, because mixing vendor packages and distribution modules on the same host is how a proxy ends up with an ABI mismatch. PHP is not used anywhere: there are no .php files and no PHP runtime is installed.",
+  "chg.v11560d_lead": "The security page had a sentence that stopped being true in v1.15.27. ",
+  "chg.v11560d": "It still described per-customer VPN credentials as plain JSON, while they have been encrypted under instance/secret.key since v1.15.27 and subscription tokens since v1.15.29. The page now says what is encrypted and what is not - display names, notes, usage counters and timestamps are billing data, not credentials - and names the dependency policy: exact pins, a hash-locked lockfile and an advisory check before a release. Nothing about the panel's behaviour changed in this release; 61 suites passed on the updated stack.",
+  "sec.layerPlain": "Credentials at rest",
+  "sec.layerDeps": "Dependencies",
+  "sec.depsText": "Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.60 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.",
+  "sec.plainA": "Encrypted since v1.15.27: per-customer VPN credentials in the database (",
+  "sec.plainB": ") - the WireGuard private key, OpenVPN client keypair, L2TP PSK and per-protocol passwords - and subscription tokens since v1.15.29, as a Fernet blob plus an HMAC digest for the indexed /sub lookup. Not encrypted: display names, notes, usage counters and timestamps, which are billing data rather than credentials. Keep",
+  "sec.plainC": "at 700 and prefer encrypted backups (",
+  "sec.plainD": ") or full-disk encryption; treat an unencrypted backup as customer credential material.",
+  "inst.runtimeTitle": "Runtime versions and what uses them",
+  "inst.thComponent": "Component",
+  "inst.thVersionPolicy": "Used by the panel, and the version policy",
+  "inst.rtPython": "Yes - the panel itself. Python 3.10 or newer (3.14 tested); dependencies are exact pins installed from a hash-locked requirements.lock.",
+  "inst.rtPhp": "No - no PHP files and no PHP runtime. The installer never installs or configures PHP.",
+  "inst.rtNode": "Only the optional Telegram example bot: Node.js 24 LTS or newer with node-telegram-bot-api 2.1.0. The panel itself does not use Node.js.",
+  "inst.rtNginx": "Optional reverse proxy: the distribution package with security backports. The installer upgrades it, prints nginx -v and repeats the version in the summary; it does not add nginx.org's third-party repository."
+});
+Object.assign(Z_STRINGS.fa, {
+  "chg.v11560": "&#8212; پشته‌ای که از خود پنل قدیمی‌تر بود",
+  "chg.v11560a_lead": "وابستگی‌های پایتون فقط روی کاغذ به‌روز بودند. ",
+  "chg.v11560a": "پین‌های خود پنل عقب افتاده بودند: PyJWT 2.13.0 در OSV بیست‌ونه هشدار داشت که همه در 2.14 و 2.15 رفع شده‌اند، و FastAPI، SQLAlchemy، pydantic، uvicorn، cryptography و PyMySQL هم از آخرین نسخه‌های پایدار عقب‌تر بودند. v1.15.60 این‌ها را پین می‌کند: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3. فایل قفل‌شدهٔ requirements.lock با ۳۲ ورودی و هش همهٔ آرتیفکت‌ها بازسازی شد، verify_lock_hashes.py پاس می‌شود و کل مجموعهٔ تست روی همین نسخه‌ها اجرا شده است. قالب JWT، claimها، نام کوکی و عمر نشست تغییری نکرده‌اند، پس نشست‌های موجود و همهٔ کلاینت‌های API کار می‌کنند؛ تست نشست هنوز توکن‌های alg=none، دست‌کاری‌شده و با امضای غلط را می‌سازد و همه رد می‌شوند.",
+  "chg.v11560b_lead": "ربات نمونهٔ Node.js روی API قدیمی v1 بود. ",
+  "chg.v11560b": "Node.js runtime پنل نیست: تنها جاوااسکریپت مخزن در examples/telegram-bot-node است. حالا Node.js 24 LTS یا جدیدتر می‌خواهد و node-telegram-bot-api 2.1.0 را پین می‌کند، بازنویسی کامل v2 که نسخهٔ پایدار فعلی است، همراه package-lock.json و npm ci. ربات برای API جدید Bot/Context بازنویسی شد؛ دستورها، قاعدهٔ فقط‌چت‌خصوصی، فراخوانی‌های پنل و خروجی اشتراک همان است. npm run check آن را پارس می‌کند و یک تست دودی بدون توکن شبکه آن را می‌سازد.",
+  "chg.v11560c_lead": "nginx همان بستهٔ توزیع می‌ماند، و نصب‌کننده حالا می‌گوید کدام نسخه. ",
+  "chg.v11560c": "پنل nginx را همراه ندارد؛ یک ریورس‌پروکسی اختیاری از مخزن توزیع است، همان‌جایی که backportهای امنیتی آن نسخه می‌رسند. نصب‌کننده حالا nginx موجود را صریحاً ارتقا می‌دهد، خروجی nginx -v را چاپ می‌کند و نسخه را در خلاصهٔ پایانی می‌آورد. مخزن شخص ثالث nginx.org را اضافه نمی‌کند، چون مخلوط‌کردن بستهٔ vendor و ماژول‌های توزیع روی یک هاست همان چیزی است که به ناسازگاری ABI می‌رسد. PHP هیچ‌جا استفاده نمی‌شود: هیچ فایل .php و هیچ runtime PHP نصب نمی‌شود.",
+  "chg.v11560d_lead": "یک جمله در صفحهٔ امنیت از v1.15.27 دیگر درست نبود. ",
+  "chg.v11560d": "هنوز اعتبارهای VPN هر مشتری را JSON ساده معرفی می‌کرد، در حالی که از v1.15.27 زیر instance/secret.key رمزنگاری می‌شوند و توکن‌های اشتراک از v1.15.29. صفحه حالا می‌گوید چه چیزی رمزنگاری شده و چه چیزی نه — نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی دادهٔ صورت‌حساب‌اند نه اعتبار — و سیاست وابستگی را هم می‌نویسد: پین دقیق، فایل قفل هش‌دار و بررسی هشدارها پیش از انتشار. در این انتشار رفتار پنل عوض نشده؛ ۶۱ مجموعه تست روی پشتهٔ به‌روز پاس شدند.",
+  "sec.layerPlain": "اعتبارها در حالت ذخیره",
+  "sec.layerDeps": "وابستگی‌ها",
+  "sec.depsText": "بسته‌های پایتون با پین دقیق و requirements.lock هش‌دار نصب می‌شوند؛ به‌روزرسان داخل پنل به majorهای جدید شنا نمی‌کند. v1.15.60 این‌ها را دارد: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3، بدون هیچ هشدار شناخته‌شدهٔ OSV روی این نسخه‌ها. nginx بیلد توزیع است (backportهای امنیتی)، که نصب‌کننده ارتقا و گزارش می‌کند. در پنل نه PHP هست و نه runtime Node.js.",
+  "sec.plainA": "از v1.15.27 رمزنگاری‌شده: اعتبارهای VPN هر مشتری در دیتابیس (",
+  "sec.plainB": ") — کلید خصوصی WireGuard، جفت‌کلید کلاینت OpenVPN، PSK مربوط به L2TP و رمز هر پروتکل — و توکن‌های اشتراک از v1.15.29، به‌صورت یک بلاب Fernet به‌همراه digest HMAC برای جست‌وجوی ایندکس‌شدهٔ /sub. رمزنگاری‌نشده: نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی، که دادهٔ صورت‌حساب‌اند نه اعتبار. پوشهٔ",
+  "sec.plainC": "را روی 700 نگه دارید و بکاپ رمزنگاری‌شده (",
+  "sec.plainD": ") یا رمزنگاری دیسک را ترجیح دهید؛ بکاپ رمزنگاری‌نشده را مادهٔ اعتبار مشتری بدانید.",
+  "inst.runtimeTitle": "نسخه‌های runtime و اینکه چه چیزی از آن‌ها استفاده می‌کند",
+  "inst.thComponent": "مؤلفه",
+  "inst.thVersionPolicy": "استفاده در پنل و سیاست نسخه",
+  "inst.rtPython": "بله — خود پنل. Python 3.10 یا جدیدتر (3.14 آزمایش شده)؛ وابستگی‌ها پین دقیق‌اند و از requirements.lock هش‌دار نصب می‌شوند.",
+  "inst.rtPhp": "نه — هیچ فایل PHP و هیچ runtime PHP وجود ندارد. نصب‌کننده هرگز PHP را نصب یا پیکربندی نمی‌کند.",
+  "inst.rtNode": "فقط ربات نمونهٔ اختیاری تلگرام: Node.js 24 LTS یا جدیدتر با node-telegram-bot-api 2.1.0. خود پنل از Node.js استفاده نمی‌کند.",
+  "inst.rtNginx": "ریورس‌پروکسی اختیاری: بستهٔ توزیع با backportهای امنیتی. نصب‌کننده آن را ارتقا می‌دهد، nginx -v را چاپ می‌کند و نسخه را در خلاصه تکرار می‌کند؛ مخزن شخص ثالث nginx.org را اضافه نمی‌کند."
+});
+Object.assign(Z_STRINGS.zh, {
+  "chg.v11560": "&#8212; 比面板本身还旧的依赖栈",
+  "chg.v11560a_lead": "Python 依赖只是在名义上保持最新。",
+  "chg.v11560a": "面板自己的固定版本已经落后：PyJWT 2.13.0 在 OSV 中有 29 条公告，全部在 2.14 和 2.15 中修复；FastAPI、SQLAlchemy、pydantic、uvicorn、cryptography 和 PyMySQL 也都落后于各自的最新稳定版。v1.15.60 固定 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3。带哈希锁的 requirements.lock 已重建（32 个条目，覆盖每个构建产物），verify_lock_hashes.py 通过，完整测试套件也在新依赖上运行。JWT 格式、声明、Cookie 名称和会话有效期都没有变化，因此现有会话和所有 API 客户端继续可用；会话测试仍会伪造 alg=none、被篡改和签名错误的令牌，全部被拒绝。",
+  "chg.v11560b_lead": "Node.js 示例机器人使用的是旧 v1 API。",
+  "chg.v11560b": "Node.js 不是面板的运行时：仓库里唯一的 JavaScript 位于 examples/telegram-bot-node。它现在要求 Node.js 24 LTS 或更新版本，并固定 node-telegram-bot-api 2.1.0——当前的稳定 v2 重写版——同时带有 package-lock.json 和 npm ci。机器人已按新的 Bot/Context API 重写；命令、仅限私聊规则、面板调用和订阅输出保持不变。npm run check 会解析它，一个不需要网络令牌的冒烟测试会构建它。",
+  "chg.v11560c_lead": "nginx 仍使用发行版软件包，安装器现在会说明是哪个版本。",
+  "chg.v11560c": "面板不捆绑 nginx；它是可选的逆向代理，来自发行版仓库——该版本的安全回溯补丁也在那里发布。安装器现在会显式升级已有的 nginx，打印 nginx -v，并在最终摘要中显示版本。它不会添加 nginx.org 的第三方仓库，因为在同一台主机上混用厂商软件包和发行版模块正是导致 ABI 不匹配的原因。PHP 完全没有被使用：没有 .php 文件，也不会安装 PHP 运行时。",
+  "chg.v11560d_lead": "安全页上有一句话从 v1.15.27 起就不再成立。",
+  "chg.v11560d": "它仍把每位客户的 VPN 凭据描述为明文 JSON，而从 v1.15.27 起这些凭据已用 instance/secret.key 加密，订阅令牌从 v1.15.29 起加密。页面现在说明什么被加密、什么没有——显示名、备注、用量计数和时间戳属于计费数据，不是凭据——并写明依赖策略：精确固定版本、带哈希的锁文件和发布前的公告检查。本次发布没有改变面板行为；61 套测试在更新后的依赖栈上全部通过。",
+  "sec.layerPlain": "静态凭据",
+  "sec.layerDeps": "依赖",
+  "sec.depsText": "Python 软件包从精确固定版本和带哈希锁的 requirements.lock 安装；面板内更新器不会漂移到新的大版本。v1.15.60 使用 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3，这些版本没有已知的 OSV 公告。nginx 是发行版构建（含安全回溯补丁），由安装器升级并报告版本。面板中没有 PHP，也没有 Node.js 运行时。",
+  "sec.plainA": "自 v1.15.27 起加密：数据库中的每位客户 VPN 凭据（",
+  "sec.plainB": "）——WireGuard 私钥、OpenVPN 客户端密钥对、L2TP PSK 和每个协议的密码——以及自 v1.15.29 起的订阅令牌，以 Fernet 密文加 HMAC 摘要支持 /sub 的索引查找。未加密：显示名、备注、用量计数和时间戳，这些是计费数据而非凭据。请保持",
+  "sec.plainC": "权限为 700，并优先使用加密备份（",
+  "sec.plainD": "）或全盘加密；把未加密备份当作客户凭据材料。",
+  "inst.runtimeTitle": "运行时版本及其用途",
+  "inst.thComponent": "组件",
+  "inst.thVersionPolicy": "面板是否使用及版本策略",
+  "inst.rtPython": "是——面板本身。Python 3.10 或更新版本（已在 3.14 上测试）；依赖为精确固定版本，并从带哈希锁的 requirements.lock 安装。",
+  "inst.rtPhp": "否——没有 PHP 文件，也没有 PHP 运行时。安装器从不安装或配置 PHP。",
+  "inst.rtNode": "仅可选的 Telegram 示例机器人：Node.js 24 LTS 或更新版本，配合 node-telegram-bot-api 2.1.0。面板本身不使用 Node.js。",
+  "inst.rtNginx": "可选反向代理：带安全回溯补丁的发行版软件包。安装器会升级它、打印 nginx -v，并在摘要中重复版本；不会添加 nginx.org 的第三方仓库。"
+});
+Object.assign(Z_STRINGS.ru, {
+  "chg.v11560": "&#8212; Стек, который был старше самой панели",
+  "chg.v11560a_lead": "Зависимости Python были актуальными только на бумаге.",
+  "chg.v11560a": "Собственные пины панели отстали: PyJWT 2.13.0 имел 29 предупреждений в OSV, все исправлены в 2.14 и 2.15, а FastAPI, SQLAlchemy, pydantic, uvicorn, cryptography и PyMySQL были позади своих последних стабильных выпусков. v1.15.60 фиксирует PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3. Хэш-зафиксированный requirements.lock пересобран (32 записи, все артефакты), verify_lock_hashes.py проходит, и полный набор тестов запускается на новых версиях. Формат JWT, утверждения, имя cookie и срок жизни сессии не изменились, поэтому существующие сессии и все API-клиенты продолжают работать; тест сессий по-прежнему подделывает alg=none, изменённые и плохо подписанные токены, и все они отклоняются.",
+  "chg.v11560b_lead": "Пример бота на Node.js использовал старый API v1.",
+  "chg.v11560b": "Node.js не является средой выполнения панели: единственный JavaScript в репозитории — examples/telegram-bot-node. Теперь ему нужен Node.js 24 LTS или новее, и он фиксирует node-telegram-bot-api 2.1.0 — текущую стабильную переработку v2 — с package-lock.json и npm ci. Бот переписан под новый API Bot/Context; команды, правило «только личный чат», вызовы панели и вывод подписки не изменились. npm run check разбирает его, а дымовой тест собирает бота без сетевого токена.",
+  "chg.v11560c_lead": "nginx остаётся пакетом дистрибутива, и установщик теперь называет версию.",
+  "chg.v11560c": "Панель не поставляет nginx; это необязательный обратный прокси из репозитория дистрибутива — туда приходят security backports для этой версии. Установщик теперь явно обновляет существующий nginx, печатает nginx -v и показывает версию в итоговой сводке. Он не добавляет сторонний репозиторий nginx.org, потому что смешивание пакетов производителя и модулей дистрибутива на одном хосте — это путь к несовместимости ABI. PHP не используется нигде: файлов .php нет, и среда PHP не устанавливается.",
+  "chg.v11560d_lead": "Одна фраза на странице безопасности перестала быть верной с v1.15.27.",
+  "chg.v11560d": "Там всё ещё говорилось, что VPN-учётные данные клиентов хранятся открытым JSON, хотя с v1.15.27 они шифруются ключом instance/secret.key, а токены подписки — с v1.15.29. Теперь страница говорит, что зашифровано, а что нет: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные; также описана политика зависимостей: точные пины, хэш-зафиксированный lock-файл и проверка предупреждений перед релизом. Поведение панели в этом релизе не изменилось; 61 набор тестов прошёл на обновлённом стеке.",
+  "sec.layerPlain": "Учётные данные в покое",
+  "sec.layerDeps": "Зависимости",
+  "sec.depsText": "Пакеты Python ставятся по точным пинам из requirements.lock с хэшами; встроенный обновлятор не переходит на новые мажоры. v1.15.60 содержит PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3, без известных предупреждений OSV для этих версий. nginx — сборка дистрибутива (security backports), установщик обновляет её и сообщает версию. В панели нет PHP и нет среды выполнения Node.js.",
+  "sec.plainA": "Зашифровано с v1.15.27: учётные данные VPN каждого клиента в базе (",
+  "sec.plainB": ") — приватный ключ WireGuard, пара ключей клиента OpenVPN, PSK L2TP и пароли всех протоколов — а также токены подписок с v1.15.29, в виде блоба Fernet плюс HMAC-дайджест для индексированного поиска /sub. Не зашифровано: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные. Держите",
+  "sec.plainC": "с правами 700 и предпочитайте шифрованные бэкапы (",
+  "sec.plainD": ") или шифрование диска; считайте нешифрованный бэкап материалом клиентских учётных данных.",
+  "inst.runtimeTitle": "Версии среды выполнения и что их использует",
+  "inst.thComponent": "Компонент",
+  "inst.thVersionPolicy": "Используется панелью и политика версий",
+  "inst.rtPython": "Да — сама панель. Python 3.10 или новее (проверено на 3.14); зависимости зафиксированы точными пинами и ставятся из requirements.lock с хэшами.",
+  "inst.rtPhp": "Нет — ни файлов PHP, ни среды выполнения PHP. Установщик никогда не устанавливает и не настраивает PHP.",
+  "inst.rtNode": "Только необязательный пример бота Telegram: Node.js 24 LTS или новее с node-telegram-bot-api 2.1.0. Сама панель Node.js не использует.",
+  "inst.rtNginx": "Необязательный обратный прокси: пакет дистрибутива с security backports. Установщик обновляет его, печатает nginx -v и повторяет версию в сводке; сторонний репозиторий nginx.org не добавляется."
+});
+
 (function initI18n() {
   Z_LANG = zDetect();
   try {

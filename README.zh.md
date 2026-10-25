@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # 只有你自己能读的私有目录
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.59/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.60/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.59` 这个 tag 固定了安装脚本本身。
+> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.60` 这个 tag 固定了安装脚本本身。
 >
 > 随后安装脚本会按它自带的发布 tag 克隆面板源码。如果你想更严格地固定到具体提交：
 >

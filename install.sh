@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.59"
+ZEFIRA_PINNED="1.15.60"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
@@ -426,6 +426,27 @@ elif command -v dnf >/dev/null; then
     dnf install -y python3 python3-pip python3-devel gcc git curl rsync nginx certbot 2>/dev/null || dnf install -y python3 git curl
 elif command -v yum >/dev/null; then
     yum install -y python3 python3-pip python3-devel gcc git curl rsync 2>/dev/null || yum install -y python3 git curl
+fi
+# nginx stays the distribution package on purpose: the distro ships security
+# backports for the version it chose, and mixing in nginx.org packages on a
+# distro host invites module/ABI mismatches. But a plain `install` leaves an
+# old copy alone on some releases, so upgrade it explicitly and print what is
+# actually running - an operator should never have to guess the nginx version.
+if command -v nginx >/dev/null; then
+    if command -v apt-get >/dev/null; then
+        apt-get install -y --only-upgrade nginx 2>/dev/null || true
+    elif command -v dnf >/dev/null; then
+        dnf upgrade -y nginx 2>/dev/null || true
+    elif command -v yum >/dev/null; then
+        yum update -y nginx 2>/dev/null || true
+    fi
+fi
+NGINX_VER=""
+if command -v nginx >/dev/null; then
+    NGINX_VER="$(nginx -v 2>&1 | sed 's/^nginx version: //')"
+    echo "[*] nginx: $NGINX_VER"
+else
+    echo "[*] nginx: not installed (the optional reverse proxy will be skipped)"
 fi
 # The app uses PEP 604 unions (`str | None`) and current FastAPI/SQLAlchemy,
 # which need 3.10+. Failing here beats a stack trace on first boot.
@@ -996,6 +1017,9 @@ printf ' %sLocal%s    : %s\n' "$C_BLD" "$C_RST" "http://127.0.0.1:$PORT"
 printf ' %sSub path%s : %s\n' "$C_BLD" "$C_RST" "$SUB_PATH"
 printf ' %sDatabase%s : %s\n' "$C_BLD" "$C_RST" "$DB_LINE"
 printf ' %sSSL%s      : %s\n' "$C_BLD" "$C_RST" "$SSL_LINE"
+if [[ -n "$NGINX_VER" ]]; then
+    printf ' %sProxy%s    : %s\n' "$C_BLD" "$C_RST" "nginx $NGINX_VER (distribution package)"
+fi
 printf ' %sService%s  : %s\n' "$C_BLD" "$C_RST" "$SERVICE.service"
 echo "${C_YEL}  Change the admin password after the first login.${C_RST}"
 echo "${C_DIM}  ────────────────────────────────────────────────────${C_RST}"
