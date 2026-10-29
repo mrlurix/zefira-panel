@@ -4,7 +4,7 @@ from typing import List, Literal, Optional
 from pydantic import (BaseModel, ConfigDict, Field, StrictBool, StrictInt,
                        field_validator, model_validator)
 
-from protocols import normalize_hop_ports
+from protocols import normalize_hop_ports, normalize_short_ids
 
 USERNAME_RE = r"^[a-zA-Z0-9_]{3,32}\z"
 
@@ -405,6 +405,18 @@ class SettingsIn(BaseModel):
     hy2_hop_interval: Optional[StrictInt] = Field(default=None, ge=5, le=300)
     reality_sni_per_user: Optional[bool] = None
 
+    # Anti-filter alignment with an EXISTING server. All optional with None =
+    # "not sent", so old integrations keep working and cannot erase them.
+    ws_path: Optional[str] = Field(default=None, max_length=200)
+    ws_host: Optional[str] = Field(
+        default=None, max_length=253, pattern=r"^(?:" + HOST_CORE + r")?\z"
+    )
+    reality_short_ids: Optional[str] = Field(default=None, max_length=200)
+    hy2_hop_format: Optional[Literal["mport", "official"]] = None
+    clash_failover: Optional[bool] = None
+    clash_health_check_url: Optional[str] = Field(default=None, max_length=480)
+    clash_failover_interval: Optional[StrictInt] = Field(default=None, ge=30, le=3600)
+
     @field_validator("hy2_obfs_password", mode="after")
     @classmethod
     def _check_obfs_password(cls, v):
@@ -434,6 +446,75 @@ class SettingsIn(BaseModel):
                 "hy2_hop_ports must be comma-separated ports or ranges between 1 and 65535"
             )
         return normalized
+
+    @field_validator("ws_path", mode="after")
+    @classmethod
+    def _check_ws_path(cls, v):
+        # Empty means "use the historical /zefira". Anything else must be an
+        # absolute path; a bare "zefira" would be emitted as a path without a
+        # leading slash and every client would reject it.
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return ""
+        if not re.fullmatch(r"/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,199}", cleaned):
+            raise ValueError("ws_path must start with / and contain no spaces or query characters")
+        return cleaned
+
+    @field_validator("reality_short_ids", mode="after")
+    @classmethod
+    def _check_short_ids(cls, v):
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return ""
+        normalized = normalize_short_ids(cleaned)
+        if not normalized:
+            raise ValueError(
+                "reality_short_ids must be comma-separated even-length hex values of 2-16 characters"
+            )
+        return normalized
+
+    @field_validator("clash_health_check_url", mode="after")
+    @classmethod
+    def _check_health_url(cls, v):
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return ""
+        if not re.fullmatch(r"https?://[^\s@]{1,480}", cleaned, re.IGNORECASE):
+            raise ValueError("clash_health_check_url must be an http(s) URL without credentials")
+        return cleaned
+
+
+class RealityPubIn(BaseModel):
+    """Import the public half of an EXISTING server's REALITY keypair.
+
+    The panel can generate its own pair, but an operator who already runs
+    Xray only has the public key (and must not hand the panel the private
+    one). Importing it makes the generated links match that server instead
+    of replacing it.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    public_key: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}\z")
+
+    @field_validator("public_key", mode="after")
+    @classmethod
+    def _check_public_key(cls, v):
+        import base64 as _b64
+
+        try:
+            raw = _b64.urlsafe_b64decode(v + "=" * (-len(v) % 4))
+        except Exception as exc:
+            raise ValueError("public_key must be base64url") from exc
+        if len(raw) != 32:
+            raise ValueError("public_key must decode to 32 bytes")
+        return v
 
 
 class SslIssueIn(BaseModel):

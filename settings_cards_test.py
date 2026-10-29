@@ -116,12 +116,37 @@ check("the transport-hardening keys have the documented types",
       and isinstance(orig.get("hy2_hop_interval"), int)
       and isinstance(orig.get("reality_sni_per_user"), bool),
       str({k: orig.get(k) for k in _hard_keys}))
+_align_keys = ("ws_path", "ws_host", "reality_short_ids", "hy2_hop_format",
+               "clash_failover", "clash_health_check_url", "clash_failover_interval")
+check("the server-alignment keys are present", all(k in orig for k in _align_keys),
+      str([k for k in _align_keys if k not in orig]))
+check("the server-alignment keys have the documented types",
+      orig.get("ws_path") == "/zefira"
+      and orig.get("ws_host") == ""
+      and orig.get("reality_short_ids") == ""
+      and orig.get("hy2_hop_format") in ("mport", "official")
+      and isinstance(orig.get("clash_failover"), bool)
+      and isinstance(orig.get("clash_health_check_url"), str)
+      and isinstance(orig.get("clash_failover_interval"), int),
+      str({k: orig.get(k) for k in _align_keys}))
 
 # A marker that is definitely NOT what the operator set, changed and restored.
 MARKER = "settingscards.example.com"
 mod = dict(orig)
 mod["domain"] = MARKER
 mod["dns"] = "9.9.9.9"
+mod["ws_path"] = "/edge"
+mod["ws_host"] = "cdn.example.com"
+mod["reality_short_ids"] = "aa11,bb22"
+mod["hy2_hop_format"] = "official"
+mod["clash_failover"] = True
+mod["clash_health_check_url"] = "https://example.com/204"
+mod["clash_failover_interval"] = 120
+# The official-hop diagnostic is only emitted when a range exists. Seed one
+# here instead of depending on the demo DB happening to have hopping enabled:
+# on a reset database hy2_hop_ports is empty, so the assertion below would be
+# testing the fixture rather than the diagnostic.
+mod["hy2_hop_ports"] = "20000-20100"
 st, _, pb = req("PUT", "/api/settings", json.dumps(mod), AUTH)
 after_put = body_json(pb)
 check("PUT /api/settings accepts a full body", st == 200, "status=%d %s" % (st, str(pb)[:80]))
@@ -130,6 +155,69 @@ st, _, raw2 = req("GET", "/api/settings", headers=AUTH)
 reread = body_json(raw2)
 check("the changed domain reads back", reread.get("domain") == MARKER, str(reread.get("domain")))
 check("the changed dns reads back", reread.get("dns") == "9.9.9.9", str(reread.get("dns")))
+check("the seeded hop range reads back", reread.get("hy2_hop_ports") == "20000-20100",
+      str(reread.get("hy2_hop_ports")))
+check("the alignment values read back",
+      reread.get("ws_path") == "/edge"
+      and reread.get("ws_host") == "cdn.example.com"
+      and reread.get("reality_short_ids") == "aa11,bb22"
+      and reread.get("hy2_hop_format") == "official"
+      and reread.get("clash_failover") is True
+      and reread.get("clash_health_check_url") == "https://example.com/204"
+      and reread.get("clash_failover_interval") == 120,
+      str({k: reread.get(k) for k in _align_keys}))
+
+print("\n=== 1b. alignment diagnostics and generators ===")
+st, _, raw_diag = req("GET", "/api/settings/diagnostics", headers=AUTH)
+diag = body_json(raw_diag)
+_checks = {c.get("code"): c for c in diag.get("checks", []) if isinstance(c, dict)}
+check("GET /api/settings/diagnostics answers", st == 200 and bool(_checks),
+      "status=%d checks=%d" % (st, len(_checks)))
+check("diagnostics see the custom WebSocket path",
+      _checks.get("ws_path_custom", {}).get("level") == "ok",
+      str(_checks.get("ws_path_custom")))
+check("diagnostics count the imported shortIds",
+      _checks.get("reality_short_ids_ok", {}).get("params", {}).get("count") == 2,
+      str(_checks.get("reality_short_ids_ok")))
+check("diagnostics report the official Hysteria2 hop format",
+      "hy2_hop_official" in _checks,
+      str([k for k in _checks if k.startswith("hy2_hop")]))
+check("diagnostics report Clash failover as on",
+      "clash_failover_on" in _checks,
+      str([k for k in _checks if k.startswith("clash_failover")]))
+# A fresh database has no REALITY key, and then the honest diagnostic is
+# reality_pub_missing. Assert whichever one matches the fixture, so this suite
+# tests the diagnostic rather than assuming the demo DB's key is present.
+if re.fullmatch(r"[A-Za-z0-9_-]{43}", str(orig.get("reality_pub") or "")):
+    check("diagnostics report the valid REALITY public key",
+          "reality_pub_ok" in _checks, str(_checks.get("reality_pub_ok")))
+else:
+    check("diagnostics report the missing REALITY public key",
+          "reality_pub_missing" in _checks, str(_checks.get("reality_pub_missing")))
+
+st, _, raw_sid = req("POST", "/api/reality/short-ids", headers=AUTH)
+sid = body_json(raw_sid)
+_ids = sid.get("short_ids") or []
+check("POST /api/reality/short-ids returns three even-length hex IDs",
+      st == 200 and len(_ids) == 3
+      and all(re.fullmatch(r"[0-9a-f]{8}", x) for x in _ids),
+      "status=%d ids=%s" % (st, _ids))
+check("the generated shortIds were not saved",
+      body_json(req("GET", "/api/settings", headers=AUTH)[2]).get("reality_short_ids")
+      == "aa11,bb22")
+
+if re.fullmatch(r"[A-Za-z0-9_-]{43}", str(orig.get("reality_pub") or "")):
+    st, _, raw_imp = req("POST", "/api/reality/import-pub",
+                         json.dumps({"public_key": orig["reality_pub"]}), AUTH)
+    check("POST /api/reality/import-pub accepts the existing key",
+          st == 200 and body_json(raw_imp).get("public_key") == orig["reality_pub"],
+          "status=%d" % st)
+else:
+    check("POST /api/reality/import-pub accepts the existing key", True,
+          "skipped: the demo DB has no public key")
+st, _, _ = req("POST", "/api/reality/import-pub",
+               json.dumps({"public_key": "not-a-key"}), AUTH)
+check("POST /api/reality/import-pub refuses a bad key", st == 422, "status=%d" % st)
 
 # The whole point: replaying the ORIGINAL dict must restore everything,
 # including a key the suite never touched.
@@ -142,6 +230,13 @@ check("the original settings were restored", final.get("domain") == orig.get("do
       "%s -> %s" % (orig.get("domain"), final.get("domain")))
 check("the untouched dns was not clobbered", final.get("dns") == orig.get("dns"),
       "%s -> %s" % (orig.get("dns"), final.get("dns")))
+check("the alignment settings were restored",
+      all(final.get(k) == orig.get(k) for k in _align_keys),
+      str({k: (orig.get(k), final.get(k)) for k in _align_keys
+           if final.get(k) != orig.get(k)}))
+check("the seeded hop range was restored",
+      final.get("hy2_hop_ports") == orig.get("hy2_hop_ports"),
+      "%s -> %s" % (orig.get("hy2_hop_ports"), final.get("hy2_hop_ports")))
 
 print("\n=== 2. a partial PUT is a silent data loss, so it must be refused ===")
 # Four ports are required in SettingsIn, so a partial body 422s rather than

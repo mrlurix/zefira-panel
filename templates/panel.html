@@ -304,6 +304,44 @@
           <button type="button" id="save-hardening-btn" class="btn btn-primary mt-10" data-i18n="reality.hardSaveBtn">Save Transport Hardening</button>
         </div>
 
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="reality.alignTitle">Server Alignment</h2></div>
+          <p class="hint mt-0" data-i18n="reality.alignHint">The panel cannot read your Xray or Hysteria2 config. These fields make the generated links match what the server already runs; leave a field empty to keep the historical default.</p>
+          <div class="field-row">
+            <label class="field"><span data-i18n="reality.wsPath">WebSocket path</span><input type="text" name="ws_path" maxlength="200" spellcheck="false" placeholder="/zefira"></label>
+            <label class="field"><span data-i18n="reality.wsHost">WebSocket Host header (empty = connect address)</span><input type="text" name="ws_host" maxlength="253" spellcheck="false" placeholder="cdn.example.com"></label>
+          </div>
+          <div class="field"><span data-i18n="reality.shortIds">REALITY shortIds on the server (comma separated, empty = legacy SHA1)</span>
+            <div class="field-row">
+              <input type="text" name="reality_short_ids" maxlength="200" spellcheck="false" placeholder="a1b2c3d4,e5f6a7b8">
+              <button type="button" id="reality-shortids-btn" class="btn btn-sm btn-ghost" data-i18n="reality.shortIdsBtn">Generate</button>
+            </div>
+          </div>
+          <p class="hint mt-0" data-i18n="reality.shortIdsHint">Paste the generated values into the server's shortIds array, save there, then save here. One REALITY link per ID is emitted.</p>
+          <div class="field"><span data-i18n="reality.importPubLabel">Import an existing server's public key</span>
+            <div class="field-row">
+              <input type="text" id="reality-pub-import" maxlength="43" spellcheck="false" placeholder="43-char base64url public key">
+              <button type="button" id="reality-import-pub-btn" class="btn btn-sm btn-ghost" data-i18n="reality.importPubBtn">Import</button>
+            </div>
+          </div>
+          <div class="field-row">
+            <label class="field"><span data-i18n="reality.hopFormat">Hysteria2 hop URI format</span>
+              <select name="hy2_hop_format">
+                <option value="mport" data-i18n="reality.hopFormatMport">mport extension (v2rayN, Xray, Shadowrocket)</option>
+                <option value="official" data-i18n="reality.hopFormatOfficial">Official Hysteria2 authority range</option>
+              </select>
+            </label>
+            <label class="field"><span data-i18n="reality.failoverInterval">Clash failover check interval (seconds)</span><input type="number" name="clash_failover_interval" min="30" max="3600" step="1" value="300"></label>
+          </div>
+          <label class="proto-check wide"><input type="checkbox" name="clash_failover"><span data-i18n="reality.failoverToggle">Add automatic Clash fallback group (Zefira-Auto)</span></label>
+          <label class="field"><span data-i18n="reality.healthUrl">Clash health-check URL</span><input type="text" name="clash_health_check_url" maxlength="480" spellcheck="false" placeholder="https://www.gstatic.com/generate_204"></label>
+          <div class="reality-actions">
+            <button type="button" id="save-align-btn" class="btn btn-primary" data-i18n="reality.alignSaveBtn">Save Alignment Settings</button>
+            <button type="button" id="diagnostics-btn" class="btn btn-ghost" data-i18n="reality.diagBtn">Run Diagnostics</button>
+          </div>
+          <ul id="diagnostics-out" class="sec-list mt-10 hidden"></ul>
+        </div>
+
       </div>
     </section>
 

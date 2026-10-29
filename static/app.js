@@ -1272,6 +1272,26 @@ async function loadSrvSettings() {
       perUserSni.checked = String(srv.reality_sni_per_user) === "1"
         || srv.reality_sni_per_user === true;
     }
+    // Server-alignment fields. They are outside #srv-form for the same reason:
+    // they are not part of the four-port form and must survive a reload.
+    const wsPath = document.querySelector('[name="ws_path"]');
+    const wsHost = document.querySelector('[name="ws_host"]');
+    const shortIds = document.querySelector('[name="reality_short_ids"]');
+    const hopFormat = document.querySelector('[name="hy2_hop_format"]');
+    const failover = document.querySelector('[name="clash_failover"]');
+    const healthUrl = document.querySelector('[name="clash_health_check_url"]');
+    const failoverInt = document.querySelector('[name="clash_failover_interval"]');
+    if (wsPath) wsPath.value = srv.ws_path || "/zefira";
+    if (wsHost) wsHost.value = srv.ws_host || "";
+    if (shortIds) shortIds.value = srv.reality_short_ids || "";
+    if (hopFormat) hopFormat.value = srv.hy2_hop_format || "mport";
+    if (failover) {
+      failover.checked = String(srv.clash_failover) === "1" || srv.clash_failover === true;
+    }
+    if (healthUrl) healthUrl.value = srv.clash_health_check_url || "https://www.gstatic.com/generate_204";
+    if (failoverInt) {
+      failoverInt.value = srv.clash_failover_interval != null ? srv.clash_failover_interval : 300;
+    }
     // The public key is not a secret: "Copy Both Keys" used to copy an EMPTY
     // public_key after a reload because only Generate ever filled it.
     const rpub = document.querySelector('[name="reality_pub"]') || $("#reality-pub");
@@ -1340,6 +1360,23 @@ async function saveAllSettings() {
     body.hy2_hop_interval = Number.isFinite(hi) ? hi : 30;
   }
   if (perUserSniIn) body.reality_sni_per_user = perUserSniIn.checked;
+  const wsPathIn = document.querySelector('[name="ws_path"]');
+  const wsHostIn = document.querySelector('[name="ws_host"]');
+  const shortIdsIn = document.querySelector('[name="reality_short_ids"]');
+  const hopFormatIn = document.querySelector('[name="hy2_hop_format"]');
+  const failoverIn = document.querySelector('[name="clash_failover"]');
+  const healthUrlIn = document.querySelector('[name="clash_health_check_url"]');
+  const failoverIntIn = document.querySelector('[name="clash_failover_interval"]');
+  if (wsPathIn) body.ws_path = wsPathIn.value.trim();
+  if (wsHostIn) body.ws_host = wsHostIn.value.trim();
+  if (shortIdsIn) body.reality_short_ids = shortIdsIn.value.trim();
+  if (hopFormatIn) body.hy2_hop_format = hopFormatIn.value;
+  if (failoverIn) body.clash_failover = failoverIn.checked;
+  if (healthUrlIn) body.clash_health_check_url = healthUrlIn.value.trim();
+  if (failoverIntIn) {
+    const fi = numInput(failoverIntIn.value);
+    body.clash_failover_interval = Number.isFinite(fi) ? fi : 300;
+  }
   // A NaN port would be sent as null and 422 the whole save; say which field.
   // Number.isFinite alone is not enough: it accepts 0, 70000 and 443.5, and the
   // schema is StrictInt(ge=1, le=65535). A rejected field then 422s the ENTIRE
@@ -1361,6 +1398,13 @@ async function saveAllSettings() {
     toast(t("msg.badHopInterval"), false);
     return;
   }
+  if (body.clash_failover_interval !== undefined &&
+      (!Number.isFinite(body.clash_failover_interval)
+       || body.clash_failover_interval < 30 || body.clash_failover_interval > 3600
+       || !Number.isInteger(body.clash_failover_interval))) {
+    toast(t("msg.badFailoverInterval"), false);
+    return;
+  }
   try {
     await api("/api/settings", { method: "PUT", body });
     toast(t("msg.srvSaved"));
@@ -1377,6 +1421,61 @@ bind("#save-hardening-btn", "click", async (e) => {
   const btn = e.currentTarget;
   if (!guardBtn(btn)) return;
   try { await saveAllSettings(); } finally { btn.disabled = false; }
+});
+bind("#save-align-btn", "click", async (e) => {
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  try { await saveAllSettings(); } finally { btn.disabled = false; }
+});
+bind("#reality-shortids-btn", "click", async (e) => {
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  try {
+    const d = await api("/api/reality/short-ids", { method: "POST" });
+    const field = document.querySelector('[name="reality_short_ids"]');
+    if (field) field.value = d.text || (d.short_ids || []).join(",");
+    toast(t("msg.shortIdsGenerated"));
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
+});
+bind("#reality-import-pub-btn", "click", async (e) => {
+  const input = $("#reality-pub-import");
+  const key = (input?.value || "").trim();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(key)) {
+    toast(t("msg.badRealityPub"), false);
+    return;
+  }
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  try {
+    await api("/api/reality/import-pub", { method: "POST", body: { public_key: key } });
+    const pub = $("#reality-pub");
+    if (pub) pub.value = key;
+    $("#reality-out")?.classList.remove("hidden");
+    toast(t("msg.realityPubImported"));
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
+});
+bind("#diagnostics-btn", "click", async (e) => {
+  const btn = e.currentTarget;
+  if (!guardBtn(btn)) return;
+  const out = $("#diagnostics-out");
+  try {
+    const d = await api("/api/settings/diagnostics");
+    if (!out) return;
+    out.textContent = "";
+    const icons = { ok: "✓", warn: "!", error: "✕", info: "i" };
+    for (const c of d.checks || []) {
+      const li = document.createElement("li");
+      const key = "diag." + c.code;
+      const translated = t(key, c.params || {});
+      li.textContent = `${icons[c.level] || "•"} ${translated === key ? c.message : translated}`;
+      li.className = "diag-" + (c.level || "info");
+      out.appendChild(li);
+    }
+    out.classList.remove("hidden");
+  } catch (err) { if (err.message !== "auth") toast(err.message, false); }
+  finally { btn.disabled = false; }
 });
 bind("#srv-form", "submit", async (e) => {
   e.preventDefault();

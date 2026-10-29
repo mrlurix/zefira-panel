@@ -78,6 +78,16 @@ DEFAULT_SRV = {
     "hy2_hop_ports": "",
     "hy2_hop_interval": HY2_HOP_INTERVAL_DEFAULT,
     "reality_sni_per_user": "0",
+    # Anti-filter alignment with an EXISTING server. All defaults reproduce
+    # the output the panel emitted before these settings existed; the fields
+    # only change anything when an operator fills them in.
+    "ws_path": "/zefira",
+    "ws_host": "",
+    "reality_short_ids": "",
+    "hy2_hop_format": "mport",
+    "clash_failover": "0",
+    "clash_health_check_url": "https://www.gstatic.com/generate_204",
+    "clash_failover_interval": 300,
 }
 
 
@@ -266,6 +276,13 @@ def resolve_srv(db_values: dict) -> dict:
     srv["hy2_hop_ports"] = normalize_hop_ports(srv.get("hy2_hop_ports"))
     srv["hy2_hop_interval"] = _safe_hop_interval(srv.get("hy2_hop_interval"))
     srv["reality_sni_per_user"] = "1" if _truthy(srv.get("reality_sni_per_user")) else "0"
+    srv["ws_path"] = normalize_ws_path(srv.get("ws_path"))
+    srv["ws_host"] = _safe_optional_host(srv.get("ws_host"))
+    srv["reality_short_ids"] = normalize_short_ids(srv.get("reality_short_ids"))
+    srv["hy2_hop_format"] = normalize_hop_format(srv.get("hy2_hop_format"))
+    srv["clash_failover"] = "1" if _truthy(srv.get("clash_failover")) else "0"
+    srv["clash_health_check_url"] = _safe_health_url(srv.get("clash_health_check_url"))
+    srv["clash_failover_interval"] = _safe_failover_interval(srv.get("clash_failover_interval"))
     return srv
 
 
@@ -284,6 +301,15 @@ def _safe_fp(value) -> str:
 
 def _tls_fp(srv: dict) -> str:
     return _safe_fp(srv.get("tls_fp"))
+
+
+def _ws_path(srv: dict) -> str:
+    return normalize_ws_path(srv.get("ws_path"))
+
+
+def _ws_host(secret: str, srv: dict) -> str:
+    """Host header for WebSocket. Empty means the connect address (legacy)."""
+    return _safe_optional_host(srv.get("ws_host")) or _effective_host(secret, srv)
 
 
 def normalize_hop_ports(value) -> str:
@@ -311,6 +337,20 @@ def normalize_hop_ports(value) -> str:
         parts.append(str(lo) if lo == hi else f"{lo}-{hi}")
     out = ",".join(parts)
     return out if len(out) <= 512 else ""
+
+
+def port_in_list(port: int, spec: str) -> bool:
+    """True when `port` falls inside a comma-separated port/range list."""
+    for chunk in str(spec or "").split(","):
+        chunk = chunk.strip().replace(":", "-")
+        m = re.fullmatch(r"(\d{1,5})(?:-(\d{1,5}))?", chunk)
+        if not m:
+            continue
+        lo = int(m.group(1))
+        hi = int(m.group(2)) if m.group(2) else lo
+        if lo <= port <= hi:
+            return True
+    return False
 
 
 def _safe_hop_interval(value) -> int:
@@ -341,6 +381,98 @@ def _safe_obfs_password(value) -> str:
     if len(v) < 4 or len(v) > 128:
         return ""
     return v
+
+
+# WebSocket path and REALITY shortIds are operator-supplied values that reach
+# query strings, JSON profiles and YAML. Keep them to a strict grammar here so
+# a hand-edited row or restored backup cannot inject a second parameter.
+_WS_PATH_RE = re.compile(r"\A/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,199}\Z")
+# Xray rejects an odd-length shortId outright ("invalid shortIds[0]"), so the
+# panel must not emit one. 2-16 hex characters, in pairs.
+_SHORT_ID_RE = re.compile(r"\A(?:[0-9a-f]{2}){1,8}\Z")
+_HTTP_URL_RE = re.compile(r"\Ahttps?://[^\s]{1,480}\Z", re.IGNORECASE)
+
+
+def normalize_ws_path(value) -> str:
+    """A safe absolute WebSocket path, or the historical default.
+
+    Empty means "not configured": the panel has always used /zefira, so an
+    upgraded database keeps emitting byte-identical links.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return "/zefira"
+    return raw if _WS_PATH_RE.fullmatch(raw) else "/zefira"
+
+
+def normalize_short_ids(value) -> str:
+    """Lowercase, comma-separated REALITY shortIds, or "" when unusable.
+
+    Xray accepts 2-16 hex characters per shortId and rejects odd lengths, so
+    each value must be whole bytes. Invalid input disables the whole list (the
+    same rule as port ranges): emitting half a list would send some clients to
+    an ID the server does not know.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    parts = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip().lower()
+        if not chunk:
+            continue
+        if not _SHORT_ID_RE.fullmatch(chunk):
+            return ""
+        if chunk not in parts:
+            parts.append(chunk)
+    if not parts or len(parts) > 16:
+        return ""
+    out = ",".join(parts)
+    return out if len(out) <= 200 else ""
+
+
+def normalize_hop_format(value) -> str:
+    """`mport` (historical extension) or the official authority range."""
+    return "official" if str(value or "").strip().lower() == "official" else "mport"
+
+
+def _safe_optional_host(value) -> str:
+    """A valid hostname/IP, or "" when the operator left it blank/invalid."""
+    h = str(value or "").strip()
+    if not h:
+        return ""
+    return h if _HOST_RE.fullmatch(h) else ""
+
+
+def _safe_health_url(value) -> str:
+    """A health-check URL for Clash's fallback group, or the default."""
+    default = "https://www.gstatic.com/generate_204"
+    raw = str(value or "").strip()
+    if not raw or not _HTTP_URL_RE.fullmatch(raw):
+        return default
+    try:
+        from urllib.parse import urlparse
+
+        p = urlparse(raw)
+        if p.scheme not in ("http", "https") or not p.hostname:
+            return default
+        if p.username or p.password:
+            return default
+        if any(ord(ch) < 32 for ch in raw):
+            return default
+    except Exception:
+        return default
+    return raw
+
+
+def _safe_failover_interval(value) -> int:
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return 300
+    return n if 30 <= n <= 3600 else 300
 
 
 def _env_port(value) -> int | None:
@@ -447,10 +579,14 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     # link and a legacy row must not be able to inject a second line.
     name = _q(username, safe="")
     fp = _tls_fp(srv)
+    ws_path = _ws_path(srv)
+    ws_path_q = _q(ws_path, safe="")
+    ws_host = _ws_host(secret, srv)
+    ws_host_q = _q(ws_host, safe="")
     if protocol == "vless":
         return (
             f"vless://{secret}@{host}:{srv['sub_port']}?encryption=none&security=tls"
-            f"&sni={sni}&fp={fp}&type=ws&host={host}&path=%2Fzefira#{name}"
+            f"&sni={sni}&fp={fp}&type=ws&host={ws_host_q}&path={ws_path_q}#{name}"
         )
     if protocol == "vmess":
         obj = {
@@ -463,8 +599,8 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
             "scy": "auto",
             "net": "ws",
             "type": "none",
-            "host": host,
-            "path": "/zefira",
+            "host": ws_host,
+            "path": ws_path,
             "tls": "tls",
             "sni": sni,
             # v2rayN's JSON schema carries the uTLS fingerprint here. It was
@@ -476,7 +612,7 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
     if protocol == "trojan":
         return (
             f"trojan://{secret}@{host}:{srv['sub_port']}?security=tls&sni={sni}"
-            f"&fp={fp}&type=ws&host={host}&path=%2Fzefira&allowInsecure=0#{name}"
+            f"&fp={fp}&type=ws&host={ws_host_q}&path={ws_path_q}&allowInsecure=0#{name}"
         )
     if protocol == "ss":
         # SIP002 mandates URL-safe base64 without padding (strict clients
@@ -496,14 +632,21 @@ def _v2ray_link(protocol: str, secret: str, username: str, index: int, srv: dict
             query.append("obfs=salamander")
             query.append("obfs-password=" + _q(obfs, safe=""))
         hop_ports = normalize_hop_ports(srv.get("hy2_hop_ports"))
+        authority_port = str(srv["hy2_port"])
         if hop_ports:
-            # The official multi-port form lives in the authority, but v2rayN,
-            # Xray-core, Shadowrocket and Sub-Store all read `mport`, while a
-            # numeric authority port keeps the URL parseable by older clients.
-            query.append("mport=" + _q(hop_ports, safe=","))
+            if normalize_hop_format(srv.get("hy2_hop_format")) == "official":
+                # Official Hysteria2 reads hopping from the authority, e.g.
+                # host:20000-50000. The numeric anchor stays out of the URI so
+                # a dead anchor cannot win the first random pick.
+                authority_port = hop_ports
+            else:
+                # v2rayN, Xray-core, Shadowrocket and Sub-Store read `mport`,
+                # while a numeric authority port keeps the URL parseable by
+                # older clients. This is the historical format.
+                query.append("mport=" + _q(hop_ports, safe=","))
             query.append(f"hop-interval={_safe_hop_interval(srv.get('hy2_hop_interval'))}")
         return (
-            f"hysteria2://{secret}@{host}:{srv['hy2_port']}/?"
+            f"hysteria2://{secret}@{host}:{authority_port}/?"
             f"{'&'.join(query)}#{_q(username, safe='')}"
         )
     return None
@@ -545,6 +688,46 @@ def _reality_sni(srv: dict, index: int = 1, secret: str = "") -> str:
     return sni_list[(i - 1) % len(sni_list)]
 
 
+def _reality_short_ids(srv: dict) -> list:
+    """The operator's actual server shortIds, or [] for legacy derivation."""
+    return [s for s in normalize_short_ids(srv.get("reality_short_ids")).split(",") if s]
+
+
+def _reality_sid(srv: dict, index: int, secret: str) -> str:
+    """A shortId the server actually has, when the operator supplied the list.
+
+    The old behaviour (SHA1(secret:index)[:8]) is kept when no list is set:
+    it cannot be dropped without breaking every existing REALITY deployment
+    whose server was configured from the panel's generated values. When a list
+    IS set, links rotate through the real IDs instead of guessing.
+    """
+    ids = _reality_short_ids(srv)
+    if ids:
+        try:
+            i = max(1, int(index or 1))
+        except (TypeError, ValueError):
+            i = 1
+        return ids[(i - 1) % len(ids)]
+    return hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
+
+
+def _reality_indexes(srv: dict) -> range:
+    """One link per real shortId; three legacy links when none are set."""
+    ids = _reality_short_ids(srv)
+    return range(1, len(ids) + 1) if ids else range(1, 4)
+
+
+def _reality_spx(secret: str) -> str:
+    """Stable per-client spider path.
+
+    REALITY's `spx` is not authentication, but a distinct value per customer
+    removes a trivial shared fingerprint. It is stable across subscription
+    fetches because it is derived from the credential, not random.
+    """
+    digest = hashlib.sha256(f"zefira-reality-spx:{secret}".encode()).hexdigest()[:8]
+    return f"/{digest}"
+
+
 def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | None:
     from urllib.parse import quote as _q
 
@@ -557,11 +740,12 @@ def _reality_link(secret: str, username: str, index: int, srv: dict) -> str | No
         return None
     sni = _reality_sni(srv, index, secret)
     sni = _q(sni, safe="")
-    sid = hashlib.sha1(f"{secret}:{index}".encode()).hexdigest()[:8]
+    sid = _reality_sid(srv, index, secret)
+    spx = _q(_reality_spx(secret), safe="")
     name = _q(username, safe="")
     return (
         f"vless://{secret}@{host}:{srv['reality_port']}?"
-        f"encryption=none&security=reality&pbk={pub}&sid={sid}"
+        f"encryption=none&security=reality&pbk={pub}&sid={sid}&spx={spx}"
         f"&sni={sni}&fp={_tls_fp(srv)}&type=tcp&flow=xtls-rprx-vision"
         f"&headerType=none#{name}"
     )
@@ -677,8 +861,11 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
     proxies = []
     names = []
 
-    def ws_opts(h, path="/zefira"):
-        return {"path": path, "headers": {"Host": h}}
+    def ws_opts(h, vsrv):
+        return {
+            "path": _ws_path(vsrv),
+            "headers": {"Host": _safe_optional_host(vsrv.get("ws_host")) or h},
+        }
 
     def _hs(sec, vsrv):
         h = _effective_host(sec, vsrv)
@@ -702,8 +889,8 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             proxies.append({
                 "name": n, "type": "vmess", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "uuid": sec, "alterId": 0, "cipher": "auto",
-                "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff),
-                "client-fingerprint": _tls_fp(vsrv),
+                "tls": True, "servername": sni_eff, "network": "ws", "ws-opts": ws_opts(host_eff, vsrv),
+                "client-fingerprint": _tls_fp(vsrv), "udp": True, "alpn": ["http/1.1"],
             })
     if "vless" in protos and secrets_map.get("vless"):
         sec = secrets_map["vless"]
@@ -714,8 +901,8 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             proxies.append({
                 "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "uuid": sec, "tls": True, "servername": sni_eff,
-                "network": "ws", "ws-opts": ws_opts(host_eff),
-                "client-fingerprint": _tls_fp(vsrv),
+                "network": "ws", "ws-opts": ws_opts(host_eff, vsrv),
+                "client-fingerprint": _tls_fp(vsrv), "udp": True, "alpn": ["http/1.1"],
             })
     if "reality" in protos and secrets_map.get("reality"):
         sec = secrets_map["reality"]
@@ -728,7 +915,7 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             # link for the same user rotated, so one customer got two
             # different REALITY servernames.
             sni = _reality_sni(vsrv, r_idx, sec)
-            sid = hashlib.sha1(f"{sec}:{r_idx}".encode()).hexdigest()[:8]
+            sid = _reality_sid(vsrv, r_idx, sec)
             # Same 43-char allowlist as the link builder: skip misconfigured
             # REALITY here too instead of shipping a dead proxy.
             rpub = vsrv.get("reality_pub") or ""
@@ -740,7 +927,15 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
                 "name": n, "type": "vless", "server": host_eff, "port": int(vsrv["reality_port"]),
                 "uuid": sec, "flow": "xtls-rprx-vision",
                 "tls": True, "servername": sni, "client-fingerprint": _tls_fp(vsrv),
-                "reality-opts": {"public-key": rpub, "short-id": sid},
+                # Current Xray REALITY servers negotiate X25519MLKEM768 by
+                # default; Mihomo refuses the handshake unless it is told it
+                # may offer the hybrid group. Older Mihomo ignores the key.
+                "reality-opts": {
+                    "public-key": rpub,
+                    "short-id": sid,
+                    "support-x25519mlkem768": True,
+                },
+                "udp": True,
             })
     if "trojan" in protos and secrets_map.get("trojan"):
         sec = secrets_map["trojan"]
@@ -751,8 +946,8 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
             proxies.append({
                 "name": n, "type": "trojan", "server": host_eff, "port": int(vsrv["sub_port"]),
                 "password": sec, "sni": sni_eff, "udp": True,
-                "network": "ws", "ws-opts": ws_opts(host_eff),
-                "client-fingerprint": _tls_fp(vsrv),
+                "network": "ws", "ws-opts": ws_opts(host_eff, vsrv),
+                "client-fingerprint": _tls_fp(vsrv), "alpn": ["http/1.1"],
             })
     if "ss" in protos and secrets_map.get("ss"):
         sec = secrets_map["ss"]
@@ -826,6 +1021,18 @@ def clash_yaml(u: dict, srv: dict, blocked: list = None, inbounds: list = None) 
         raise ValueError(_NO_CLASH_REASON)
     lines.append("proxy-groups:")
     group_proxies = names
+    if _truthy(srv.get("clash_failover")):
+        # Opt-in automatic failover. The manual selector stays first so the
+        # customer can still pin a proxy; the fallback group probes health and
+        # moves to the next proxy without a restart.
+        lines.append("  - " + _json_scalar({
+            "name": "Zefira-Auto",
+            "type": "fallback",
+            "proxies": names,
+            "url": _safe_health_url(srv.get("clash_health_check_url")),
+            "interval": _safe_failover_interval(srv.get("clash_failover_interval")),
+        }))
+        group_proxies = ["Zefira-Auto"] + names
     lines.append("  - " + _json_scalar({"name": "Zefira", "type": "select", "proxies": group_proxies}))
     lines.append("rules:")
     if blocked:
@@ -1140,7 +1347,7 @@ def build_files(u: dict, srv: dict, inbounds: list = None) -> list:
         elif p == "reality":
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""
-                for i in range(1, 4):
+                for i in _reality_indexes(vsrv):
                     link = _reality_link(sec, u["username"] + suffix, i, vsrv)
                     if link:
                         links.append(link)
@@ -1215,7 +1422,7 @@ def user_links(u: dict, srv: dict, inbounds: list = None) -> dict:
             links = []
             for vsrv, ilabel in _srvs_for(p, srv, inbounds):
                 suffix = f"-{ilabel}" if ilabel else ""
-                for i in range(1, 4):
+                for i in _reality_indexes(vsrv):
                     link = _reality_link(sec, u["username"] + suffix, i, vsrv)
                     if link:
                         links.append(link)
@@ -1278,7 +1485,7 @@ def subscription_body(u: dict, srv: dict, inbounds: list = None) -> tuple[str, s
         elif p == "reality":
             for vsrv, label in _srvs_for(p, srv, inbounds):
                 suffix = f"-{label}" if label else ""
-                for i in range(1, 4):
+                for i in _reality_indexes(vsrv):
                     link = _reality_link(sec, u["username"] + suffix, i, vsrv)
                     if link:
                         links.append(link)

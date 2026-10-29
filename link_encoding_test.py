@@ -416,5 +416,179 @@ check("normalize_hop_ports rejects a reversed range",
 check("normalize_hop_ports rejects an empty member",
       P.normalize_hop_ports("1,,2") == "")
 
+print()
+print("=== 11. server alignment: defaults stay, opt-in values reach every output ===")
+_DEF = P.resolve_srv({})
+check("the default WebSocket path is the historical /zefira",
+      _DEF["ws_path"] == "/zefira", _DEF["ws_path"])
+check("the default WebSocket Host is empty (connect address)",
+      _DEF["ws_host"] == "", repr(_DEF["ws_host"]))
+check("REALITY shortIds default to the legacy derivation",
+      _DEF["reality_short_ids"] == "", repr(_DEF["reality_short_ids"]))
+check("the default Hysteria2 hop format is mport",
+      _DEF["hy2_hop_format"] == "mport", _DEF["hy2_hop_format"])
+check("Clash failover is off by default", _DEF["clash_failover"] == "0",
+      repr(_DEF["clash_failover"]))
+check("the default Clash health URL is the documented one",
+      _DEF["clash_health_check_url"] == "https://www.gstatic.com/generate_204",
+      _DEF["clash_health_check_url"])
+check("the default Clash failover interval is 300 seconds",
+      _DEF["clash_failover_interval"] == 300, str(_DEF["clash_failover_interval"]))
+
+_WS = dict(SRV)
+_ws_link = P._v2ray_link("vless", SEC, "alice", 1, _WS)
+_ws_q = parse_qs(urlsplit(_ws_link).query)
+check("the default VLESS link keeps path=/zefira and host=connect address",
+      _ws_q.get("path") == ["/zefira"] and _ws_q.get("host") == ["panel.example.com"],
+      str({k: _ws_q.get(k) for k in ("path", "host")}))
+
+_WSC = dict(SRV)
+_WSC["ws_path"] = "/custom/ws"
+_WSC["ws_host"] = "cdn.example.com"
+_vless_ws = parse_qs(urlsplit(P._v2ray_link("vless", SEC, "alice", 1, _WSC)).query)
+check("a custom WebSocket path and Host reach the VLESS link",
+      _vless_ws.get("path") == ["/custom/ws"]
+      and _vless_ws.get("host") == ["cdn.example.com"],
+      str({k: _vless_ws.get(k) for k in ("path", "host")}))
+_trojan_ws = parse_qs(urlsplit(P._v2ray_link("trojan", SEC, "alice", 1, _WSC)).query)
+check("a custom WebSocket path and Host reach the Trojan link",
+      _trojan_ws.get("path") == ["/custom/ws"]
+      and _trojan_ws.get("host") == ["cdn.example.com"],
+      str({k: _trojan_ws.get(k) for k in ("path", "host")}))
+_vp = P._v2ray_link("vmess", SEC, "alice", 1, _WSC)[len("vmess://"):]
+_vp += "=" * (-len(_vp) % 4)
+_vj = json.loads(base64.urlsafe_b64decode(_vp).decode("utf-8"))
+check("a custom WebSocket path and Host reach the VMess JSON",
+      _vj.get("path") == "/custom/ws" and _vj.get("host") == "cdn.example.com",
+      str({k: _vj.get(k) for k in ("path", "host")}))
+_ws_clash = clash_proxies(P.clash_yaml(
+    {"username": "alice", "protocols": ["vless"],
+     "secret_map": {"vless": SEC}}, _WSC))[0]
+check("a custom WebSocket path and Host reach Clash ws-opts",
+      _ws_clash.get("ws-opts", {}).get("path") == "/custom/ws"
+      and _ws_clash.get("ws-opts", {}).get("headers", {}).get("Host") == "cdn.example.com",
+      str(_ws_clash.get("ws-opts")))
+check("a bad WebSocket path falls back to /zefira at the builder",
+      P.resolve_srv({"ws_path": "zefira"})["ws_path"] == "/zefira")
+check("a bad WebSocket Host is dropped, not injected",
+      P.resolve_srv({"ws_host": "cdn.example.com/path"})["ws_host"] == "")
+
+_SID = dict(SRV)
+_SID["reality_short_ids"] = "aa11,bb22"
+_sid_links = next(iter(P.user_links(
+    {"username": "alice", "protocols": ["reality"],
+     "secret_map": {"reality": SEC}}, _SID).values()))["links"]
+_sid_values = [parse_qs(urlsplit(x).query).get("sid", [""])[0] for x in _sid_links]
+check("one REALITY link is emitted per configured shortId",
+      len(_sid_links) == 2 and _sid_values == ["aa11", "bb22"],
+      f"{len(_sid_links)} links: {_sid_values}")
+check("the legacy SHA1 shortId is kept when no list is set",
+      P._reality_sid(dict(SRV), 1, SEC)
+      == P.hashlib.sha1(f"{SEC}:1".encode()).hexdigest()[:8],
+      P._reality_sid(dict(SRV), 1, SEC))
+_spx = [parse_qs(urlsplit(x).query).get("spx", [""])[0] for x in _sid_links]
+check("every REALITY link carries a spider path",
+      all(s.startswith("/") for s in _spx), str(_spx))
+check("the spider path is stable per credential",
+      len(set(_spx)) == 1, str(_spx))
+_spx2 = parse_qs(urlsplit(P._reality_link(
+    "22222222-3333-4444-5555-666666666666", "bob", 1, SRV)).query).get("spx", [""])[0]
+check("two customers do not share one spider path", _spx[0] != _spx2,
+      f"{_spx[0]} vs {_spx2}")
+check("odd-length shortIds are refused (Xray rejects them)",
+      P.resolve_srv({"reality_short_ids": "abc"})["reality_short_ids"] == "")
+check("duplicate shortIds collapse to one link",
+      P.resolve_srv({"reality_short_ids": "aa11,AA11"})["reality_short_ids"] == "aa11")
+check("port_in_list finds an anchor inside a range",
+      P.port_in_list(24447, "24447-24449"))
+check("port_in_list reports an anchor outside the hop list",
+      not P.port_in_list(24447, "24448-24449"))
+
+_HY_OFF = dict(SRV)
+_HY_OFF.update({"hy2_hop_ports": "20000-20005", "hy2_hop_format": "official",
+                "hy2_hop_interval": 45})
+_hy_official = P._v2ray_link("hysteria2", SEC, "alice", 1, _HY_OFF)
+_hy_official_q = parse_qs(urlsplit(_hy_official).query)
+check("official hopping puts the range in the URI authority",
+      urlsplit(_hy_official).netloc.endswith("@panel.example.com:20000-20005"),
+      urlsplit(_hy_official).netloc)
+check("official hopping does not emit mport",
+      "mport" not in _hy_official_q, str(_hy_official_q))
+check("official hopping keeps the interval parameter",
+      _hy_official_q.get("hop-interval") == ["45"], str(_hy_official_q))
+
+_HY_MPORT = dict(SRV)
+_HY_MPORT.update({"hy2_hop_ports": "20000-20005", "hy2_hop_interval": 45})
+_hy_mport = P._v2ray_link("hysteria2", SEC, "alice", 1, _HY_MPORT)
+_hy_mport_q = parse_qs(urlsplit(_hy_mport).query)
+check("mport keeps the numeric anchor and the extension",
+      urlsplit(_hy_mport).netloc.endswith("@panel.example.com:8443")
+      and _hy_mport_q.get("mport") == ["20000-20005"],
+      f"{urlsplit(_hy_mport).netloc} {_hy_mport_q.get('mport')}")
+
+_CLASH_USER = {"username": "alice", "protocols": ["vless"],
+               "secret_map": {"vless": SEC}}
+_clash_off = clash_proxies(P.clash_yaml(_CLASH_USER, dict(SRV)))
+check("Clash emits no Zefira-Auto group by default",
+      not any(g.get("name") == "Zefira-Auto" for g in _clash_off),
+      str([g.get("name") for g in _clash_off]))
+_CLASH_ON = dict(SRV)
+_CLASH_ON.update({"clash_failover": "1",
+                  "clash_health_check_url": "https://example.com/204",
+                  "clash_failover_interval": 120})
+_clash_on = clash_proxies(P.clash_yaml(_CLASH_USER, _CLASH_ON))
+_auto = [g for g in _clash_on if g.get("name") == "Zefira-Auto"]
+_manual = [g for g in _clash_on if g.get("name") == "Zefira"]
+check("Clash adds a fallback group when failover is enabled",
+      len(_auto) == 1 and _auto[0].get("type") == "fallback"
+      and _auto[0].get("url") == "https://example.com/204"
+      and _auto[0].get("interval") == 120,
+      str(_auto[:1]))
+check("the manual selector survives and can pin the automatic group",
+      len(_manual) == 1 and _manual[0].get("type") == "select"
+      and "Zefira-Auto" in (_manual[0].get("proxies") or []),
+      str(_manual[:1]))
+check("a bad failover URL falls back to the documented default",
+      P.resolve_srv({"clash_health_check_url": "ftp://x"})["clash_health_check_url"]
+      == "https://www.gstatic.com/generate_204")
+check("an out-of-range failover interval falls back to 300",
+      P.resolve_srv({"clash_failover_interval": 5})["clash_failover_interval"] == 300)
+
+from schemas import RealityPubIn, SettingsIn  # noqa: E402
+_ok_settings = SettingsIn(
+    sub_port=443, hy2_port=8443, wg_port=51820, ovpn_port=1194,
+    ws_path=" /edge ", ws_host=" cdn.example.com ",
+    reality_short_ids=" AA11,bb22 ", hy2_hop_format="official",
+    clash_failover=True, clash_health_check_url=" https://example.com/204 ",
+    clash_failover_interval=120)
+check("the settings schema trims and normalises alignment values",
+      _ok_settings.ws_path == "/edge"
+      and _ok_settings.ws_host == "cdn.example.com"
+      and _ok_settings.reality_short_ids == "aa11,bb22"
+      and _ok_settings.hy2_hop_format == "official"
+      and _ok_settings.clash_failover is True
+      and _ok_settings.clash_failover_interval == 120,
+      str(_ok_settings.model_dump(exclude_none=True)))
+for _field, _value in (("ws_path", "edge"), ("ws_path", "/a?b"),
+                       ("reality_short_ids", "abc"), ("reality_short_ids", "zz11"),
+                       ("clash_failover_interval", 5)):
+    try:
+        SettingsIn(sub_port=443, hy2_port=8443, wg_port=51820, ovpn_port=1194,
+                   **{_field: _value})
+        _refused = False
+    except ValidationError:
+        _refused = True
+    check(f"the settings schema refuses {_field}={_value!r}", _refused)
+_pub = RealityPubIn(public_key="OhuXKHlnnUbaD2kyV93XpMMS9-UcVUtr_LyYNsIFugU")
+check("a 43-character base64url REALITY public key is accepted",
+      _pub.public_key.endswith("IFugU"))
+for _bad in ("short", "!" * 43, "A" * 42 + "="):
+    try:
+        RealityPubIn(public_key=_bad)
+        _refused = False
+    except ValidationError:
+        _refused = True
+    check(f"the REALITY import refuses {_bad[:8]!r}...", _refused)
+
 print(f"  === {n - len(fails)}/{n} checks passed ===")
 sys.exit(1 if fails else 0)

@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleUsers">Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=92">
+<link rel="stylesheet" href="assets/style.css?v=96">
 </head>
 <body>
 <header class="topbar">
@@ -170,6 +170,10 @@
 <tr><td data-i18n="usr.setPerUserSni">Per-user REALITY SNI</td><td data-i18n="usr.setPerUserSniD">Gives each user a stable SNI from the list instead of always the first one. Every SNI must be present in the server's REALITY serverNames.</td></tr>
 <tr><td data-i18n="usr.setHy2Obfs">Hysteria2 obfs</td><td data-i18n="usr.setHy2ObfsD">A non-empty password enables Salamander obfuscation in every Hysteria2 link and Clash profile. The server must run Hysteria2 with the same password first.</td></tr>
 <tr><td data-i18n="usr.setHy2Hop">Hysteria2 port hopping</td><td data-i18n="usr.setHy2HopD">A range such as 20000-50000,443 makes clients rotate Hysteria2 ports. The server must listen on the range (or DNAT it) and the firewall must allow the same UDP ports.</td></tr>
+<tr><td data-i18n="usr.setWs">WebSocket path and Host</td><td data-i18n="usr.setWsD">Matches the links and Clash profiles to an existing Xray server whose <code>wsSettings.path</code> or Host header is not <code>/zefira</code> and the connect address. Empty keeps the historical defaults.</td></tr>
+<tr><td data-i18n="usr.setShortIds">REALITY shortIds</td><td data-i18n="usr.setShortIdsD">Paste the server's real <code>shortIds</code> array, or generate values and add them to the server first. With a list the panel emits one link per ID; without it links keep the legacy SHA1-derived IDs.</td></tr>
+<tr><td data-i18n="usr.setHopFormat">Hysteria2 hop URI format</td><td data-i18n="usr.setHopFormatD">Choose <code>official</code> for the official Hysteria2 client, which reads the range from the URI authority. The default <code>mport</code> is read by v2rayN, Xray and Shadowrocket only.</td></tr>
+<tr><td data-i18n="usr.setClashFailover">Clash automatic failover</td><td data-i18n="usr.setClashFailoverD">Adds a health-checked <code>fallback</code> group named <code>Zefira-Auto</code> alongside the manual selector. Off by default; the URL and interval are configurable.</td></tr>
 <tr><td data-i18n="usr.setObf">Obfuscated host</td><td data-i18n="usr.setObfD">Replaces the real domain inside configs with a decoy host.</td></tr>
 <tr><td data-i18n="usr.setPer">Per-user subdomain</td><td><span data-i18n="usr.setPerA">Prefixes a per-user hash (</span><code>a1b2c3d4.domain</code><span data-i18n="usr.setPerB">) so links are not correlatable.</span></td></tr>
 <tr><td data-i18n="usr.setCdn">CDN SNI spoofing</td><td data-i18n="usr.setCdnD">Uses a separate CDN domain for TLS SNI.</td></tr>
@@ -189,8 +193,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=92"></script>
-<script src="assets/docs.js?v=92"></script>
-<script src="assets/support-ai.js?v=92"></script>
+<script src="assets/i18n.js?v=96"></script>
+<script src="assets/docs.js?v=96"></script>
+<script src="assets/support-ai.js?v=96"></script>
 </body>
 </html>

@@ -71,6 +71,7 @@ from schemas import (
     InboundIn,
     InboundPatchIn,
     LoginIn,
+    RealityPubIn,
     RestoreConfirmIn,
     RestoreEncryptedIn,
     RestoreIn,
@@ -213,6 +214,8 @@ SRV_KEYS = {
     "obfuscated_host", "per_user_subdomain", "cdn_enabled", "cdn_sni", "block_direct_ip",
     "tls_fp", "hy2_obfs_password", "hy2_hop_ports", "hy2_hop_interval",
     "reality_sni_per_user",
+    "ws_path", "ws_host", "reality_short_ids", "hy2_hop_format",
+    "clash_failover", "clash_health_check_url", "clash_failover_interval",
 }
 # Everything in SRV_KEYS except `reality_pub`, which is rotated by its own
 # endpoint and is never accepted in a settings PUT. One list, used by both the
@@ -220,6 +223,7 @@ SRV_KEYS = {
 SRV_WRITE_KEYS = tuple(sorted(SRV_KEYS - {"reality_pub"}))
 SRV_SWITCH_KEYS = (
     "per_user_subdomain", "cdn_enabled", "block_direct_ip", "reality_sni_per_user",
+    "clash_failover",
 )
 PENDING_YEAR = 2098
 
@@ -2586,6 +2590,194 @@ def api_reality_private(request: Request, admin: Admin = Depends(require_admin))
         audit(s, "REALITY_REVEAL", f"private key viewed by {admin.username}", client_ip(request))
         _commit(s)
     return {"private_key": priv}
+
+
+@app.post("/api/reality/import-pub")
+def api_reality_import_pub(
+    data: RealityPubIn, request: Request, admin: Admin = Depends(require_admin)
+):
+    # Import, not rotate: the private key stays on the operator's server.
+    if not sensitive_limiter.hit(f"realityimport|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    with db.s() as s:
+        row = s.get(Setting, "reality_pub")
+        if row is None:
+            s.add(Setting(key="reality_pub", value=data.public_key))
+        else:
+            row.value = data.public_key
+        audit(s, "REALITY_IMPORT_PUB", f"by {admin.username}", client_ip(request))
+        _commit(s)
+    _settings_cache.pop("reality_pub", None)
+    log.info("REALITY public key imported by %s", admin.username)
+    return {"public_key": data.public_key}
+
+
+@app.post("/api/reality/short-ids")
+def api_reality_short_ids(request: Request, admin: Admin = Depends(require_admin)):
+    # Generate values to paste into the server's shortIds array. Deliberately
+    # not saved here: the operator must configure the server first, otherwise
+    # links would point at IDs the server has never heard of.
+    if not sensitive_limiter.hit(f"realitysids|{admin.id}"):
+        raise HTTPException(status_code=429, detail="Too many attempts, wait a few minutes")
+    ids = [secrets.token_hex(4) for _ in range(3)]
+    with db.s() as s:
+        audit(s, "REALITY_SHORTIDS_GENERATE", f"by {admin.username}", client_ip(request))
+        _commit(s)
+    return {"short_ids": ids, "text": ",".join(ids)}
+
+
+def _diag(code: str, level: str, message: str, **extra) -> dict:
+    return {"code": code, "level": level, "message": message, **extra}
+
+
+@app.get("/api/settings/diagnostics")
+def api_settings_diagnostics(admin: Admin = Depends(require_admin)):
+    """Explain how the panel's output can disagree with an existing server.
+
+    Nothing here changes a setting: every check is a hint for the operator,
+    because the panel cannot see the Xray/Hysteria2 config on the other side.
+    """
+    srv = load_srv()
+    checks: list[dict] = []
+
+    pub = str(srv.get("reality_pub") or "")
+    if not pub:
+        checks.append(_diag(
+            "reality_pub_missing", "error",
+            "No REALITY public key is configured; REALITY links are skipped.",
+        ))
+    elif not re.fullmatch(r"[A-Za-z0-9_-]{43}", pub):
+        checks.append(_diag(
+            "reality_pub_invalid", "error",
+            "The stored REALITY public key is not a 43-character base64url value; REALITY links are skipped.",
+        ))
+    else:
+        checks.append(_diag(
+            "reality_pub_ok", "ok",
+            "The REALITY public key is valid and is embedded in links.",
+        ))
+
+    short_ids = str(srv.get("reality_short_ids") or "")
+    if short_ids:
+        count = len([x for x in short_ids.split(",") if x])
+        checks.append(_diag(
+            "reality_short_ids_ok", "ok",
+            f"Using {count} imported shortId(s); the server must contain exactly these values.",
+            count=count, params={"count": count},
+        ))
+    else:
+        checks.append(_diag(
+            "reality_short_ids_legacy", "warn",
+            "No server shortIds imported. Links use SHA1-derived shortIds; the server's shortIds array must contain exactly those generated values or every REALITY connection fails.",
+        ))
+
+    if str(srv.get("reality_sni_per_user") or "0") in ("1", "true", "True"):
+        checks.append(_diag(
+            "reality_sni_per_user", "info",
+            "Per-user REALITY SNI is on: every SNI in the list must exist in the server's serverNames.",
+        ))
+
+    if str(srv.get("cdn_enabled") or "0") in ("1", "true", "True"):
+        if not str(srv.get("cdn_sni") or "").strip():
+            checks.append(_diag(
+                "cdn_sni_missing", "error",
+                "CDN spoofing is enabled but cdn_sni is empty; clients will use the connect address as SNI.",
+            ))
+        if not str(srv.get("ws_host") or "").strip():
+            checks.append(_diag(
+                "cdn_ws_host_missing", "warn",
+                "CDN spoofing is on but ws_host is empty. If the CDN routes by Host header, set ws_host to the CDN hostname.",
+            ))
+
+    ws_path = str(srv.get("ws_path") or "")
+    if not ws_path or ws_path == "/zefira":
+        checks.append(_diag(
+            "ws_path_default", "info",
+            "WebSocket path is the historical /zefira. Change it only if the server uses a different path.",
+        ))
+    else:
+        checks.append(_diag(
+            "ws_path_custom", "ok",
+            f"WebSocket path is {ws_path}; the server's wsSettings.path must match it.",
+            params={"path": ws_path},
+        ))
+
+    if str(srv.get("ws_host") or "").strip():
+        checks.append(_diag(
+            "ws_host_custom", "ok",
+            f"WebSocket Host header is {srv.get('ws_host')}; the server or CDN must accept it.",
+            params={"host": srv.get("ws_host")},
+        ))
+
+    obfs = str(srv.get("hy2_obfs_password") or "")
+    if obfs:
+        checks.append(_diag(
+            "hy2_obfs_on", "ok",
+            "Hysteria2 Salamander obfs is configured; the server must use the same password.",
+        ))
+    else:
+        checks.append(_diag(
+            "hy2_obfs_off", "info",
+            "Hysteria2 obfs is off. Enable it only if the server uses Salamander.",
+        ))
+
+    hop_ports = protocols.normalize_hop_ports(srv.get("hy2_hop_ports"))
+    hop_format = protocols.normalize_hop_format(srv.get("hy2_hop_format"))
+    if hop_ports:
+        if hop_format == "official":
+            checks.append(_diag(
+                "hy2_hop_official", "info",
+                f"Official Hysteria2 port hopping: clients read {hop_ports} from the URI authority.",
+                params={"ports": hop_ports},
+            ))
+        else:
+            checks.append(_diag(
+                "hy2_hop_mport", "info",
+                f"Hysteria2 links use the mport extension with {hop_ports}; the official Hysteria2 client ignores it.",
+                params={"ports": hop_ports},
+            ))
+            anchor = srv.get("hy2_port")
+            try:
+                anchor_i = int(anchor)
+            except (TypeError, ValueError):
+                anchor_i = 0
+            if anchor_i and not protocols.port_in_list(anchor_i, hop_ports):
+                checks.append(_diag(
+                    "hy2_anchor_outside_range", "warn",
+                    f"mport clients connect to anchor port {anchor_i} first, but it is not in the hop list {hop_ports}; keep the anchor open too.",
+                    params={"anchor": anchor_i, "ports": hop_ports},
+                ))
+    else:
+        checks.append(_diag(
+            "hy2_hop_off", "info",
+            "Hysteria2 port hopping is off; links use a single port.",
+        ))
+
+    if str(srv.get("clash_failover") or "0") in ("1", "true", "True"):
+        checks.append(_diag(
+            "clash_failover_on", "ok",
+            "Clash profiles include the automatic Zefira-Auto fallback group.",
+        ))
+    else:
+        checks.append(_diag(
+            "clash_failover_off", "info",
+            "Clash profiles use a manual selector only; automatic failover is off.",
+        ))
+
+    if not str(srv.get("domain") or "").strip():
+        checks.append(_diag(
+            "domain_missing", "error",
+            "No domain is configured; links fall back to localhost and cannot be used remotely.",
+        ))
+
+    errors = sum(1 for c in checks if c["level"] == "error")
+    warnings = sum(1 for c in checks if c["level"] == "warn")
+    return {
+        "ok": errors == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "checks": checks,
+    }
 
 
 SSL_SETTING_KEYS = ("ssl_domains", "ssl_cert_path", "ssl_key_path", "ssl_expires")

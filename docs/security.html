@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleSecurity">Security — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=92">
+<link rel="stylesheet" href="assets/style.css?v=96">
 </head>
 <body>
 <header class="topbar">
@@ -65,7 +65,7 @@
 <tr><td data-i18n="sec.layerPlain">Credentials at rest</td><td><span data-i18n="sec.plainA">Encrypted since v1.15.27: per-customer VPN credentials in the database (</span><code>secret_data</code><span data-i18n="sec.plainB">) - the WireGuard private key, OpenVPN client keypair, L2TP PSK and per-protocol passwords - and subscription tokens since v1.15.29, as a Fernet blob plus an HMAC digest for the indexed /sub lookup. Not encrypted: display names, notes, usage counters and timestamps, which are billing data rather than credentials. Keep</span> <code>instance/</code> <span data-i18n="sec.plainC">at 700 and prefer encrypted backups (</span><code>{"encrypt": true}</code><span data-i18n="sec.plainD">) or full-disk encryption; treat an unencrypted backup as customer credential material.</span></td></tr>
 <tr><td data-i18n="sec.layerExports">Sensitive exports</td><td><span data-i18n="sec.exportsA">Backup download is POST-only with password confirm (no GET, so no CSRF-able download);</span> <code>{"encrypt": true}</code> <span data-i18n="sec.exportsB">returns a scrypt + Fernet blob restorable via</span> <code>POST /api/restore-encrypted</code><span data-i18n="sec.exportsC">; access logs omit subscription tokens</span></td></tr>
 <tr><td data-i18n="sec.layerService">Service</td><td><span data-i18n="sec.serviceA">Non-root systemd (</span><code>User=zefira</code><span data-i18n="sec.serviceB">,</span> <code>ProtectSystem=strict</code><span data-i18n="sec.serviceC">,</span> <code>UMask=0077</code><span data-i18n="sec.serviceD">); updater fetches only mrlurix/zefira-panel@main, installs exactly the advertised commit SHA (a force-push mid-update is refused), reports that commit's GitHub signature state and can refuse unsigned commits with</span> <code>ZEFIRA_REQUIRE_SIGNED_UPDATE=1</code> <span data-i18n="sec.serviceE">, fixed service name,</span> <code>ZEFIRA_ALLOW_UPDATE=0</code> <span data-i18n="sec.serviceF">kill-switch</span></td></tr>
-<tr><td data-i18n="sec.layerDeps">Dependencies</td><td data-i18n="sec.depsText">Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.60 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.</td></tr>
+<tr><td data-i18n="sec.layerDeps">Dependencies</td><td data-i18n="sec.depsText">Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.61 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.</td></tr>
 <tr><td data-i18n="sec.layerProxies">Proxies</td><td><code>trusted_proxies</code> <span data-i18n="sec.proxiesA">refuses</span> <code>0.0.0.0/0</code><span data-i18n="sec.proxiesB">, multicast and overly-broad ranges at input and ignores them at runtime (XFF spoofing = rate-limit bypass)</span></td></tr>
 <tr><td data-i18n="sec.layerVisibility">Visibility</td><td data-i18n="sec.visibilityText">Audit log (last 2000 events), Telegram brute-force alerts (spam-throttled)</td></tr>
 </table>
@@ -106,8 +106,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=92"></script>
-<script src="assets/docs.js?v=92"></script>
-<script src="assets/support-ai.js?v=92"></script>
+<script src="assets/i18n.js?v=96"></script>
+<script src="assets/docs.js?v=96"></script>
+<script src="assets/support-ai.js?v=96"></script>
 </body>
 </html>

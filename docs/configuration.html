@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleConfig">Configuration — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=92">
+<link rel="stylesheet" href="assets/style.css?v=96">
 </head>
 <body>
 <header class="topbar">
@@ -94,6 +94,13 @@
 <tr><td><code>hy2_obfs_password</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kHy2Obfs">Empty keeps Hysteria2 un-obfuscated. A value of 4–128 characters emits <code>obfs=salamander</code> and the matching <code>obfs-password</code>; the server must use the same Salamander password.</td></tr>
 <tr><td><code>hy2_hop_ports</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kHy2HopPorts">Empty keeps a single Hysteria2 port. A list such as <code>20000-50000,443</code> emits <code>mport</code> in the link and <code>ports</code> in Clash; the server must listen on the range (or DNAT it) and the firewall must allow it.</td></tr>
 <tr><td><code>hy2_hop_interval</code></td><td><code>30</code></td><td data-i18n="cfg.kHy2HopInterval">Seconds between port changes, 5–300. Only used when <code>hy2_hop_ports</code> is set.</td></tr>
+<tr><td><code>hy2_hop_format</code></td><td><code>mport</code></td><td data-i18n="cfg.kHy2HopFormat"><code>mport</code> writes the range into the <code>mport</code> extension (v2rayN, Xray, Shadowrocket). <code>official</code> puts it in the URI authority for the official Hysteria2 client.</td></tr>
+<tr><td><code>ws_path</code></td><td><code>/zefira</code></td><td data-i18n="cfg.kWsPath">WebSocket path in VLESS, VMess, Trojan and Clash output. Must equal the server's <code>wsSettings.path</code>.</td></tr>
+<tr><td><code>ws_host</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kWsHost">WebSocket Host header. Empty uses the connect address; set it when the server or CDN routes by Host.</td></tr>
+<tr><td><code>reality_short_ids</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kRealityShortIds">Comma-separated <code>shortIds</code> from the server. Empty keeps the legacy SHA1-derived IDs; a list produces one REALITY link per ID.</td></tr>
+<tr><td><code>clash_failover</code></td><td><code>0</code></td><td data-i18n="cfg.kClashFailover">When 1, Clash profiles get an automatic <code>fallback</code> group named <code>Zefira-Auto</code> next to the manual selector.</td></tr>
+<tr><td><code>clash_health_check_url</code></td><td><code>https://www.gstatic.com/generate_204</code></td><td data-i18n="cfg.kClashHealth">URL the <code>Zefira-Auto</code> group probes to decide which proxy is alive.</td></tr>
+<tr><td><code>clash_failover_interval</code></td><td><code>300</code></td><td data-i18n="cfg.kClashInterval">Seconds between health checks for <code>Zefira-Auto</code>, 30–3600.</td></tr>
 <tr><td><code>reality_pub</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kRealityPub">REALITY public key; the matching private key is stored encrypted and reveal is audit-logged</td></tr>
 <tr><td><code>obfuscated_host</code></td><td data-i18n="cfg.empty2">empty</td><td data-i18n="cfg.kObf">Decoy host that replaces your domain inside the configs (leave empty to use the real domain)</td></tr>
 <tr><td><code>per_user_subdomain</code></td><td><code>0</code></td><td data-i18n="cfg.kPerUser">Prefixes a per-user hash so two customers' configs are not correlatable. Needs a wildcard DNS record, and it is skipped on IP literals — a prefixed IP resolves nowhere</td></tr>
@@ -129,8 +136,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=92"></script>
-<script src="assets/docs.js?v=92"></script>
-<script src="assets/support-ai.js?v=92"></script>
+<script src="assets/i18n.js?v=96"></script>
+<script src="assets/docs.js?v=96"></script>
+<script src="assets/support-ai.js?v=96"></script>
 </body>
 </html>

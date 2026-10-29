@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleApi">API Reference — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=92">
+<link rel="stylesheet" href="assets/style.css?v=96">
 </head>
 <body>
 <header class="topbar">
@@ -114,6 +114,9 @@
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/settings</code></td><td data-i18n="api.srvSettings">Domain, ports (VLESS/VMess/Trojan/SS, Hysteria2, WireGuard, OpenVPN, L2TP, Cisco, SOCKS5), REALITY, obfuscation… <code>PUT</code> needs the four ports <code>sub_port</code>, <code>hy2_port</code>, <code>wg_port</code> and <code>ovpn_port</code>; a body without them is refused with <code>422</code>. With them, only the fields you name are changed - anything you leave out keeps its stored value, so a request can never erase the WireGuard key or switch off <code>block_direct_ip</code> by omission. The three switches come back as real booleans, not as <code>"1"</code> and <code>"0"</code>.</td></tr>
 <tr><td><span class="badge post">POST</span></td><td><code>/api/reality/generate</code></td><td data-i18n="api.realityGen">New X25519 keypair</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/api/reality/private</code></td><td data-i18n="api.realityReveal">Audit-logged reveal</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/reality/import-pub</code></td><td data-i18n="api.realityImportPub">Import the public half of an existing server's REALITY keypair (43-character base64url). The private key stays on that server; nothing is rotated.</td></tr>
+<tr><td><span class="badge post">POST</span></td><td><code>/api/reality/short-ids</code></td><td data-i18n="api.realityShortIds">Generate three even-length hex shortIds to paste into the server's <code>shortIds</code> array. They are returned, not saved: save the alignment settings only after the server has them.</td></tr>
+<tr><td><span class="badge get">GET</span></td><td><code>/api/settings/diagnostics</code></td><td data-i18n="api.settingsDiagnostics">Read-only alignment checks: REALITY key/shortId state, CDN SNI and Host, WebSocket path/Host, Hysteria2 hop format and anchor port, Clash failover and a missing domain. Each check carries <code>code</code>, <code>level</code>, <code>message</code> and translation <code>params</code>; nothing is changed.</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/appearance</code></td><td data-i18n="api.appearance">Theme colors, brand, dashboard note (GET is public, PUT needs session)</td></tr>
 <tr><td><span class="badge get">GET</span></td><td><code>/theme.css</code></td><td data-i18n="api.themeCss">Generated theme overrides, text/css</td></tr>
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/ai/settings</code></td><td data-i18n="api.aiSettings">Provider, model, key state (key never returned)</td></tr>
@@ -141,7 +144,7 @@
 <tr><td><span class="badge get">GET</span> <span class="badge put">PUT</span></td><td><code>/api/tunnel-settings</code></td><td data-i18n="api.tunnelSettings">The two BackPack fields: <code>public_url</code> (the address the outer server dials back on) and <code>trusted_proxies</code> (CIDRs whose <code>X-Forwarded-For</code> is believed for rate limiting and audit logs). Same page as Settings → Tunnel; a mis-set proxy list makes every client look like one address.</td></tr>
 </table>
 
-<p data-i18n="api.srvHardening">The same object also carries the transport-hardening keys: <code>tls_fp</code> (chrome by default), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> and <code>hy2_hop_interval</code>. Leave the last three at their defaults unless the Hysteria2 server is configured to match: an enabled obfs password or port range makes every Hysteria2 link fail until the server uses the same values. <code>tls_fp</code> accepts chrome, firefox, safari, ios, android, edge, 360, qq and random.</p>
+<p data-i18n="api.srvHardening">The same object also carries the transport-hardening keys: <code>tls_fp</code> (chrome by default), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> and <code>hy2_hop_interval</code>. Leave the last three at their defaults unless the Hysteria2 server is configured to match: an enabled obfs password or port range makes every Hysteria2 link fail until the server uses the same values. <code>tls_fp</code> accepts chrome, firefox, safari, ios, android, edge, 360, qq and random. The server-alignment keys are also optional: <code>ws_path</code> (<code>/zefira</code> by default), <code>ws_host</code> (empty = connect address), <code>reality_short_ids</code> (empty = legacy SHA1-derived IDs), <code>hy2_hop_format</code> (<code>mport</code> or <code>official</code>), <code>clash_failover</code>, <code>clash_health_check_url</code> and <code>clash_failover_interval</code>.</p>
 
 <!-- MCP-TOOLS:BEGIN -->
 <h2 id="mcp-tools" data-i18n="api.hMcpTools">MCP tools</h2>
@@ -323,8 +326,8 @@ curl -X POST -H 'Authorization: Bearer zfp_…' \
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=92"></script>
-<script src="assets/docs.js?v=92"></script>
-<script src="assets/support-ai.js?v=92"></script>
+<script src="assets/i18n.js?v=96"></script>
+<script src="assets/docs.js?v=96"></script>
+<script src="assets/support-ai.js?v=96"></script>
 </body>
 </html>

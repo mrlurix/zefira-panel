@@ -541,6 +541,19 @@ td strong { font-weight: 700; letter-spacing: .3px; }
 }
 .sec-list li::before { content: "\2713"; color: var(--red); font-weight: 900; margin-left: 9px; }
 .sec-list li:last-child { border-bottom: none; }
+#diagnostics-out { list-style: none; margin: 10px 0 0; padding: 0; }
+#diagnostics-out li {
+  padding: 8px 10px;
+  border-bottom: 1px dashed rgba(34, 34, 47, .8);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+#diagnostics-out li::before { content: none; }
+#diagnostics-out li.diag-ok { color: var(--green); }
+#diagnostics-out li.diag-warn { color: var(--orange); }
+#diagnostics-out li.diag-error { color: var(--red); }
+#diagnostics-out li.diag-info { color: #c9cad6; }
+#diagnostics-out li:last-child { border-bottom: none; }
 
 /* ============ MODAL ============ */
 

@@ -94,10 +94,20 @@ def call(method, path, body=None, headers=None):
             return e.code, raw.decode("utf-8", "replace")
 
 
+# The runner deletes the admin row before every live suite, so this copy has
+# no admin. Bootstrap the known account from the environment instead of
+# relying on the demo DB's credential, which is no longer there.
+con = sqlite3.connect(os.path.join(APP, "instance", "zefira.db"))
+con.execute("delete from admins")
+con.commit()
+con.close()
+
 proc = subprocess.Popen(
     [PY, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port",
      str(PORT), "--no-server-header", "--no-proxy-headers"],
-    cwd=APP, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cwd=APP, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    env=dict(os.environ, ZEFIRA_ADMIN_USERNAME="admin",
+             ZEFIRA_ADMIN_PASSWORD=PW))
 try:
     # the panel must trust this peer before it reads the header
     con = sqlite3.connect(os.path.join(APP, "instance", "zefira.db"))

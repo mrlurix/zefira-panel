@@ -2408,7 +2408,7 @@ Object.assign(Z_STRINGS.en, {
   "stg.hardFrag2": ", Hiddify's Fragment switch, or v2rayN/v2rayNG's Fragment option. It is not needed on a clean route and adds overhead.",
   "stg.hardWarn": "Do not enable obfs or port hopping until the server matches.",
   "stg.hardWarn2": "Both are off by default for exactly that reason: turning them on without the server-side change breaks every Hysteria2 link while the panel still reports a healthy save.",
-  "api.srvHardening": "The same object also carries the transport-hardening keys: <code>tls_fp</code> (chrome by default), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> and <code>hy2_hop_interval</code>. Leave the last three at their defaults unless the Hysteria2 server is configured to match: an enabled obfs password or port range makes every Hysteria2 link fail until the server uses the same values. <code>tls_fp</code> accepts chrome, firefox, safari, ios, android, edge, 360, qq and random."
+  "api.srvHardening": "The same object also carries the transport-hardening keys: <code>tls_fp</code> (chrome by default), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> and <code>hy2_hop_interval</code>. Leave the last three at their defaults unless the Hysteria2 server is configured to match: an enabled obfs password or port range makes every Hysteria2 link fail until the server uses the same values. <code>tls_fp</code> accepts chrome, firefox, safari, ios, android, edge, 360, qq and random. The server-alignment keys are also optional: <code>ws_path</code> (<code>/zefira</code> by default), <code>ws_host</code> (empty = connect address), <code>reality_short_ids</code> (empty = legacy SHA1-derived IDs), <code>hy2_hop_format</code> (<code>mport</code> or <code>official</code>), <code>clash_failover</code>, <code>clash_health_check_url</code> and <code>clash_failover_interval</code>."
 });
 Object.assign(Z_STRINGS.fa, {
   "cfg.kTlsFp": "اثر انگشت uTLS که در لینک‌های VLESS / VMess / Trojan / REALITY و اثر انگشت کلاینت Clash نوشته می‌شود: chrome، firefox، safari، ios، android، edge، 360، qq یا random. مقدار خارج از این لیست به chrome برمی‌گردد.",
@@ -2442,7 +2442,7 @@ Object.assign(Z_STRINGS.fa, {
   "stg.hardFrag2": "، کلید Fragment در Hiddify، یا گزینهٔ Fragment در v2rayN/v2rayNG. روی مسیر سالم لازم نیست و سربار دارد.",
   "stg.hardWarn": "تا وقتی سرور هم‌سان نشده، obfs یا پرش پورت را روشن نکن.",
   "stg.hardWarn2": "هر دو به همین دلیل پیش‌فرض خاموش‌اند: روشن‌کردن بدون تغییر سمت سرور، همهٔ لینک‌های Hysteria2 را از کار می‌اندازد در حالی که پنل ذخیرهٔ سالم گزارش می‌دهد.",
-  "api.srvHardening": "همین آبجکت کلیدهای سخت‌سازی انتقال را هم دارد: <code>tls_fp</code> (پیش‌فرض chrome)، <code>reality_sni_per_user</code>، <code>hy2_obfs_password</code>، <code>hy2_hop_ports</code> و <code>hy2_hop_interval</code>. سه کلید آخر را پیش‌فرض نگه دار مگر سرور Hysteria2 هم‌سان باشد: فعال‌کردن پسورد obfs یا محدودهٔ پورت، همهٔ لینک‌های Hysteria2 را تا هم‌سان‌شدن سرور از کار می‌اندازد. <code>tls_fp</code> مقادیر chrome، firefox، safari، ios، android، edge، 360، qq و random را می‌پذیرد."
+  "api.srvHardening": "همین آبجکت کلیدهای سخت‌سازی انتقال را هم دارد: <code>tls_fp</code> (پیش‌فرض chrome)، <code>reality_sni_per_user</code>، <code>hy2_obfs_password</code>، <code>hy2_hop_ports</code> و <code>hy2_hop_interval</code>. سه کلید آخر را پیش‌فرض نگه دار مگر سرور Hysteria2 هم‌سان باشد: فعال‌کردن پسورد obfs یا محدودهٔ پورت، همهٔ لینک‌های Hysteria2 را تا هم‌سان‌شدن سرور از کار می‌اندازد. <code>tls_fp</code> مقادیر chrome، firefox، safari، ios، android، edge، 360، qq و random را می‌پذیرد. کلیدهای هم‌ترازی با سرور هم اختیاری‌اند: <code>ws_path</code> (پیش‌فرض <code>/zefira</code>)، <code>ws_host</code> (خالی = آدرس اتصال)، <code>reality_short_ids</code> (خالی = IDهای مشتق از SHA1 قدیمی)، <code>hy2_hop_format</code> (<code>mport</code> یا <code>official</code>)، <code>clash_failover</code>، <code>clash_health_check_url</code> و <code>clash_failover_interval</code>."
 });
 Object.assign(Z_STRINGS.zh, {
   "cfg.kTlsFp": "写入 VLESS / VMess / Trojan / REALITY 链接和 Clash 客户端指纹的 uTLS 指纹:chrome、firefox、safari、ios、android、edge、360、qq 或 random。列表之外的值回退为 chrome。",
@@ -2476,7 +2476,7 @@ Object.assign(Z_STRINGS.zh, {
   "stg.hardFrag2": "、Hiddify 的 Fragment 开关,或 v2rayN/v2rayNG 的 Fragment 选项。干净线路不需要,而且会增加开销。",
   "stg.hardWarn": "在服务器匹配之前,不要启用混淆或端口跳跃。",
   "stg.hardWarn2": "两者默认关闭正是这个原因:没有服务端修改就开启,会破坏所有 Hysteria2 链接,而面板仍报告保存成功。",
-  "api.srvHardening": "同一对象还包含传输加固键:<code>tls_fp</code>(默认 chrome)、<code>reality_sni_per_user</code>、<code>hy2_obfs_password</code>、<code>hy2_hop_ports</code> 和 <code>hy2_hop_interval</code>。除非 Hysteria2 服务器已同步配置,否则请保持后三项默认值:启用混淆密码或端口范围后,在服务器使用相同值之前所有 Hysteria2 链接都会失效。<code>tls_fp</code> 接受 chrome、firefox、safari、ios、android、edge、360、qq 和 random。"
+  "api.srvHardening": "同一对象还包含传输加固键:<code>tls_fp</code>(默认 chrome)、<code>reality_sni_per_user</code>、<code>hy2_obfs_password</code>、<code>hy2_hop_ports</code> 和 <code>hy2_hop_interval</code>。除非 Hysteria2 服务器已同步配置,否则请保持后三项默认值:启用混淆密码或端口范围后,在服务器使用相同值之前所有 Hysteria2 链接都会失效。<code>tls_fp</code> 接受 chrome、firefox、safari、ios、android、edge、360、qq 和 random。服务器对齐键也是可选的:<code>ws_path</code>(默认 <code>/zefira</code>)、<code>ws_host</code>(留空 = 连接地址)、<code>reality_short_ids</code>(留空 = 旧版 SHA1 派生 ID)、<code>hy2_hop_format</code>(<code>mport</code> 或 <code>official</code>)、<code>clash_failover</code>、<code>clash_health_check_url</code> 和 <code>clash_failover_interval</code>。"
 });
 Object.assign(Z_STRINGS.ru, {
   "cfg.kTlsFp": "uTLS-отпечаток, записываемый в ссылки VLESS / VMess / Trojan / REALITY и в отпечаток клиента Clash: chrome, firefox, safari, ios, android, edge, 360, qq или random. Значение вне списка откатывается к chrome.",
@@ -2510,7 +2510,7 @@ Object.assign(Z_STRINGS.ru, {
   "stg.hardFrag2": ", переключатель Fragment в Hiddify или опция Fragment в v2rayN/v2rayNG. На чистом маршруте она не нужна и добавляет накладные расходы.",
   "stg.hardWarn": "Не включай обфускацию или смену портов, пока сервер не настроен так же.",
   "stg.hardWarn2": "Оба выключены по умолчанию именно поэтому: включение без изменения сервера ломает все ссылки Hysteria2, а панель всё равно сообщает об успешном сохранении.",
-  "api.srvHardening": "Тот же объект содержит ключи усиления транспорта: <code>tls_fp</code> (по умолчанию chrome), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> и <code>hy2_hop_interval</code>. Оставь последние три по умолчанию, если сервер Hysteria2 не настроен так же: включённый пароль obfs или диапазон портов ломает все ссылки Hysteria2, пока сервер не использует те же значения. <code>tls_fp</code> принимает chrome, firefox, safari, ios, android, edge, 360, qq и random."
+  "api.srvHardening": "Тот же объект содержит ключи усиления транспорта: <code>tls_fp</code> (по умолчанию chrome), <code>reality_sni_per_user</code>, <code>hy2_obfs_password</code>, <code>hy2_hop_ports</code> и <code>hy2_hop_interval</code>. Оставь последние три по умолчанию, если сервер Hysteria2 не настроен так же: включённый пароль obfs или диапазон портов ломает все ссылки Hysteria2, пока сервер не использует те же значения. <code>tls_fp</code> принимает chrome, firefox, safari, ios, android, edge, 360, qq и random. Ключи согласования с сервером тоже необязательны: <code>ws_path</code> (по умолчанию <code>/zefira</code>), <code>ws_host</code> (пусто = адрес подключения), <code>reality_short_ids</code> (пусто = старые ID, производные от SHA1), <code>hy2_hop_format</code> (<code>mport</code> или <code>official</code>), <code>clash_failover</code>, <code>clash_health_check_url</code> и <code>clash_failover_interval</code>."
 });
 
 /* Dependency and runtime security (v1.15.60) */
@@ -2526,7 +2526,7 @@ Object.assign(Z_STRINGS.en, {
   "chg.v11560d": "It still described per-customer VPN credentials as plain JSON, while they have been encrypted under instance/secret.key since v1.15.27 and subscription tokens since v1.15.29. The page now says what is encrypted and what is not - display names, notes, usage counters and timestamps are billing data, not credentials - and names the dependency policy: exact pins, a hash-locked lockfile and an advisory check before a release. Nothing about the panel's behaviour changed in this release; 61 suites passed on the updated stack.",
   "sec.layerPlain": "Credentials at rest",
   "sec.layerDeps": "Dependencies",
-  "sec.depsText": "Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.60 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.",
+  "sec.depsText": "Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.61 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.",
   "sec.plainA": "Encrypted since v1.15.27: per-customer VPN credentials in the database (",
   "sec.plainB": ") - the WireGuard private key, OpenVPN client keypair, L2TP PSK and per-protocol passwords - and subscription tokens since v1.15.29, as a Fernet blob plus an HMAC digest for the indexed /sub lookup. Not encrypted: display names, notes, usage counters and timestamps, which are billing data rather than credentials. Keep",
   "sec.plainC": "at 700 and prefer encrypted backups (",
@@ -2551,7 +2551,7 @@ Object.assign(Z_STRINGS.fa, {
   "chg.v11560d": "هنوز اعتبارهای VPN هر مشتری را JSON ساده معرفی می‌کرد، در حالی که از v1.15.27 زیر instance/secret.key رمزنگاری می‌شوند و توکن‌های اشتراک از v1.15.29. صفحه حالا می‌گوید چه چیزی رمزنگاری شده و چه چیزی نه — نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی دادهٔ صورت‌حساب‌اند نه اعتبار — و سیاست وابستگی را هم می‌نویسد: پین دقیق، فایل قفل هش‌دار و بررسی هشدارها پیش از انتشار. در این انتشار رفتار پنل عوض نشده؛ ۶۱ مجموعه تست روی پشتهٔ به‌روز پاس شدند.",
   "sec.layerPlain": "اعتبارها در حالت ذخیره",
   "sec.layerDeps": "وابستگی‌ها",
-  "sec.depsText": "بسته‌های پایتون با پین دقیق و requirements.lock هش‌دار نصب می‌شوند؛ به‌روزرسان داخل پنل به majorهای جدید شنا نمی‌کند. v1.15.60 این‌ها را دارد: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3، بدون هیچ هشدار شناخته‌شدهٔ OSV روی این نسخه‌ها. nginx بیلد توزیع است (backportهای امنیتی)، که نصب‌کننده ارتقا و گزارش می‌کند. در پنل نه PHP هست و نه runtime Node.js.",
+  "sec.depsText": "بسته‌های پایتون با پین دقیق و requirements.lock هش‌دار نصب می‌شوند؛ به‌روزرسان داخل پنل به majorهای جدید شنا نمی‌کند. v1.15.61 این‌ها را دارد: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3، بدون هیچ هشدار شناخته‌شدهٔ OSV روی این نسخه‌ها. nginx بیلد توزیع است (backportهای امنیتی)، که نصب‌کننده ارتقا و گزارش می‌کند. در پنل نه PHP هست و نه runtime Node.js.",
   "sec.plainA": "از v1.15.27 رمزنگاری‌شده: اعتبارهای VPN هر مشتری در دیتابیس (",
   "sec.plainB": ") — کلید خصوصی WireGuard، جفت‌کلید کلاینت OpenVPN، PSK مربوط به L2TP و رمز هر پروتکل — و توکن‌های اشتراک از v1.15.29، به‌صورت یک بلاب Fernet به‌همراه digest HMAC برای جست‌وجوی ایندکس‌شدهٔ /sub. رمزنگاری‌نشده: نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی، که دادهٔ صورت‌حساب‌اند نه اعتبار. پوشهٔ",
   "sec.plainC": "را روی 700 نگه دارید و بکاپ رمزنگاری‌شده (",
@@ -2576,7 +2576,7 @@ Object.assign(Z_STRINGS.zh, {
   "chg.v11560d": "它仍把每位客户的 VPN 凭据描述为明文 JSON，而从 v1.15.27 起这些凭据已用 instance/secret.key 加密，订阅令牌从 v1.15.29 起加密。页面现在说明什么被加密、什么没有——显示名、备注、用量计数和时间戳属于计费数据，不是凭据——并写明依赖策略：精确固定版本、带哈希的锁文件和发布前的公告检查。本次发布没有改变面板行为；61 套测试在更新后的依赖栈上全部通过。",
   "sec.layerPlain": "静态凭据",
   "sec.layerDeps": "依赖",
-  "sec.depsText": "Python 软件包从精确固定版本和带哈希锁的 requirements.lock 安装；面板内更新器不会漂移到新的大版本。v1.15.60 使用 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3，这些版本没有已知的 OSV 公告。nginx 是发行版构建（含安全回溯补丁），由安装器升级并报告版本。面板中没有 PHP，也没有 Node.js 运行时。",
+  "sec.depsText": "Python 软件包从精确固定版本和带哈希锁的 requirements.lock 安装；面板内更新器不会漂移到新的大版本。v1.15.61 使用 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3，这些版本没有已知的 OSV 公告。nginx 是发行版构建（含安全回溯补丁），由安装器升级并报告版本。面板中没有 PHP，也没有 Node.js 运行时。",
   "sec.plainA": "自 v1.15.27 起加密：数据库中的每位客户 VPN 凭据（",
   "sec.plainB": "）——WireGuard 私钥、OpenVPN 客户端密钥对、L2TP PSK 和每个协议的密码——以及自 v1.15.29 起的订阅令牌，以 Fernet 密文加 HMAC 摘要支持 /sub 的索引查找。未加密：显示名、备注、用量计数和时间戳，这些是计费数据而非凭据。请保持",
   "sec.plainC": "权限为 700，并优先使用加密备份（",
@@ -2601,7 +2601,7 @@ Object.assign(Z_STRINGS.ru, {
   "chg.v11560d": "Там всё ещё говорилось, что VPN-учётные данные клиентов хранятся открытым JSON, хотя с v1.15.27 они шифруются ключом instance/secret.key, а токены подписки — с v1.15.29. Теперь страница говорит, что зашифровано, а что нет: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные; также описана политика зависимостей: точные пины, хэш-зафиксированный lock-файл и проверка предупреждений перед релизом. Поведение панели в этом релизе не изменилось; 61 набор тестов прошёл на обновлённом стеке.",
   "sec.layerPlain": "Учётные данные в покое",
   "sec.layerDeps": "Зависимости",
-  "sec.depsText": "Пакеты Python ставятся по точным пинам из requirements.lock с хэшами; встроенный обновлятор не переходит на новые мажоры. v1.15.60 содержит PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3, без известных предупреждений OSV для этих версий. nginx — сборка дистрибутива (security backports), установщик обновляет её и сообщает версию. В панели нет PHP и нет среды выполнения Node.js.",
+  "sec.depsText": "Пакеты Python ставятся по точным пинам из requirements.lock с хэшами; встроенный обновлятор не переходит на новые мажоры. v1.15.61 содержит PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3, без известных предупреждений OSV для этих версий. nginx — сборка дистрибутива (security backports), установщик обновляет её и сообщает версию. В панели нет PHP и нет среды выполнения Node.js.",
   "sec.plainA": "Зашифровано с v1.15.27: учётные данные VPN каждого клиента в базе (",
   "sec.plainB": ") — приватный ключ WireGuard, пара ключей клиента OpenVPN, PSK L2TP и пароли всех протоколов — а также токены подписок с v1.15.29, в виде блоба Fernet плюс HMAC-дайджест для индексированного поиска /sub. Не зашифровано: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные. Держите",
   "sec.plainC": "с правами 700 и предпочитайте шифрованные бэкапы (",
@@ -2613,6 +2613,186 @@ Object.assign(Z_STRINGS.ru, {
   "inst.rtPhp": "Нет — ни файлов PHP, ни среды выполнения PHP. Установщик никогда не устанавливает и не настраивает PHP.",
   "inst.rtNode": "Только необязательный пример бота Telegram: Node.js 24 LTS или новее с node-telegram-bot-api 2.1.0. Сама панель Node.js не использует.",
   "inst.rtNginx": "Необязательный обратный прокси: пакет дистрибутива с security backports. Установщик обновляет его, печатает nginx -v и повторяет версию в сводке; сторонний репозиторий nginx.org не добавляется."
+});
+
+/* Server alignment for existing servers (v1.15.61) */
+Object.assign(Z_STRINGS.en, {
+  "stg.alignTitle": "Server alignment: match an existing Xray / Hysteria2 server",
+  "stg.alignIntro": "The Server Alignment card is for servers you did not build from this panel. It changes only what the panel writes into links and Clash profiles; every field is optional and an empty value keeps the historical behaviour.",
+  "stg.alignShortBold": "REALITY shortIds:",
+  "stg.alignShort": "paste the server's real shortIds array (comma separated) or use Generate and copy the values into Xray first. With a list, the panel emits one link per ID; without it, links keep using the old SHA1-derived IDs, which the server must already contain.",
+  "stg.alignWsBold": "WebSocket path and Host:",
+  "stg.alignWs": "set them when the server's wsSettings.path or Host header is not /zefira and the connect address. The same values go into VLESS, VMess and Trojan links and Clash profiles.",
+  "stg.alignHy2Bold": "Hysteria2 hop URI format:",
+  "stg.alignHy2": "choose official for the official Hysteria2 client, which reads the port range from the URI authority. The default mport extension is what v2rayN, Xray and Shadowrocket read; the official client ignores it.",
+  "stg.alignClashBold": "Clash automatic failover:",
+  "stg.alignClash": "adds a fallback group named Zefira-Auto with a health-check URL and interval. The manual Zefira selector stays, so customers can still pin a proxy. Off by default.",
+  "stg.alignDiagBold": "Run Diagnostics:",
+  "stg.alignDiag": "checks the saved values for the mismatches the panel can see: missing or invalid REALITY keys, legacy shortIds, a CDN SNI without a Host override, an anchor port outside the hop range, and Clash failover state. It never changes a setting.",
+  "stg.alignNote": "The panel cannot read the remote Xray or Hysteria2 config. Diagnostics are hints, not a server audit; the final check is a real client connection.",
+  "api.realityImportPub": "Import the public half of an existing server's REALITY keypair (43-character base64url). The private key stays on that server; nothing is rotated.",
+  "api.realityShortIds": "Generate three even-length hex shortIds to paste into the server's shortIds array. They are returned, not saved: save the alignment settings only after the server has them.",
+  "api.settingsDiagnostics": "Read-only alignment checks: REALITY key/shortId state, CDN SNI and Host, WebSocket path/Host, Hysteria2 hop format and anchor port, Clash failover and a missing domain. Each check carries code, level, message and translation params; nothing is changed.",
+  "usr.setWs": "WebSocket path and Host",
+  "usr.setWsD": "Matches the links and Clash profiles to an existing Xray server whose wsSettings.path or Host header is not /zefira and the connect address. Empty keeps the historical defaults.",
+  "usr.setShortIds": "REALITY shortIds",
+  "usr.setShortIdsD": "Paste the server's real shortIds array, or generate values and add them to the server first. With a list the panel emits one link per ID; without it links keep the legacy SHA1-derived IDs.",
+  "usr.setHopFormat": "Hysteria2 hop URI format",
+  "usr.setHopFormatD": "Choose official for the official Hysteria2 client, which reads the range from the URI authority. The default mport is read by v2rayN, Xray and Shadowrocket only.",
+  "usr.setClashFailover": "Clash automatic failover",
+  "usr.setClashFailoverD": "Adds a health-checked fallback group named Zefira-Auto alongside the manual selector. Off by default; the URL and interval are configurable.",
+  "cfg.kWsPath": "WebSocket path in VLESS, VMess, Trojan and Clash output. Must equal the server's wsSettings.path.",
+  "cfg.kWsHost": "WebSocket Host header. Empty uses the connect address; set it when the server or CDN routes by Host.",
+  "cfg.kRealityShortIds": "Comma-separated shortIds from the server. Empty keeps the legacy SHA1-derived IDs; a list produces one REALITY link per ID.",
+  "cfg.kHy2HopFormat": "mport writes the range into the mport extension (v2rayN, Xray, Shadowrocket). official puts it in the URI authority for the official Hysteria2 client.",
+  "cfg.kClashFailover": "When 1, Clash profiles get an automatic fallback group named Zefira-Auto next to the manual selector.",
+  "cfg.kClashHealth": "URL the Zefira-Auto group probes to decide which proxy is alive.",
+  "cfg.kClashInterval": "Seconds between health checks for Zefira-Auto, 30-3600."
+});
+Object.assign(Z_STRINGS.fa, {
+  "stg.alignTitle": "هم‌ترازی با سرور: تطبیق با Xray / Hysteria2 موجود",
+  "stg.alignIntro": "کارت هم‌ترازی با سرور برای سرورهایی است که با همین پنل ساخته نشده‌اند. فقط چیزی را عوض می‌کند که پنل در لینک‌ها و پروفایل‌های Clash می‌نویسد؛ همهٔ فیلدها اختیاری‌اند و مقدار خالی رفتار قبلی را نگه می‌دارد.",
+  "stg.alignShortBold": "shortIdهای REALITY:",
+  "stg.alignShort": "آرایهٔ واقعی shortIds سرور را بچسبانید (با کاما جدا شود) یا اول Generate بزنید و مقادیر را در Xray بگذارید. با داشتن لیست، پنل برای هر ID یک لینک می‌سازد؛ بدون آن، لینک‌ها از shortId مشتق از SHA1 قدیمی استفاده می‌کنند که سرور باید از قبل داشته باشد.",
+  "stg.alignWsBold": "مسیر و Host وب‌سوکت:",
+  "stg.alignWs": "وقتی wsSettings.path یا هدر Host سرور برابر /zefira و آدرس اتصال نیست آن‌ها را تنظیم کنید. همین مقادیر در لینک‌های VLESS، VMess و Trojan و پروفایل‌های Clash می‌روند.",
+  "stg.alignHy2Bold": "فرمت URI پورت‌هاپینگ Hysteria2:",
+  "stg.alignHy2": "برای کلاینت رسمی Hysteria2 گزینهٔ official را انتخاب کنید؛ این کلاینت رنج پورت را از authority URI می‌خواند. افزونهٔ پیش‌فرض mport را v2rayN، Xray و Shadowrocket می‌خوانند و کلاینت رسمی آن را نادیده می‌گیرد.",
+  "stg.alignClashBold": "failover خودکار Clash:",
+  "stg.alignClash": "گروه fallback با نام Zefira-Auto به‌همراه آدرس و فاصلهٔ health-check اضافه می‌کند. انتخابگر دستی Zefira می‌ماند تا مشتری بتواند پروکسی را پین کند. پیش‌فرض خاموش است.",
+  "stg.alignDiagBold": "اجرای تشخیص:",
+  "stg.alignDiag": "مقادیر ذخیره‌شده را برای ناهم‌سانی‌هایی که پنل می‌بیند بررسی می‌کند: کلید REALITY گم‌شده یا نامعتبر، shortIdهای قدیمی، CDN SNI بدون Host override، پورت anchor خارج از رنج hop و وضعیت failover کلش. هیچ تنظیمی را تغییر نمی‌دهد.",
+  "stg.alignNote": "پنل نمی‌تواند کانفیگ Xray یا Hysteria2 راه دور را بخواند. تشخیص‌ها راهنما هستند، نه audit سرور؛ بررسی نهایی یک اتصال واقعی کلاینت است.",
+  "api.realityImportPub": "نیمهٔ عمومی جفت‌کلید REALITY سرور موجود را وارد می‌کند (۴۳ کاراکتر base64url). کلید خصوصی روی همان سرور می‌ماند و چیزی چرخش نمی‌کند.",
+  "api.realityShortIds": "سه shortId هگز با طول زوج برای گذاشتن در آرایهٔ shortIds سرور تولید می‌کند. آن‌ها برگردانده می‌شوند و ذخیره نمی‌شوند: تنظیمات هم‌ترازی را فقط بعد از افزودن آن‌ها به سرور ذخیره کنید.",
+  "api.settingsDiagnostics": "بررسی‌های فقط‌خواندنی هم‌ترازی: وضعیت کلید/shortId واقعی، CDN SNI و Host، مسیر/Host وب‌سوکت، فرمت hop و پورت anchor در Hysteria2، failover کلش و دامنهٔ گم‌شده. هر بررسی code، level، message و params ترجمه را دارد؛ هیچ‌چیز تغییر نمی‌کند.",
+  "usr.setWs": "مسیر و Host وب‌سوکت",
+  "usr.setWsD": "لینک‌ها و پروفایل‌های Clash را با سرور Xray موجودی هماهنگ می‌کند که wsSettings.path یا هدر Host آن /zefira و آدرس اتصال نیست. خالی یعنی حفظ پیش‌فرض قبلی.",
+  "usr.setShortIds": "shortIdهای REALITY",
+  "usr.setShortIdsD": "آرایهٔ واقعی shortIds سرور را بچسبانید یا اول مقادیر را تولید و به سرور اضافه کنید. با لیست، برای هر ID یک لینک ساخته می‌شود؛ بدون آن لینک‌ها از ID مشتق از SHA1 قدیمی استفاده می‌کنند.",
+  "usr.setHopFormat": "فرمت URI پورت‌هاپینگ Hysteria2",
+  "usr.setHopFormatD": "برای کلاینت رسمی Hysteria2 گزینهٔ official را بزنید که رنج را از authority URI می‌خواند. mport پیش‌فرض فقط توسط v2rayN، Xray و Shadowrocket خوانده می‌شود.",
+  "usr.setClashFailover": "failover خودکار Clash",
+  "usr.setClashFailoverD": "گروه fallback دارای health-check با نام Zefira-Auto را کنار انتخابگر دستی اضافه می‌کند. پیش‌فرض خاموش است؛ آدرس و فاصله قابل تنظیم‌اند.",
+  "cfg.kWsPath": "مسیر WebSocket در خروجی VLESS، VMess، Trojan و Clash. باید با wsSettings.path سرور یکی باشد.",
+  "cfg.kWsHost": "هدر Host وب‌سوکت. خالی یعنی آدرس اتصال؛ وقتی سرور یا CDN بر اساس Host مسیریابی می‌کند آن را تنظیم کنید.",
+  "cfg.kRealityShortIds": "shortIdهای سرور با کاما جدا شده. خالی یعنی IDهای مشتق از SHA1 قدیمی؛ لیست یعنی یک لینک REALITY برای هر ID.",
+  "cfg.kHy2HopFormat": "mport رنج را در افزونهٔ mport می‌نویسد (v2rayN، Xray، Shadowrocket). official آن را در authority URI برای کلاینت رسمی Hysteria2 می‌گذارد.",
+  "cfg.kClashFailover": "با مقدار 1، پروفایل‌های Clash گروه fallback خودکار Zefira-Auto را کنار انتخابگر دستی می‌گیرند.",
+  "cfg.kClashHealth": "آدرسی که گروه Zefira-Auto برای تشخیص زنده‌بودن پروکسی بررسی می‌کند.",
+  "cfg.kClashInterval": "فاصلهٔ بین health-checkهای Zefira-Auto به ثانیه، ۳۰ تا ۳۶۰۰."
+});
+Object.assign(Z_STRINGS.zh, {
+  "stg.alignTitle": "服务器对齐：匹配现有 Xray / Hysteria2 服务器",
+  "stg.alignIntro": "服务器对齐卡片适用于不是用本面板搭建的服务器。它只改变面板写入链接和 Clash 配置的内容；所有字段都是可选的，留空则保持历史行为。",
+  "stg.alignShortBold": "REALITY shortId：",
+  "stg.alignShort": "粘贴服务器真实的 shortIds 数组（逗号分隔），或先用“生成”并把值复制到 Xray。有列表时，面板为每个 ID 生成一条链接；没有列表时，链接继续使用旧的 SHA1 派生 ID，服务器必须已包含这些值。",
+  "stg.alignWsBold": "WebSocket 路径和 Host：",
+  "stg.alignWs": "当服务器的 wsSettings.path 或 Host 头不是 /zefira 和连接地址时设置它们。相同的值会写入 VLESS、VMess、Trojan 链接和 Clash 配置。",
+  "stg.alignHy2Bold": "Hysteria2 跳端口 URI 格式：",
+  "stg.alignHy2": "官方 Hysteria2 客户端请选择 official，它从 URI authority 读取端口范围。默认的 mport 扩展由 v2rayN、Xray 和 Shadowrocket 读取；官方客户端会忽略它。",
+  "stg.alignClashBold": "Clash 自动故障转移：",
+  "stg.alignClash": "添加名为 Zefira-Auto 的 fallback 组，并附带健康检查 URL 和间隔。手动 Zefira 选择器保留，客户仍可固定代理。默认关闭。",
+  "stg.alignDiagBold": "运行诊断：",
+  "stg.alignDiag": "检查已保存值中面板能发现的不匹配：缺失或无效的 REALITY 密钥、旧版 shortId、缺少 Host 覆盖的 CDN SNI、跳端口范围之外的 anchor 端口，以及 Clash 故障转移状态。它从不修改设置。",
+  "stg.alignNote": "面板无法读取远程 Xray 或 Hysteria2 配置。诊断只是提示，不是服务器审计；最终检查是真实客户端连接。",
+  "api.realityImportPub": "导入现有服务器 REALITY 密钥对的公钥部分（43 字符 base64url）。私钥留在该服务器上，不会轮换任何内容。",
+  "api.realityShortIds": "生成三个偶数长度十六进制 shortId，粘贴到服务器的 shortIds 数组。它们只返回、不保存：服务器配置好之后再保存对齐设置。",
+  "api.settingsDiagnostics": "只读对齐检查：REALITY 密钥/shortId 状态、CDN SNI 和 Host、WebSocket 路径/Host、Hysteria2 跳端口格式和 anchor 端口、Clash 故障转移以及缺失域名。每项检查带有 code、level、message 和翻译 params；不会修改任何内容。",
+  "usr.setWs": "WebSocket 路径和 Host",
+  "usr.setWsD": "让链接和 Clash 配置匹配现有 Xray 服务器，当其 wsSettings.path 或 Host 头不是 /zefira 和连接地址时。留空保持历史默认值。",
+  "usr.setShortIds": "REALITY shortId",
+  "usr.setShortIdsD": "粘贴服务器真实的 shortIds 数组，或先生成值并添加到服务器。有列表时每个 ID 生成一条链接；没有列表时链接使用旧版 SHA1 派生 ID。",
+  "usr.setHopFormat": "Hysteria2 跳端口 URI 格式",
+  "usr.setHopFormatD": "官方 Hysteria2 客户端请选择 official，它从 URI authority 读取范围。默认 mport 仅由 v2rayN、Xray 和 Shadowrocket 读取。",
+  "usr.setClashFailover": "Clash 自动故障转移",
+  "usr.setClashFailoverD": "在手动选择器旁添加带健康检查的 fallback 组 Zefira-Auto。默认关闭；URL 和间隔可配置。",
+  "cfg.kWsPath": "VLESS、VMess、Trojan 和 Clash 输出中的 WebSocket 路径。必须等于服务器的 wsSettings.path。",
+  "cfg.kWsHost": "WebSocket Host 头。留空使用连接地址；当服务器或 CDN 按 Host 路由时设置它。",
+  "cfg.kRealityShortIds": "服务器上的 shortId，逗号分隔。留空保留旧版 SHA1 派生 ID；列表会为每个 ID 生成一条 REALITY 链接。",
+  "cfg.kHy2HopFormat": "mport 把范围写入 mport 扩展（v2rayN、Xray、Shadowrocket）。official 把它放进 URI authority，供官方 Hysteria2 客户端使用。",
+  "cfg.kClashFailover": "设为 1 时，Clash 配置在手动选择器旁获得自动 fallback 组 Zefira-Auto。",
+  "cfg.kClashHealth": "Zefira-Auto 组用来判断代理是否存活的探测 URL。",
+  "cfg.kClashInterval": "Zefira-Auto 健康检查间隔秒数，30-3600。"
+});
+Object.assign(Z_STRINGS.ru, {
+  "stg.alignTitle": "Согласование с сервером: под существующий Xray / Hysteria2",
+  "stg.alignIntro": "Карточка согласования предназначена для серверов, собранных не этой панелью. Она меняет только то, что панель пишет в ссылки и профили Clash; все поля необязательны, а пустое значение сохраняет прежнее поведение.",
+  "stg.alignShortBold": "shortId REALITY:",
+  "stg.alignShort": "вставь реальный массив shortIds сервера (через запятую) или сначала нажми «Сгенерировать» и перенеси значения в Xray. Со списком панель выдаёт по одной ссылке на ID; без него ссылки используют старые ID, производные от SHA1, которые сервер уже должен содержать.",
+  "stg.alignWsBold": "Путь и Host WebSocket:",
+  "stg.alignWs": "задай их, если wsSettings.path или заголовок Host сервера отличаются от /zefira и адреса подключения. Те же значения попадут в ссылки VLESS, VMess, Trojan и профили Clash.",
+  "stg.alignHy2Bold": "Формат URI порт-хоппинга Hysteria2:",
+  "stg.alignHy2": "выбери official для официального клиента Hysteria2 — он читает диапазон портов из authority URI. Расширение mport по умолчанию читают v2rayN, Xray и Shadowrocket; официальный клиент его игнорирует.",
+  "stg.alignClashBold": "Автоматический failover Clash:",
+  "stg.alignClash": "добавляет fallback-группу Zefira-Auto с URL и интервалом health-check. Ручной селектор Zefira остаётся, чтобы клиент мог закрепить прокси. По умолчанию выключено.",
+  "stg.alignDiagBold": "Запустить диагностику:",
+  "stg.alignDiag": "проверяет сохранённые значения на то, что панель может увидеть: отсутствующий или неверный ключ REALITY, устаревшие shortId, CDN SNI без переопределения Host, anchor-порт вне диапазона хоппинга и состояние failover Clash. Настройки она не меняет.",
+  "stg.alignNote": "Панель не читает удалённый конфиг Xray или Hysteria2. Диагностика — подсказки, а не аудит сервера; финальная проверка — реальное подключение клиента.",
+  "api.realityImportPub": "Импортирует публичную половину пары REALITY существующего сервера (43 символа base64url). Приватный ключ остаётся на том сервере; ничего не ротируется.",
+  "api.realityShortIds": "Генерирует три shortId чётной длины в hex для массива shortIds сервера. Они возвращаются, но не сохраняются: сохраняй настройки согласования только после того, как сервер их получил.",
+  "api.settingsDiagnostics": "Проверки согласования только для чтения: состояние ключа/shortId REALITY, CDN SNI и Host, путь/Host WebSocket, формат хоппинга и anchor-порт Hysteria2, failover Clash и отсутствующий домен. Каждая проверка несёт code, level, message и params для перевода; ничего не меняется.",
+  "usr.setWs": "Путь и Host WebSocket",
+  "usr.setWsD": "Приводит ссылки и профили Clash в соответствие с существующим сервером Xray, если его wsSettings.path или заголовок Host отличаются от /zefira и адреса подключения. Пусто сохраняет прежние значения.",
+  "usr.setShortIds": "shortId REALITY",
+  "usr.setShortIdsD": "Вставь реальный массив shortIds сервера или сначала сгенерируй значения и добавь их на сервер. Со списком на каждый ID выдаётся одна ссылка; без него ссылки используют старые ID, производные от SHA1.",
+  "usr.setHopFormat": "Формат URI порт-хоппинга Hysteria2",
+  "usr.setHopFormatD": "Для официального клиента Hysteria2 выбери official: он читает диапазон из authority URI. mport по умолчанию читают только v2rayN, Xray и Shadowrocket.",
+  "usr.setClashFailover": "Автоматический failover Clash",
+  "usr.setClashFailoverD": "Добавляет fallback-группу Zefira-Auto с health-check рядом с ручным селектором. По умолчанию выключено; URL и интервал настраиваются.",
+  "cfg.kWsPath": "Путь WebSocket в выводе VLESS, VMess, Trojan и Clash. Должен совпадать с wsSettings.path сервера.",
+  "cfg.kWsHost": "Заголовок Host WebSocket. Пусто — адрес подключения; задай его, если сервер или CDN маршрутизирует по Host.",
+  "cfg.kRealityShortIds": "shortId сервера через запятую. Пусто — старые ID, производные от SHA1; список — по одной ссылке REALITY на каждый ID.",
+  "cfg.kHy2HopFormat": "mport пишет диапазон в расширение mport (v2rayN, Xray, Shadowrocket). official помещает его в authority URI для официального клиента Hysteria2.",
+  "cfg.kClashFailover": "При 1 профили Clash получают автоматическую fallback-группу Zefira-Auto рядом с ручным селектором.",
+  "cfg.kClashHealth": "URL, который группа Zefira-Auto опрашивает, чтобы определить живой прокси.",
+  "cfg.kClashInterval": "Секунды между health-check Zefira-Auto, 30-3600."
+});
+
+/* Server alignment for existing servers - changelog (v1.15.61) */
+Object.assign(Z_STRINGS.en, {
+  "chg.v11561": "&#8212; The panel that learns the server it did not build",
+  "chg.v11561a_lead": "A Server Alignment card, for servers this panel did not build. ",
+  "chg.v11561a": "It changes only what the panel writes into links and Clash profiles: the server's real REALITY shortIds (paste the list, or generate values and add them to Xray first), the public half of an existing REALITY keypair, a stable per-client spiderX path, the WebSocket path and Host header, the Hysteria2 hop URI format, and an optional Clash fallback group. Every field is opt-in and an empty value keeps the historical output. A read-only Diagnostics button reports what the panel can see - a missing or malformed REALITY key, legacy SHA1 shortIds, a CDN SNI without a Host override, an anchor port outside the hop range - and never changes a setting.",
+  "chg.v11561b_lead": "Hysteria2 hop links can now match the official client. ",
+  "chg.v11561b": "The official Hysteria2 client reads the port range from the URI authority and ignores the mport extension the panel used to emit for v2rayN, Xray and Shadowrocket. A new setting chooses between the two formats; mport remains the default so existing links do not change. Mihomo output keeps using ports and integer hop-interval seconds, and a bad range or interval is refused before it is saved.",
+  "chg.v11561c_lead": "Clash failover is available, but only when you turn it on. ",
+  "chg.v11561c": "When enabled, the subscription adds a health-checked fallback group named Zefira-Auto next to the manual Zefira selector, with a configurable probe URL and interval. With the default off, the Clash profile is byte-for-byte what v1.15.60 produced. The manual selector stays in both cases, so a customer can still pin one proxy.",
+  "chg.v11561d_lead": "The alignment was tested against real binaries, not assumptions. ",
+  "chg.v11561d": "A local lab ran portable Xray-core 26.10.21, Hysteria2 and Mihomo against real listeners: 13 of 13 happy-path checks passed, and 8 of 8 negative checks passed, including a dead VLESS proxy that Mihomo automatically replaced with a working REALITY proxy. The link suite grew to 133 checks and all 61 suites pass. The panel still cannot read the remote server's config, so Diagnostics are hints; the final proof is a real client connection."
+});
+Object.assign(Z_STRINGS.fa, {
+  "chg.v11561": "&#8212; پنلی که سروری را که خودش نساخته می‌شناسد",
+  "chg.v11561a_lead": "کارت هم‌ترازی سرور، برای سرورهایی که این پنل نساخته است. ",
+  "chg.v11561a": "این کارت فقط چیزی را عوض می‌کند که پنل در لینک‌ها و پروفایل‌های Clash می‌نویسد: shortIdهای واقعی REALITY سرور (فهرست را بچسبانید، یا مقدار تولید کنید و اول به Xray اضافه کنید)، نیمه عمومی یک جفت‌کلید REALITY موجود، مسیر spiderX پایدار برای هر مشتری، مسیر و هدر Host وب‌سوکت، قالب URI پرش پورت Hysteria2 و یک گروه fallback اختیاری برای Clash. هر فیلد اختیاری است و مقدار خالی خروجی قبلی را حفظ می‌کند. دکمه فقط‌خواندنی تشخیص، آنچه پنل می‌بیند را گزارش می‌دهد - کلید REALITY گمشده یا بدشکل، shortIdهای قدیمی SHA1، CDN SNI بدون Host، پورت anchor بیرون از بازه پرش - و هیچ تنظیمی را تغییر نمی‌دهد.",
+  "chg.v11561b_lead": "لینک‌های پرش Hysteria2 حالا با کلاینت رسمی هم‌خوان می‌شوند. ",
+  "chg.v11561b": "کلاینت رسمی Hysteria2 بازه پورت را از authority در URI می‌خواند و افزونه mport را که پنل برای v2rayN، Xray و Shadowrocket تولید می‌کرد نادیده می‌گیرد. یک تنظیم جدید بین این دو قالب انتخاب می‌کند؛ mport پیش‌فرض می‌ماند تا لینک‌های موجود تغییر نکنند. خروجی Mihomo همچنان از ports و hop-interval صحیح استفاده می‌کند و بازه یا فاصله نامعتبر پیش از ذخیره رد می‌شود.",
+  "chg.v11561c_lead": "failover در Clash هست، اما فقط وقتی خودتان روشن کنید. ",
+  "chg.v11561c": "وقتی فعال باشد، اشتراک یک گروه fallback با health-check به نام Zefira-Auto کنار انتخاب‌گر دستی Zefira اضافه می‌کند، با URL و فاصله قابل تنظیم. با پیش‌فرض خاموش، پروفایل Clash بایت‌به‌بایت همان خروجی v1.15.60 است. انتخاب‌گر دستی در هر دو حالت می‌ماند تا مشتری بتواند یک پروکسی را پین کند.",
+  "chg.v11561d_lead": "هم‌ترازی با باینری‌های واقعی آزمایش شد، نه با فرض. ",
+  "chg.v11561d": "یک آزمایشگاه محلی Xray-core 26.10.21، Hysteria2 و Mihomo را روی listenerهای واقعی اجرا کرد: 13 از 13 بررسی مسیر سالم و 8 از 8 بررسی منفی گذشت، از جمله پروکسی VLESS مرده‌ای که Mihomo خودکار با یک پروکسی REALITY سالم جایگزین کرد. مجموعه لینک به 133 بررسی رسید و هر 61 مجموعه تست پاس شد. پنل هنوز نمی‌تواند کانفیگ سرور راه دور را بخواند، پس تشخیص‌ها راهنما هستند؛ اثبات نهایی یک اتصال واقعی کلاینت است."
+});
+Object.assign(Z_STRINGS.zh, {
+  "chg.v11561": "&#8212; 认识并非自己搭建的服务器的面板",
+  "chg.v11561a_lead": "服务器对齐卡片，专为不是本面板搭建的服务器而设。",
+  "chg.v11561a": "它只改变面板写入链接和 Clash 配置的内容：服务器真实的 REALITY shortId（粘贴真实列表，或生成值后先加入 Xray）、现有 REALITY 密钥对的公钥部分、每个客户稳定的 spiderX 路径、WebSocket 路径和 Host 头、Hysteria2 端口跳跃 URI 格式，以及可选的 Clash 回退组。每个字段都是可选的，留空即保留原有输出。只读的“诊断”按钮会报告面板能看到的偏差——REALITY 密钥缺失或格式错误、旧的 SHA1 shortId、没有 Host 覆盖的 CDN SNI、超出跳跃范围的 anchor 端口——并且从不修改设置。",
+  "chg.v11561b_lead": "Hysteria2 跳跃链接现在可以匹配官方客户端。",
+  "chg.v11561b": "官方 Hysteria2 客户端从 URI authority 读取端口范围，并忽略面板过去为 v2rayN、Xray 和 Shadowrocket 生成的 mport 扩展。新增设置可在两种格式之间选择；默认仍是 mport，因此现有链接不变。Mihomo 输出继续使用 ports 和整数秒 hop-interval，非法范围或间隔会在保存前被拒绝。",
+  "chg.v11561c_lead": "Clash 故障转移可用，但只有你开启时才生效。",
+  "chg.v11561c": "启用后，订阅会在手动 Zefira 选择器旁加入一个带健康检查的 Zefira-Auto 回退组，探测 URL 和间隔可配置。默认关闭时，Clash 配置与 v1.15.60 逐字节相同。两种情况下都保留手动选择器，客户仍可固定使用某个代理。",
+  "chg.v11561d_lead": "对齐是用真实二进制验证的，不是靠假设。",
+  "chg.v11561d": "本地实验室用真实监听器运行便携版 Xray-core 26.10.21、Hysteria2 和 Mihomo：13/13 正常路径检查和 8/8 负向检查全部通过，其中包括 Mihomo 自动用一个可用的 REALITY 代理替换失效的 VLESS 代理。链接测试增至 133 项，全部 61 个测试套件通过。面板仍无法读取远程服务器配置，因此诊断只是提示；最终证明是真实客户端连接。"
+});
+Object.assign(Z_STRINGS.ru, {
+  "chg.v11561": "&#8212; Панель, которая узнаёт сервер, построенный не ею",
+  "chg.v11561a_lead": "Карточка выравнивания сервера — для серверов, которые собраны не этой панелью.",
+  "chg.v11561a": "Она меняет только то, что панель пишет в ссылки и профили Clash: реальные shortId REALITY сервера (вставьте настоящий список или сгенерируйте значения и сначала добавьте их в Xray), публичную половину существующей пары ключей REALITY, стабильный spiderX-путь для каждого клиента, путь WebSocket и заголовок Host, формат URI скачка портов Hysteria2 и необязательную группу fallback для Clash. Все поля необязательны, пустое значение сохраняет прежний вывод. Кнопка «Диагностика» только читает и сообщает о том, что видит панель: отсутствующий или некорректный ключ REALITY, устаревшие shortId на SHA1, CDN SNI без Host, anchor-порт вне диапазона скачка — и никогда не меняет настройки.",
+  "chg.v11561b_lead": "Ссылки скачка Hysteria2 теперь совместимы с официальным клиентом.",
+  "chg.v11561b": "Официальный клиент Hysteria2 читает диапазон портов из authority в URI и игнорирует расширение mport, которое панель формировала для v2rayN, Xray и Shadowrocket. Новая настройка выбирает один из двух форматов; mport остаётся по умолчанию, поэтому существующие ссылки не меняются. Вывод Mihomo по-прежнему использует ports и целые секунды hop-interval, а неверный диапазон или интервал отклоняется до сохранения.",
+  "chg.v11561c_lead": "Failover в Clash доступен, но только когда вы его включите.",
+  "chg.v11561c": "Когда он включён, подписка добавляет группу fallback с health-check под именем Zefira-Auto рядом с ручным селектором Zefira; URL проверки и интервал настраиваются. При выключенном по умолчанию параметре профиль Clash побайтно совпадает с выводом v1.15.60. Ручной селектор остаётся в обоих случаях, чтобы клиент мог закрепить один прокси.",
+  "chg.v11561d_lead": "Выравнивание проверено на настоящих бинарниках, а не на предположениях.",
+  "chg.v11561d": "Локальная лаборатория запускала портативные Xray-core 26.10.21, Hysteria2 и Mihomo на реальных слушателях: 13 из 13 проверок успешного пути и 8 из 8 негативных проверок прошли, включая мёртвый прокси VLESS, который Mihomo автоматически заменил рабочим REALITY. Набор ссылок вырос до 133 проверок, и все 61 набор тестов проходят. Панель по-прежнему не может прочитать конфигурацию удалённого сервера, поэтому диагностика — это подсказки; окончательное доказательство — реальное подключение клиента."
 });
 
 (function initI18n() {
