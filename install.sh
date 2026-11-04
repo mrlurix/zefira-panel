@@ -44,7 +44,7 @@ SERVICE="zefira"
 # --- begin version-resolution (version_resolution_test.sh slices this block) ---
 # The release this installer ships with. Keep it equal to the VERSION file and
 # let installer_test.py prove it rather than restating the number here.
-ZEFIRA_PINNED="1.15.61"
+ZEFIRA_PINNED="1.15.62"
 
 # Which release do we install? The two ways of answering that disagree, and the
 # disagreement is the whole bug.
@@ -983,8 +983,12 @@ fi
 
 sleep 3
 echo "==> Verifying..."
-if curl -fsS "http://127.0.0.1:$PORT/login" >/dev/null 2>&1; then ok "Panel running on port $PORT"; else
+# Initialise BEFORE the health check. It used to live inside the `else`, so a
+# HEALTHY panel skipped the assignment and the summary below aborted under
+# `set -u` with "VERIFY_FAILED: unbound variable" - the installer failed at the
+# last step precisely when everything had worked.
 VERIFY_FAILED=0
+if curl -fsS "http://127.0.0.1:$PORT/login" >/dev/null 2>&1; then ok "Panel running on port $PORT"; else
     fail "Panel not responding - logs:"; journalctl -u "$SERVICE" -n 40 --no-pager 2>&1 | tail -n 30 || true
     VERIFY_FAILED=1
 fi

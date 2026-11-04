@@ -2526,7 +2526,7 @@ Object.assign(Z_STRINGS.en, {
   "chg.v11560d": "It still described per-customer VPN credentials as plain JSON, while they have been encrypted under instance/secret.key since v1.15.27 and subscription tokens since v1.15.29. The page now says what is encrypted and what is not - display names, notes, usage counters and timestamps are billing data, not credentials - and names the dependency policy: exact pins, a hash-locked lockfile and an advisory check before a release. Nothing about the panel's behaviour changed in this release; 61 suites passed on the updated stack.",
   "sec.layerPlain": "Credentials at rest",
   "sec.layerDeps": "Dependencies",
-  "sec.depsText": "Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.61 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.",
+  "sec.depsText": "Python packages install from exact pins and a hash-locked requirements.lock; the in-panel updater does not float to new majors. v1.15.62 ships PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 and PyMySQL 1.2.3, with no known OSV advisory on those versions. nginx is the distribution build (security backports), upgraded and reported by the installer. There is no PHP and no Node.js runtime in the panel.",
   "sec.plainA": "Encrypted since v1.15.27: per-customer VPN credentials in the database (",
   "sec.plainB": ") - the WireGuard private key, OpenVPN client keypair, L2TP PSK and per-protocol passwords - and subscription tokens since v1.15.29, as a Fernet blob plus an HMAC digest for the indexed /sub lookup. Not encrypted: display names, notes, usage counters and timestamps, which are billing data rather than credentials. Keep",
   "sec.plainC": "at 700 and prefer encrypted backups (",
@@ -2551,7 +2551,7 @@ Object.assign(Z_STRINGS.fa, {
   "chg.v11560d": "هنوز اعتبارهای VPN هر مشتری را JSON ساده معرفی می‌کرد، در حالی که از v1.15.27 زیر instance/secret.key رمزنگاری می‌شوند و توکن‌های اشتراک از v1.15.29. صفحه حالا می‌گوید چه چیزی رمزنگاری شده و چه چیزی نه — نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی دادهٔ صورت‌حساب‌اند نه اعتبار — و سیاست وابستگی را هم می‌نویسد: پین دقیق، فایل قفل هش‌دار و بررسی هشدارها پیش از انتشار. در این انتشار رفتار پنل عوض نشده؛ ۶۱ مجموعه تست روی پشتهٔ به‌روز پاس شدند.",
   "sec.layerPlain": "اعتبارها در حالت ذخیره",
   "sec.layerDeps": "وابستگی‌ها",
-  "sec.depsText": "بسته‌های پایتون با پین دقیق و requirements.lock هش‌دار نصب می‌شوند؛ به‌روزرسان داخل پنل به majorهای جدید شنا نمی‌کند. v1.15.61 این‌ها را دارد: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3، بدون هیچ هشدار شناخته‌شدهٔ OSV روی این نسخه‌ها. nginx بیلد توزیع است (backportهای امنیتی)، که نصب‌کننده ارتقا و گزارش می‌کند. در پنل نه PHP هست و نه runtime Node.js.",
+  "sec.depsText": "بسته‌های پایتون با پین دقیق و requirements.lock هش‌دار نصب می‌شوند؛ به‌روزرسان داخل پنل به majorهای جدید شنا نمی‌کند. v1.15.62 این‌ها را دارد: PyJWT 2.15.1، FastAPI 0.162.0، SQLAlchemy 2.1.6، pydantic 2.14.1، uvicorn 0.54.0، cryptography 50.0.2 و PyMySQL 1.2.3، بدون هیچ هشدار شناخته‌شدهٔ OSV روی این نسخه‌ها. nginx بیلد توزیع است (backportهای امنیتی)، که نصب‌کننده ارتقا و گزارش می‌کند. در پنل نه PHP هست و نه runtime Node.js.",
   "sec.plainA": "از v1.15.27 رمزنگاری‌شده: اعتبارهای VPN هر مشتری در دیتابیس (",
   "sec.plainB": ") — کلید خصوصی WireGuard، جفت‌کلید کلاینت OpenVPN، PSK مربوط به L2TP و رمز هر پروتکل — و توکن‌های اشتراک از v1.15.29، به‌صورت یک بلاب Fernet به‌همراه digest HMAC برای جست‌وجوی ایندکس‌شدهٔ /sub. رمزنگاری‌نشده: نام نمایشی، یادداشت، شمارندهٔ مصرف و زمان‌سنجی، که دادهٔ صورت‌حساب‌اند نه اعتبار. پوشهٔ",
   "sec.plainC": "را روی 700 نگه دارید و بکاپ رمزنگاری‌شده (",
@@ -2576,7 +2576,7 @@ Object.assign(Z_STRINGS.zh, {
   "chg.v11560d": "它仍把每位客户的 VPN 凭据描述为明文 JSON，而从 v1.15.27 起这些凭据已用 instance/secret.key 加密，订阅令牌从 v1.15.29 起加密。页面现在说明什么被加密、什么没有——显示名、备注、用量计数和时间戳属于计费数据，不是凭据——并写明依赖策略：精确固定版本、带哈希的锁文件和发布前的公告检查。本次发布没有改变面板行为；61 套测试在更新后的依赖栈上全部通过。",
   "sec.layerPlain": "静态凭据",
   "sec.layerDeps": "依赖",
-  "sec.depsText": "Python 软件包从精确固定版本和带哈希锁的 requirements.lock 安装；面板内更新器不会漂移到新的大版本。v1.15.61 使用 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3，这些版本没有已知的 OSV 公告。nginx 是发行版构建（含安全回溯补丁），由安装器升级并报告版本。面板中没有 PHP，也没有 Node.js 运行时。",
+  "sec.depsText": "Python 软件包从精确固定版本和带哈希锁的 requirements.lock 安装；面板内更新器不会漂移到新的大版本。v1.15.62 使用 PyJWT 2.15.1、FastAPI 0.162.0、SQLAlchemy 2.1.6、pydantic 2.14.1、uvicorn 0.54.0、cryptography 50.0.2 和 PyMySQL 1.2.3，这些版本没有已知的 OSV 公告。nginx 是发行版构建（含安全回溯补丁），由安装器升级并报告版本。面板中没有 PHP，也没有 Node.js 运行时。",
   "sec.plainA": "自 v1.15.27 起加密：数据库中的每位客户 VPN 凭据（",
   "sec.plainB": "）——WireGuard 私钥、OpenVPN 客户端密钥对、L2TP PSK 和每个协议的密码——以及自 v1.15.29 起的订阅令牌，以 Fernet 密文加 HMAC 摘要支持 /sub 的索引查找。未加密：显示名、备注、用量计数和时间戳，这些是计费数据而非凭据。请保持",
   "sec.plainC": "权限为 700，并优先使用加密备份（",
@@ -2601,7 +2601,7 @@ Object.assign(Z_STRINGS.ru, {
   "chg.v11560d": "Там всё ещё говорилось, что VPN-учётные данные клиентов хранятся открытым JSON, хотя с v1.15.27 они шифруются ключом instance/secret.key, а токены подписки — с v1.15.29. Теперь страница говорит, что зашифровано, а что нет: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные; также описана политика зависимостей: точные пины, хэш-зафиксированный lock-файл и проверка предупреждений перед релизом. Поведение панели в этом релизе не изменилось; 61 набор тестов прошёл на обновлённом стеке.",
   "sec.layerPlain": "Учётные данные в покое",
   "sec.layerDeps": "Зависимости",
-  "sec.depsText": "Пакеты Python ставятся по точным пинам из requirements.lock с хэшами; встроенный обновлятор не переходит на новые мажоры. v1.15.61 содержит PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3, без известных предупреждений OSV для этих версий. nginx — сборка дистрибутива (security backports), установщик обновляет её и сообщает версию. В панели нет PHP и нет среды выполнения Node.js.",
+  "sec.depsText": "Пакеты Python ставятся по точным пинам из requirements.lock с хэшами; встроенный обновлятор не переходит на новые мажоры. v1.15.62 содержит PyJWT 2.15.1, FastAPI 0.162.0, SQLAlchemy 2.1.6, pydantic 2.14.1, uvicorn 0.54.0, cryptography 50.0.2 и PyMySQL 1.2.3, без известных предупреждений OSV для этих версий. nginx — сборка дистрибутива (security backports), установщик обновляет её и сообщает версию. В панели нет PHP и нет среды выполнения Node.js.",
   "sec.plainA": "Зашифровано с v1.15.27: учётные данные VPN каждого клиента в базе (",
   "sec.plainB": ") — приватный ключ WireGuard, пара ключей клиента OpenVPN, PSK L2TP и пароли всех протоколов — а также токены подписок с v1.15.29, в виде блоба Fernet плюс HMAC-дайджест для индексированного поиска /sub. Не зашифровано: отображаемые имена, заметки, счётчики трафика и время — это биллинговые данные, а не учётные данные. Держите",
   "sec.plainC": "с правами 700 и предпочитайте шифрованные бэкапы (",
@@ -2793,6 +2793,36 @@ Object.assign(Z_STRINGS.ru, {
   "chg.v11561c": "Когда он включён, подписка добавляет группу fallback с health-check под именем Zefira-Auto рядом с ручным селектором Zefira; URL проверки и интервал настраиваются. При выключенном по умолчанию параметре профиль Clash побайтно совпадает с выводом v1.15.60. Ручной селектор остаётся в обоих случаях, чтобы клиент мог закрепить один прокси.",
   "chg.v11561d_lead": "Выравнивание проверено на настоящих бинарниках, а не на предположениях.",
   "chg.v11561d": "Локальная лаборатория запускала портативные Xray-core 26.10.21, Hysteria2 и Mihomo на реальных слушателях: 13 из 13 проверок успешного пути и 8 из 8 негативных проверок прошли, включая мёртвый прокси VLESS, который Mihomo автоматически заменил рабочим REALITY. Набор ссылок вырос до 133 проверок, и все 61 набор тестов проходят. Панель по-прежнему не может прочитать конфигурацию удалённого сервера, поэтому диагностика — это подсказки; окончательное доказательство — реальное подключение клиента."
+});
+
+/* Installer verification fix - changelog (v1.15.62) */
+Object.assign(Z_STRINGS.en, {
+  "chg.v11562": "&#8212; The installer that failed only when it succeeded",
+  "chg.v11562a_lead": "A healthy install no longer dies at the last line. ",
+  "chg.v11562a": "install.sh runs under set -u, and VERIFY_FAILED=0 was assigned inside the health check's else branch. On a healthy panel that branch never ran, so the summary line read an unset variable and aborted with /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable - the install had worked, but the operator saw a crash instead of the URL. The flag is now initialised before the health check, and a regression test executes the real verification block under set -u with a stubbed healthy panel; moving the assignment back into the else turns it red. Nothing in the panel's behaviour changed, and all 61 suites pass.",
+  "chg.v11562b_lead": "The assistant's changelog was unreadable in three languages. ",
+  "chg.v11562b": "The Persian, Chinese and Russian summaries of v1.15.61 and v1.15.60 in docs/assets/site-knowledge.json had been reduced to question marks by a lossy rewrite, and the existing guard only looked for U+FFFD, so it passed. Both releases are now proper translations, and release_notes_test.py requires the newest release in each locale to contain characters from its own script - a paragraph that is all ASCII in Persian, Chinese or Russian now fails the suite."
+});
+Object.assign(Z_STRINGS.fa, {
+  "chg.v11562": "&#8212; نصبی که فقط وقتی موفق می‌شد، شکست می‌خورد",
+  "chg.v11562a_lead": "نصب سالم دیگر در آخرین خط از کار نمی‌افتد. ",
+  "chg.v11562a": "اسکریپت install.sh زیر set -u اجرا می‌شود و VERIFY_FAILED=0 داخل شاخهٔ else بررسی سلامت پنل مقداردهی می‌شد. روی پنل سالم آن شاخه هرگز اجرا نمی‌شد، بنابراین خط خلاصه یک متغیر مقدارنگرفته را می‌خواند و با خطای /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable متوقف می‌شد - نصب انجام شده بود، اما اپراتور به‌جای URL یک کرش می‌دید. حالا پرچم پیش از بررسی سلامت مقداردهی می‌شود و یک تست رگرسیون همان بلوک واقعی بررسی را زیر set -u با پنل سالم شبیه‌سازی‌شده اجرا می‌کند؛ برگرداندن مقداردهی به داخل else آن را قرمز می‌کند. رفتار پنل تغییر نکرده و هر ۶۱ مجموعه تست پاس می‌شوند.",
+  "chg.v11562b_lead": "changelog دستیار در سه زبان ناخوانا بود. ",
+  "chg.v11562b": "خلاصه‌های فارسی، چینی و روسی v1.15.61 و v1.15.60 در docs/assets/site-knowledge.json در یک بازنویسی زیان‌بار به علامت سؤال تبدیل شده بودند و نگهبان موجود فقط U+FFFD را می‌دید، پس سبز ماند. هر دو نسخه حالا ترجمهٔ درست دارند و release_notes_test.py لازم می‌داند جدیدترین نسخه در هر زبان حروفی از خط خودش داشته باشد - پاراگرافی که در فارسی، چینی یا روسی تماماً ASCII باشد اکنون تست را قرمز می‌کند."
+});
+Object.assign(Z_STRINGS.zh, {
+  "chg.v11562": "&#8212; 只在成功时才失败的安装程序",
+  "chg.v11562a_lead": "健康的安装不再在最后一行崩溃。",
+  "chg.v11562a": "install.sh 在 set -u 下运行，而 VERIFY_FAILED=0 原本位于面板健康检查的 else 分支内。面板健康时该分支不会执行，于是摘要行读取未赋值的变量并以 /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable 中止——安装其实已经成功，操作者看到的却是崩溃而不是 URL。现在标志在健康检查之前初始化，并新增回归测试：在 set -u 下用模拟的健康面板执行真实的验证块；把赋值移回 else 会让测试变红。面板行为没有改变，全部 61 个测试套件通过。",
+  "chg.v11562b_lead": "助手的更新日志在三种语言中无法阅读。",
+  "chg.v11562b": "docs/assets/site-knowledge.json 中 v1.15.61 和 v1.15.60 的波斯语、中文和俄语摘要被一次有损重写变成了问号，而现有守卫只检查 U+FFFD，所以没有发现。两个版本现在都有正确的翻译，release_notes_test.py 要求每种语言的最新版本必须包含该语言自身的字符——波斯语、中文或俄语中全为 ASCII 的段落现在会让测试失败。"
+});
+Object.assign(Z_STRINGS.ru, {
+  "chg.v11562": "&#8212; Установщик, который падал только при успехе",
+  "chg.v11562a_lead": "Успешная установка больше не обрывается на последней строке.",
+  "chg.v11562a": "install.sh работает под set -u, а VERIFY_FAILED=0 присваивался внутри ветки else проверки здоровья панели. При здоровой панели эта ветка не выполнялась, поэтому строка итога читала неинициализированную переменную и завершалась с /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable — установка уже прошла, но оператор видел падение вместо URL. Теперь флаг инициализируется до проверки здоровья, а регрессионный тест выполняет настоящий блок проверки под set -u с имитацией здоровой панели; если вернуть присваивание в else, тест краснеет. Поведение панели не изменилось, и все 61 набор тестов проходят.",
+  "chg.v11562b_lead": "Changelog помощника был нечитаем на трёх языках.",
+  "chg.v11562b": "Персидское, китайское и русское резюме v1.15.61 и v1.15.60 в docs/assets/site-knowledge.json были превращены в вопросительные знаки при перезаписи с потерей кодировки, а существующая проверка искала только U+FFFD и потому молчала. Оба выпуска теперь переведены правильно, а release_notes_test.py требует, чтобы новейший выпуск в каждой локали содержал символы своей письменности - абзац из одних ASCII в персидском, китайском или русском теперь роняет набор тестов."
 });
 
 (function initI18n() {

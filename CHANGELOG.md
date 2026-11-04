@@ -3,6 +3,11 @@
 Every release, newest first. Generated from [`docs/changelog.html`](docs/changelog.html), which is the source of
 truth; run `python docs/gen_changelog.py` after editing that page.
 
+## v1.15.62 - The installer that failed only when it succeeded
+
+- **A healthy install no longer dies at the last line.** install.sh runs under set -u, and VERIFY_FAILED=0 was assigned inside the health check's else branch. On a healthy panel that branch never ran, so the summary line read an unset variable and aborted with /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable - the install had worked, but the operator saw a crash instead of the URL. The flag is now initialised before the health check, and a regression test executes the real verification block under set -u with a stubbed healthy panel; moving the assignment back into the else turns it red. Nothing in the panel's behaviour changed, and all 61 suites pass.
+- **The assistant's changelog was unreadable in three languages.** The Persian, Chinese and Russian summaries of v1.15.61 and v1.15.60 in docs/assets/site-knowledge.json had been reduced to question marks by a lossy rewrite, and the existing guard only looked for U+FFFD, so it passed. Both releases are now proper translations, and release_notes_test.py requires the newest release in each locale to contain characters from its own script - a paragraph that is all ASCII in Persian, Chinese or Russian now fails the suite.
+
 ## v1.15.61 - The panel that learns the server it did not build
 
 - **A Server Alignment card, for servers this panel did not build.** It changes only what the panel writes into links and Clash profiles: the server's real REALITY shortIds (paste the list, or generate values and add them to Xray first), the public half of an existing REALITY keypair, a stable per-client spiderX path, the WebSocket path and Host header, the Hysteria2 hop URI format, and an optional Clash fallback group. Every field is opt-in and an empty value keeps the historical output. A read-only Diagnostics button reports what the panel can see - a missing or malformed REALITY key, legacy SHA1 shortIds, a CDN SNI without a Host override, an anchor port outside the hop range - and never changes a setting.
@@ -311,7 +316,7 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 
 ## v1.15.14 - One backslash in the version corrupted every asset URL in the site
 
-- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=96 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
+- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=98 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
 - **The version is now digits-only, and the directory cannot be given at all.** A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.
 
 ## v1.15.13 - The installer's SSL block appended to .env through a symlink, as root

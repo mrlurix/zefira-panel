@@ -18,6 +18,13 @@ It also reads the changelog the way a reader does. It used to extract
 shipped a heading displaying v1.15.38, the only duplicated version number
 in 41, and eleven ascending inversions buried the shipped release 12th of
 41. And "every locale is non-empty" let seven U+FFFD through the same file.
+
+U+FFFD was not the only lossy rewrite. v1.15.61 shipped the Persian, Chinese
+and Russian summaries of itself and v1.15.60 as literal question marks: the
+paragraph had no non-ASCII character left, so a U+FFFD-only check was green
+over three unreadable languages. The newest paragraph in each of those locales
+must now contain characters from its own script, and a mutation that replaces
+them with "?" proves the check goes red.
 """
 import io
 import json
@@ -54,6 +61,21 @@ def newest_version(text):
     """
     found = re.findall(r"v(\d+\.\d+\.\d+)", text or "")
     return "v" + found[0] if found else None
+
+
+def newest_paragraph(text):
+    """The first release paragraph in a knowledge-base string."""
+    return (text or "").split("\n\n", 1)[0]
+
+
+def keeps_script(text):
+    """Does the newest paragraph still carry non-ASCII letters?
+
+    Persian, Chinese and Russian all require them. A lossy encode that maps
+    every one to "?" leaves an ASCII paragraph that is still non-empty and
+    still starts with the right version - exactly what v1.15.61 shipped.
+    """
+    return sum(ord(c) > 127 for c in newest_paragraph(text)) >= 20
 
 
 def cur_head_section(changelog, cur):
@@ -128,6 +150,12 @@ def checks(kb, version, changelog):
     out["every locale decodes without a replacement character"] = (
         e is not None and all("\ufffd" not in (e.get(loc) or "")
                               for loc in LOCALES))
+    # A "?" is not U+FFFD, and a paragraph made entirely of them is still
+    # non-empty and still names the right version. v1.15.61 shipped exactly
+    # that for fa/zh/ru; only a script check sees it.
+    for loc in ("fa", "zh", "ru"):
+        out["the newest release keeps its own script (%s)" % loc] = (
+            e is not None and keeps_script(e.get(loc)))
     out["the full changelog is still linked"] = (
         e is not None and any(l.get("href") == "changelog.html" for l in (e.get("links") or [])))
     # The site also has a real changelog page; the assistant must not claim to
@@ -258,6 +286,17 @@ def main():
         mutations.append((
             "ship U+FFFD in %s" % loc, c, changelog,
             ["every locale decodes without a replacement character"]))
+
+    # The lossy rewrite that shipped in v1.15.61: every non-ASCII character in
+    # the newest paragraph became "?". The version, the link and the length all
+    # survive, so only the script check can see it.
+    for loc in ("fa", "zh", "ru"):
+        c = copy.deepcopy(kb)
+        first, rest = entry(c)[loc].split("\n\n", 1)
+        entry(c)[loc] = re.sub(r"[^\x00-\x7f]", "?", first) + "\n\n" + rest
+        mutations.append((
+            "encode the newest %s summary as ASCII" % loc, c, changelog,
+            ["the newest release keeps its own script (%s)" % loc]))
 
     # Headings are read by eye, so the mutations have to be too. The first
     # reproduces the shipped bug exactly: the newest heading wearing the
