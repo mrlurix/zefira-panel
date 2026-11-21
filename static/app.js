@@ -525,7 +525,8 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
     // must be loaded even when Settings was never opened (blank ports parsed
     // to NaN and the save was rejected).
     if (btn.dataset.section === "reality") { loadSrvSettings(); }
-    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadTelegram(); loadSslStatus(); loadAi(); }
+    if (btn.dataset.section === "telegram") { loadTelegram(); }
+    if (btn.dataset.section === "settings") { loadAudit(); loadSrvSettings(); loadSslStatus(); loadAi(); }
     if (btn.dataset.section === "customize") { loadAppearance(); }
     if (btn.dataset.section === "tunnels") { loadNodes(); loadTunnelSettings(); }
     if (btn.dataset.section === "inbounds") loadInbounds();
@@ -942,7 +943,7 @@ function applyBrand(name) {
 // could be neither reordered nor hidden, which is exactly what Personalize
 // exists to let the operator do. Any new section has to be added here AND to
 // MENU_SECTIONS in main.py, or it is pinned on.
-const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "settings"];
+const MENU_IDS = ["dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "telegram", "settings"];
 const MENU_LOCKED = ["dashboard", "users", "inbounds", "customize", "settings"];
 const DASH_IDS = ["usage", "link", "groups", "apps"];
 let MENU_STATE = MENU_IDS.map((id) => ({ id, hidden: false }));

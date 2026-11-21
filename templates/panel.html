@@ -62,6 +62,10 @@
         <svg viewBox="0 0 24 24"><path d="M12 3v4"/><path d="M12 17v4"/><circle cx="12" cy="12" r="4"/><path d="M5.6 5.6 8.4 8.4"/><path d="M15.6 15.6 18.4 18.4"/><path d="M18.4 5.6 15.6 8.4"/><path d="M8.4 15.6 5.6 18.4"/></svg>
         <span data-i18n="nav.mcp">AI client (MCP)</span>
       </button>
+      <button class="nav-btn" data-section="telegram" data-title-key="title.telegram">
+        <svg viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+        <span data-i18n="nav.telegram">Telegram Bot</span>
+      </button>
       <button class="nav-btn" data-section="settings" data-title-key="title.settings">
         <svg viewBox="0 0 24 24"><path d="M4 6h16"/><circle cx="9" cy="6" r="2.5"/><path d="M4 12h16"/><circle cx="15" cy="12" r="2.5"/><path d="M4 18h16"/><circle cx="7" cy="18" r="2.5"/></svg>
         <span data-i18n="nav.settings">Settings</span>
@@ -609,6 +613,27 @@
     </section>
 
 
+    <section id="section-telegram" class="section">
+      <div class="settings-grid">
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="tg.title">Telegram Notifications</h2></div>
+          <p class="hint mt-0" data-i18n="tg.hint">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
+          <label class="field"><span data-i18n="tg.token">Bot token (kept encrypted, empty = keep current)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
+          <label class="field"><span data-i18n="tg.chat">Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
+          <div class="reality-actions">
+            <button type="button" id="tg-save-btn" class="btn btn-primary" data-i18n="tg.saveBtn">Save</button>
+            <button type="button" id="tg-test-btn" class="btn btn-ghost" data-i18n="tg.testBtn">Send Test</button>
+          </div>
+          <p class="hint" id="tg-hint"></p>
+        </div>
+
+        <div class="card form-card">
+          <div class="card-head"><h2 data-i18n="tg.sellTitle">Your Own Bot (Reseller Shop)</h2></div>
+          <p class="hint mt-0" data-i18n="tg.sellHint">Run a reseller shop on your own Telegram bot: create a bot with @BotFather, add a bot-scoped API token (Developer API → API Tokens → Bot scope), point the example bot at your panel, then add your payment step before creating the customer.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="section-settings" class="section">
       <p class="hint mt-0" data-i18n="settings.intro">Everything on this page. Server and network settings take effect immediately; the rest apply to new connections.</p>
 
@@ -670,17 +695,6 @@
             <button type="button" id="ssl-renew-btn" class="btn btn-ghost" data-i18n="ssl.renewBtn">Renew</button>
           </div>
           <p class="hint" id="ssl-status"></p>
-        </div>
-        <div class="card form-card">
-          <div class="card-head"><h2 data-i18n="tg.title">Telegram Notifications</h2></div>
-          <p class="hint mt-0" data-i18n="tg.hint">Get notified on user create/delete and brute-force lockouts. Create a bot with @BotFather, then send your new bot any message once.</p>
-          <label class="field"><span data-i18n="tg.token">Bot token (kept encrypted, empty = keep current)</span><input type="password" id="tg-token" placeholder="123456:ABC-DEF..." spellcheck="false"></label>
-          <label class="field"><span data-i18n="tg.chat">Chat ID (from @userinfobot) or @channel</span><input type="text" id="tg-chat" placeholder="123456789" spellcheck="false"></label>
-          <div class="reality-actions">
-            <button type="button" id="tg-save-btn" class="btn btn-primary" data-i18n="tg.saveBtn">Save</button>
-            <button type="button" id="tg-test-btn" class="btn btn-ghost" data-i18n="tg.testBtn">Send Test</button>
-          </div>
-          <p class="hint" id="tg-hint"></p>
         </div>
       </div>
 

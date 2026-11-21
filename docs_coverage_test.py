@@ -65,6 +65,7 @@ SECTION_DOCS = {
     "customize": ("user-guide.html", "appearance-branding"),
     "api": ("api.html", None),
     "mcp": ("user-guide.html", "mcp-ai-clients"),
+    "telegram": ("user-guide.html", "telegram-bot"),
     "settings": ("configuration.html", "panel-settings"),
 }
 pages = {p.name: p.read_text(encoding="utf-8", errors="replace") for p in DOCS.glob("*.html")}

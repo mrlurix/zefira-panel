@@ -3,6 +3,11 @@
 Every release, newest first. Generated from [`docs/changelog.html`](docs/changelog.html), which is the source of
 truth; run `python docs/gen_changelog.py` after editing that page.
 
+## v1.15.63 - The Telegram bot shop
+
+- **The bot's controls finally have a room of their own.** The sidebar grew a dedicated telegram section, placed directly above Settings, holding every bot-token function: the panel bot's start and control, the operator's own-bot hint, the payment capability for the panel's bot, and the full management surface from within the bot. A layout saved before the section existed merges it in above Settings.
+- **The reseller bot can now take paid plans.** The /buy command sends a Telegram Stars invoice through TG_PROVIDER_TOKEN and, once Telegram approves the pre-checkout, creates the customer with the chosen plan and delivers the subscription link; without TG_PROVIDER_TOKEN the shop answers with the not-configured hint, and an operator adds their own real payment step before the user object is created in the pre-checkout handler.
+
 ## v1.15.62 - The installer that failed only when it succeeded
 
 - **A healthy install no longer dies at the last line.** install.sh runs under set -u, and VERIFY_FAILED=0 was assigned inside the health check's else branch. On a healthy panel that branch never ran, so the summary line read an unset variable and aborted with /dev/fd/63: line 1000: VERIFY_FAILED: unbound variable - the install had worked, but the operator saw a crash instead of the URL. The flag is now initialised before the health check, and a regression test executes the real verification block under set -u with a stubbed healthy panel; moving the assignment back into the else turns it red. Nothing in the panel's behaviour changed, and all 61 suites pass.
@@ -316,7 +321,7 @@ The update-page latency check compared a cold read against a FIXED fraction of a
 
 ## v1.15.14 - One backslash in the version corrupted every asset URL in the site
 
-- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=98 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
+- **The version went straight into a regex replacement.** Measured against a copy of the real docs tree, passing 9\1 turned every ?v=34 into ?v=9assets/style.css?v=99 - because \1 is a backreference to the matched path - and the script exited 0 having written that to every asset URL on the site. A plausible typo, or a Windows path pasted into the version slot, silently and completely broke the docs.
 - **The version is now digits-only, and the directory cannot be given at all.** A cache-buster can only be a number, and rejecting the input names the mistake instead of quietly doing nothing. With one argument the directory cannot be passed either - the obvious thing to do - and a non-existent directory made the script rewrite zero files while still printing that it was setting every asset URL.
 
 ## v1.15.13 - The installer's SSL block appended to .env through a symlink, as root

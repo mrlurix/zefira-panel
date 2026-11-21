@@ -971,7 +971,13 @@ def load_appearance() -> dict:
 # Two places disagreed and nothing compared them, so menu_order_test.py now
 # does: this tuple, MENU_IDS in app.js and the nav buttons in panel.html must
 # all be the same sequence, in the same order.
-MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "settings")
+#
+# "telegram" now sits directly above "settings" - the requested home for the
+# Telegram bot control (token in, bot start out) that used to live inside
+# Settings. Same slot the MCP section took: the front end draws it above
+# Settings and the server's tuple carries it there too, so a saved layout and
+# the drawn menu can never disagree again.
+MENU_SECTIONS = ("dashboard", "users", "inbounds", "tunnels", "nodes", "reality", "blocker", "update", "customize", "api", "mcp", "telegram", "settings")
 MENU_ALWAYS = ("dashboard", "users", "inbounds", "customize", "settings")
 DASH_BLOCKS = ("usage", "link", "groups", "apps")
 

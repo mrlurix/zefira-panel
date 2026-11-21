@@ -6,10 +6,11 @@ Setup:
     set TELEGRAM_BOT_TOKEN=...      (from @BotFather)
     set ZEFIRA_URL=https://panel.example.com
     set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens -> Create with scope "bot")
+    set TG_PROVIDER_TOKEN=...       (from @BotFather, for paid Stars plans)
     python bot.py
 
-Flow: /buy -> pick a plan -> bot creates the VPN user -> replies with the
-subscription link. /my shows your existing account.
+Flow: /buy -> pick a plan -> bot sends the Stars payment -> creates the VPN
+user -> replies with the subscription link. /my shows your existing account.
 
 Security: use a "bot"-scoped token (least privilege: can only list/create
 users + read stats/templates). A "full" token works but can delete users,
@@ -20,8 +21,14 @@ import os
 import re
 
 import requests
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, PreCheckoutQuery, Update
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    PreCheckoutQueryHandler,
+)
 
 def _missing_env(name: str) -> str:
     raise SystemExit(f"Set {name} first (see README.md).")
@@ -45,11 +52,11 @@ if PANEL.startswith("http://") and not os.environ.get("ZEFIRA_ALLOW_HTTP"):
     )
 SUB_BASE = os.environ.get("ZEFIRA_SUB_BASE", PANEL + "/sub").rstrip("/")
 HEADERS = {"Authorization": f"Bearer {ZEFIRA_TOKEN}", "Content-Type": "application/json"}
-
+PROVIDER_TOKEN = os.environ.get("TG_PROVIDER_TOKEN", "")
 PLANS = [
-    ("10GB / 30 days", 10, 30),
-    ("30GB / 30 days", 30, 30),
-    ("50GB / 90 days", 50, 90),
+    ("10GB / 30 days", 10, 30, 30),  # label, volume_gb, days, price in Telegram Stars
+    ("30GB / 30 days", 30, 30, 90),
+    ("50GB / 90 days", 50, 90, 150),
 ]
 PROTOS = ["vless"]
 
@@ -111,8 +118,10 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 async def buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _require_private(update):
         return
-    kb = [[InlineKeyboardButton(label, callback_data=f"buy:{i}")]
-          for i, (label, _, _) in enumerate(PLANS)]
+    kb = [
+        [InlineKeyboardButton(label, callback_data=f"buy:{i}")]
+        for i, (label, _, _, _) in enumerate(PLANS)
+    ]
     await update.message.reply_text("Pick a plan:", reply_markup=InlineKeyboardMarkup(kb))
 
 
@@ -174,34 +183,69 @@ async def on_buy(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         # callback bought a different plan than the one displayed.
         if not 0 <= idx < len(PLANS):
             raise IndexError(idx)
-        label, vol, days = PLANS[idx]
+        label, vol, days, stars = PLANS[idx]
     except (IndexError, ValueError):
         # Stale inline button (bot restarted with a different plan list):
         # answer instead of leaving the spinner hanging forever.
         await reply_to.reply_text("Plan list changed — send /buy again.")
         return
-    name = uname(q.from_user.id)
-    st, data = api("POST", "/api/users", {
-        "username": name, "protocols": PROTOS, "volume_gb": vol, "days": days,
-        "note": f"telegram:{q.from_user.id}",
-    })
-    if st == 409:
-        await reply_to.reply_text("You already have an account. Use /my.")
+    if not PROVIDER_TOKEN:
+        await reply_to.reply_text(
+            "Payments are not configured for this shop (set TG_PROVIDER_TOKEN from @BotFather). Tell the shop owner."
+        )
         return
-    if st != 200 or not data.get("token"):
-        log.warning("create failed %s %s", st, data)
-        await reply_to.reply_text(panel_msg(st))
-        return
-    await reply_to.reply_text(
-        f"Done! {md(label)}\n\nSubscription (tap to copy):\n"
-        f"`{md(SUB_BASE)}/{md(data['token'])}`\n\n"
-        f"Paste it into v2rayNG / Streisand / Clash.",
-        parse_mode="Markdown")
-    # Hide the buttons so a second tap cannot hit "already have".
+    await ctx.bot.send_invoice(
+        chat_id=reply_to.chat.id,
+        title=f"Zefira VPN - {label}",
+        description=f"{vol} GB for {days} days",
+        payload=f"buy:{idx}",
+        provider_token=PROVIDER_TOKEN,
+        currency="XTR",
+        prices=[LabeledPrice(label=label, amount=stars)],
+    )
+    await reply_to.reply_text("Order sent — waiting for the payment.")
+    # Hide the buttons so a second tap cannot start a second order.
     try:
         await q.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([]))
     except Exception:
         pass
+
+
+async def on_pre_checkout(update: PreCheckoutQuery, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    q = update
+    try:
+        idx = int(q.invoice_payload.split(":", 1)[1])
+        if not 0 <= idx < len(PLANS):
+            raise IndexError(idx)
+    except (IndexError, ValueError):
+        await q.answer(ok=False, error_message="Plan changed — start the purchase again.")
+        return
+    label, vol, days, _stars = PLANS[idx]
+    # Approve the charge, then hand the freshly paid plan to the customer.
+    await q.answer(ok=True)
+    st, data = api("POST", "/api/users", {
+        "username": uname(q.from_user.id),
+        "protocols": PROTOS,
+        "volume_gb": vol,
+        "days": days,
+        "note": f"telegram:{q.from_user.id}",
+    })
+    if st == 409:
+        await ctx.bot.send_message(chat_id=q.from_user.id, text="You already have an account. Use /my.")
+        return
+    if st != 200 or not data.get("token"):
+        log.warning("create failed %s %s", st, data)
+        await ctx.bot.send_message(chat_id=q.from_user.id, text=panel_msg(st))
+        return
+    await ctx.bot.send_message(
+        chat_id=q.from_user.id,
+        text=(
+            f"Payment received! {md(label)}\n\n"
+            f"Subscription (tap to copy):\n`{md(SUB_BASE)}/{md(data['token'])}`\n\n"
+            "Paste it into v2rayNG / Streisand / Clash."
+        ),
+        parse_mode="Markdown",
+    )
 
 
 def main() -> None:
@@ -210,6 +254,7 @@ def main() -> None:
     app.add_handler(CommandHandler("buy", buy))
     app.add_handler(CommandHandler("my", my))
     app.add_handler(CallbackQueryHandler(on_buy, pattern=r"^buy:"))
+    app.add_handler(PreCheckoutQueryHandler(on_pre_checkout))
     log.info("bot polling...")
     app.run_polling()
 

@@ -91,9 +91,12 @@ check("the server's DASH_BLOCKS and the front end's DASH_IDS agree",
       "server=%s front=%s" % (SERVER_DASH, FRONT_DASH))
 
 # --------------------------------------------------- the section the user wants
-check("the MCP section sits directly above Settings",
-      "mcp" in FRONT and "settings" in FRONT
-      and FRONT.index("mcp") == FRONT.index("settings") - 1,
+check("the Telegram section sits directly above Settings",
+      "telegram" in FRONT and "settings" in FRONT
+      and FRONT.index("telegram") == FRONT.index("settings") - 1,
+      "the order is %s" % FRONT)
+check("the MCP section sits directly above the Telegram section",
+      FRONT.index("mcp") == FRONT.index("telegram") - 1,
       "the order is %s" % FRONT)
 
 # --------------------------------------------------------- the server agrees
@@ -104,11 +107,11 @@ check("the MCP section sits directly above Settings",
 sys.path.insert(0, ROOT)
 import main as _main  # noqa: E402
 
-old_layout = [{"id": i, "hidden": False} for i in FRONT if i != "mcp"]
+old_layout = [{"id": i, "hidden": False} for i in FRONT if i != "telegram"]
 merged = _main._canon_menu_layout(__import__("json").dumps(old_layout))
 ids = [m["id"] for m in merged]
-check("a layout saved before the MCP section existed gets MCP above Settings",
-      ids.index("mcp") == ids.index("settings") - 1,
+check("a layout saved before the Telegram section existed gets Telegram above Settings",
+      ids.index("telegram") == ids.index("settings") - 1,
       "the merged order is %s" % ids)
 
 # and a layout that already has MCP keeps the operator's own position

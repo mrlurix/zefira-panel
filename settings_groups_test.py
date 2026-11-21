@@ -87,7 +87,11 @@ def checks(panel, i18n, baseline):
         missing = [k for k in GROUP_KEYS if k not in have]
         out["group labels exist in %s" % loc] = not missing
     for cid in CRITICAL_IDS:
-        out["#%s survived" % cid] = ('id="%s"' % cid) in sec
+        sid = "telegram" if cid.startswith("tg") else "settings"
+        _lines = panel.split("\n")
+        _start = next(n for n, l in enumerate(_lines) if ('id="section-%s"' % sid) in l)
+        _end = next(n for n in range(_start + 1, len(_lines)) if "</section>" in _lines[n])
+        out["#%s survived" % cid] = ('id="%s"' % cid) in "\n".join(_lines[_start:_end + 1])
     return out
 
 

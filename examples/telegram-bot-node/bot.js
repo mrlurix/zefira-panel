@@ -9,10 +9,11 @@
  *   set TELEGRAM_BOT_TOKEN=...      (from @BotFather; Linux: export)
  *   set ZEFIRA_URL=https://panel.example.com
  *   set ZEFIRA_API_TOKEN=zfp_...    (Panel -> Settings -> API Tokens -> scope "bot")
+ *   set TG_PROVIDER_TOKEN=...       (from @BotFather, for paid Stars plans)
  *   node bot.js
  *
- * Flow: /buy -> pick a plan -> bot creates the VPN user -> replies with the
- * subscription link. /my shows your existing account.
+ * Flow: /buy -> pick a plan -> bot sends the Stars payment -> creates the VPN
+ * user -> replies with the subscription link. /my shows your existing account.
  *
  * Security: use a "bot"-scoped token (least privilege). A "full" token can
  * delete users, restore backups and manage settings: never ship it in a bot.
@@ -26,11 +27,12 @@ const HEADERS = {
   Authorization: `Bearer ${process.env.ZEFIRA_API_TOKEN || ""}`,
   "Content-Type": "application/json",
 };
+const PROVIDER_TOKEN = process.env.TG_PROVIDER_TOKEN || "";
 
 const PLANS = [
-  { label: "10GB / 30 days", volume_gb: 10, days: 30 },
-  { label: "30GB / 30 days", volume_gb: 30, days: 30 },
-  { label: "50GB / 90 days", volume_gb: 50, days: 90 },
+  { label: "10GB / 30 days", volume_gb: 10, days: 30, stars: 30 },
+  { label: "30GB / 30 days", volume_gb: 30, days: 30, stars: 90 },
+  { label: "50GB / 90 days", volume_gb: 50, days: 90, stars: 150 },
 ];
 const PROTOS = ["vless"];
 
@@ -131,8 +133,49 @@ function createBot(token) {
       return;
     }
     if (!ctx.from) return;
-    const name = uname(ctx.from.id);
     await ctx.answerCallbackQuery();
+    if (!PROVIDER_TOKEN) {
+      await ctx.reply("Payments are not configured for this shop (set TG_PROVIDER_TOKEN from @BotFather). Tell the shop owner.");
+      return;
+    }
+    await ctx.telegram.sendInvoice({
+      chat_id: q.message.chat.id,
+      title: `Zefira VPN - ${plan.label}`,
+      description: `${plan.volume_gb} GB for ${plan.days} days`,
+      payload: `buy:${Number(m[1])}`,
+      provider_token: PROVIDER_TOKEN,
+      currency: "XTR",
+      prices: [{ label: plan.label, amount: plan.stars }],
+    });
+    await ctx.reply("Order sent - waiting for the payment.");
+    // Hide the buttons so a second tap cannot start a second order.
+    if (q.message) {
+      await ctx.api
+        .editMessageReplyMarkup({
+          chat_id: q.message.chat.id,
+          message_id: q.message.message_id,
+          reply_markup: { inline_keyboard: [] },
+        })
+        .catch(() => {});
+    }
+  });
+
+  bot.on("pre_checkout_query", async (ctx) => {
+    const q = ctx.preCheckoutQuery;
+    const m = /^buy:(\d+)$/.exec(q.invoice_payload || "");
+    if (!m || !PLANS[Number(m[1])]) {
+      await ctx.telegram
+        .answerPreCheckoutQuery({
+          ok: false,
+          error_message: "Plan changed - start the purchase again.",
+        })
+        .catch(() => {});
+      return;
+    }
+    const plan = PLANS[Number(m[1])];
+    // Approve the charge, then hand the freshly paid plan to the customer.
+    await ctx.telegram.answerPreCheckoutQuery({ ok: true }).catch(() => {});
+    const name = uname(ctx.from.id);
     const [st, data] = await api("POST", "/api/users", {
       username: name,
       protocols: PROTOS,
@@ -150,19 +193,9 @@ function createBot(token) {
       return;
     }
     await ctx.reply(
-      `Done! ${md(plan.label)}\n\nSubscription (tap to copy):\n\`${md(SUB_BASE)}/${md(data.token)}\`\n\nPaste it into v2rayNG / Streisand / Clash.`,
+      `Payment received! ${md(plan.label)}\n\nSubscription (tap to copy):\n\`${md(SUB_BASE)}/${md(data.token)}\`\n\nPaste it into v2rayNG / Streisand / Clash.`,
       { parse_mode: "Markdown" }
     );
-    // Hide the buttons so a second tap cannot hit "already have".
-    if (q.message) {
-      await ctx.api
-        .editMessageReplyMarkup({
-          chat_id: q.message.chat.id,
-          message_id: q.message.message_id,
-          reply_markup: { inline_keyboard: [] },
-        })
-        .catch(() => {});
-    }
   });
 
   return bot;
