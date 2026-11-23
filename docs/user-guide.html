@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title data-i18n="docs.titleUsers">Users &amp; Plans — Zefira Docs</title>
 <link rel="icon" href="assets/logo.png">
-<link rel="stylesheet" href="assets/style.css?v=99">
+<link rel="stylesheet" href="assets/style.css?v=100">
 </head>
 <body>
 <header class="topbar">
@@ -106,6 +106,27 @@
 <p><b data-i18n="usr.tgB">Telegram reseller bot in 5 minutes:</b> <span data-i18n="usr.tgA">1) message</span> <b>@BotFather</b> → <code>/newbot</code><span data-i18n="usr.tgCopy">, copy the token;</span> <span data-i18n="usr.tgC">2) in Zefira create a</span> <code>bot</code><span data-i18n="usr.tgD">-scoped API token;</span> <span data-i18n="usr.tgE">3) open</span> <code>examples/telegram-bot-python</code> <span data-i18n="usr.tgF">(or</span> <code>-node</code><span data-i18n="usr.tgG">), set</span> <code>TELEGRAM_BOT_TOKEN</code>, <code>ZEFIRA_URL</code>, <code>ZEFIRA_API_TOKEN</code><span data-i18n="usr.tgH">; 4) run it — customers get</span> <code>/buy</code> <span data-i18n="usr.tgI">plans keyboard, instant account + subscription link,</span> <code>/my</code> <span data-i18n="usr.tgJ">quota view. Panel-side notifications (user create/delete, brute-force lockouts) are separate:</span> <b data-i18n="usr.tgK">Telegram Bot → Telegram Notifications</b> <span data-i18n="usr.tgL">with any bot token + chat ID (message the bot once first, then Send Test).</span></p>
 
 <h2 id="telegram-bot" data-i18n="usr.tgBot">Telegram bot</h2>
+<p data-i18n="usr.tgShopIntro">The Telegram bot is a reseller shop: customers buy VPN accounts from a private chat and receive the subscription link there.</p>
+<h3 id="tgShopCommands" data-i18n="usr.tgShopCmd">Bot commands</h3>
+<ul>
+<li data-i18n="usr.tgShopStart">/start — the welcome message and the pointers to /buy and /my.</li>
+<li data-i18n="usr.tgShopBuy">/buy — posts the plan keyboard; the customer taps a plan and the bot sends a Telegram Stars invoice.</li>
+<li data-i18n="usr.tgShopMy">/my — shows the caller's own account, used volume, expiry and subscription link.</li>
+</ul>
+<p data-i18n="usr.tgShopCb">The <code>buy:&lt;n&gt;</code> callback — the plan-keyboard callback; the bot validates the plan index and sends the invoice.</p>
+<p data-i18n="usr.tgShopPre">The <code>pre_checkout</code> handler — Telegram approves the Stars payment; the bot creates the customer with the chosen plan and delivers the subscription link.</p>
+<h3 id="tgShopCapabilities" data-i18n="usr.tgShopCaps">Capabilities</h3>
+<ul>
+<li data-i18n="usr.tgShopPay">Paid plans: set TG_PROVIDER_TOKEN (from @BotFather, Telegram Stars) to sell them; without it the shop answers with the not-configured hint.</li>
+<li data-i18n="usr.tgShopPriv">Private chat only: subscription links are bearer credentials, so the bot refuses group and channel chats.</li>
+<li data-i18n="usr.tgShopNotif">Panel notifications: user created/deleted and brute-force lockouts are sent through the bot token and chat id.</li>
+</ul>
+<h3 id="tgShopUsage" data-i18n="usr.tgShopUsage">Usage</h3>
+<p data-i18n="usr.tgShopFlow">Flow: /buy posts the plan keyboard, sends the Stars invoice, and on pre-checkout approval creates the customer and delivers the link; /my reads the account.</p>
+<h3 id="tgShopSetup" data-i18n="usr.tgShopSetup">Setup</h3>
+<p data-i18n="usr.tgShopSetupBody">Setup has two ends. Panel side: open the Telegram Bot section, put the @BotFather token into the Bot token field and the chat ID (from @userinfobot or @channel) into Chat ID, then Save and Send Test - the panel answers with the not-configured hint until a token is stored. Seller bot side: set TELEGRAM_BOT_TOKEN, ZEFIRA_URL and ZEFIRA_API_TOKEN (scope bot) in the example bot and run it; set TG_PROVIDER_TOKEN to enable paid plans.</p>
+<h3 id="tgShopManage" data-i18n="usr.tgShopManage">Managing from within the bot</h3>
+<p data-i18n="usr.tgShopManageBody">A bot-scoped token is the management surface for the customers it created: the bot can list users, create customers and renew or top up - the same operations the panel buttons run, all audit-logged. Deletes, patches, resets, backups, restores, settings, tokens and updates answer 403 for a bot token and need the operator's own admin token, which never goes into a bot.</p>
 
 <h2 id="mcp-ai-clients" data-i18n="usr.mcp">AI client (MCP)</h2>
 
@@ -195,8 +216,8 @@
 </main>
 </div>
 <footer>Zefira · <span data-i18n="docs.footMit">MIT License</span> · <a href="https://github.com/mrlurix/zefira-panel">github.com/mrlurix/zefira-panel</a></footer>
-<script src="assets/i18n.js?v=99"></script>
-<script src="assets/docs.js?v=99"></script>
-<script src="assets/support-ai.js?v=99"></script>
+<script src="assets/i18n.js?v=100"></script>
+<script src="assets/docs.js?v=100"></script>
+<script src="assets/support-ai.js?v=100"></script>
 </body>
 </html>

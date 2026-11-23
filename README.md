@@ -36,7 +36,7 @@ Prefer to read it first? Download, look, then run that exact copy:
 ```bash
 d="$(mktemp -d)"                       # a private dir only you can read
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.63/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.64/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
@@ -46,7 +46,7 @@ rm -rf "$d"
 > straight into a root shell, so if you care which code runs as root, use the
 > second form: it lands in a directory `mktemp` just created for you (a fixed
 > `/tmp/zefira-inst` could be pre-created by another local user, and `mkdir -p`
-> succeeds silently on a directory it does not own), and the `v1.15.63` tag pins
+> succeeds silently on a directory it does not own), and the `v1.15.64` tag pins
 > the installer itself.
 >
 > The installer then clones the panel source at the release tag it ships with.
@@ -326,6 +326,17 @@ python security_doc_test.py              # the security policy states no coverag
 > uninstallable on Linux. `verify_lock_hashes.py` checks every recorded hash
 > against PyPI and reports any entry whose coverage a Linux install needs is
 > missing. It needs network access; `tools_lock.py` also prints the command.
+
+### Telegram bot
+
+The panel ships a Telegram reseller shop, and the seller-bot examples live in `examples/`:
+
+- **Bot methods:** `/start`, `/buy`, `/my`, the `buy:<n>` plan callback, and the `pre_checkout` approval handler. `/buy` posts a plan keyboard, sends a Telegram **Stars** invoice through `TG_PROVIDER_TOKEN`, and once Telegram approves the pre-checkout it creates the customer with the chosen plan and delivers the subscription link; `/my` reads the caller's own account. Without `TG_PROVIDER_TOKEN` the shop answers with the not-configured hint.
+- **Capabilities:** paid plans over Telegram Stars; private-chat-only (subscription links are bearer credentials); panel notifications (user create/delete, brute-force lockouts) via the bot token and chat id.
+- **Usage:** `examples/telegram-bot-python` or `examples/telegram-bot-node` — set `TELEGRAM_BOT_TOKEN`, `ZEFIRA_URL`, `ZEFIRA_API_TOKEN` (scope `bot`) and `TG_PROVIDER_TOKEN`; run the bot; customers get `/buy` plans, instant account + link, `/my` quota.
+- **Management:** the bot itself can list/create customers with a `bot`-scoped token; destructive management needs an admin token you hold yourself.
+
+See the [Telegram bot section on the docs site](https://mrlurix.github.io/zefira-panel/user-guide.html#telegram-bot) and `examples/telegram-bot-python/README.md` / `examples/telegram-bot-node/README.md`.
 
 ### API
 

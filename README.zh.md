@@ -34,13 +34,13 @@ curl -fsSL https://raw.githubusercontent.com/mrlurix/zefira-panel/main/install.s
 ```bash
 d="$(mktemp -d)"                       # 只有你自己能读的私有目录
 curl -fsSL -o "$d/install.sh" \
-  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.63/install.sh
+  https://raw.githubusercontent.com/mrlurix/zefira-panel/v1.15.64/install.sh
 less "$d/install.sh"
 sudo bash "$d/install.sh"
 rm -rf "$d"
 ```
 
-> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.63` 这个 tag 固定了安装脚本本身。
+> 两种都可以。单行版本会把当时上游提供的任何代码直接管进 root shell，所以如果你在意**以 root 身份运行的是哪份代码**，就用第二种：它落在 `mktemp` 刚刚为你创建的目录里（固定的 `/tmp/zefira-inst` 可能已被本地其他用户预先创建，而 `mkdir -p` 会在一个自己并不拥有的目录上静默成功），并且 `v1.15.64` 这个 tag 固定了安装脚本本身。
 >
 > 随后安装脚本会按它自带的发布 tag 克隆面板源码。如果你想更严格地固定到具体提交：
 >
@@ -217,6 +217,20 @@ python verify_lock_hashes.py
 ```
 
 > **务必运行验证器。** 锁文件在一台机器上生成、在另一台机器上安装，而只覆盖生成机器平台的哈希会让安装在服务器上直接中断——或者更糟，留下一个其实什么都没验证的锁文件。早期版本的 `tools_lock.py` 只记录它能在本地下载到的构件，这导致 31 个包中有 11 个在 Linux 上根本无法安装。`verify_lock_hashes.py` 会把每条记录的哈希与 PyPI 逐一核对。
+
+### Telegram 机器人
+
+面板自带一个 Telegram 分销商店，卖家机器人示例在 `examples/` 中：
+
+- **机器人方法：** `/start`、`/buy`、`/my`、`buy:<n>` 套餐回调，以及 `pre_checkout` 审批处理。`/buy` 发布套餐键盘，通过 `TG_PROVIDER_TOKEN` 发送 Telegram Stars 发票，Telegram 批准预付费后，用所选套餐创建客户并交付订阅链接；`/my` 读取用户自己的账号。未设置 `TG_PROVIDER_TOKEN` 时商店回复未配置提示。
+
+- **能力：** Telegram Stars 付费套餐；仅限私聊（订阅链接是 bearer 凭据）；面板通知（用户创建/删除、暴力破解锁定）通过机器人令牌和 chat id 发送。
+
+- **用法：** `examples/telegram-bot-python` 或 `examples/telegram-bot-node` —— 设置 `TELEGRAM_BOT_TOKEN`、`ZEFIRA_URL`、`ZEFIRA_API_TOKEN`（作用域 `bot`）和 `TG_PROVIDER_TOKEN`；运行机器人；客户通过 `/buy` 获取套餐、即时账号+链接，`/my` 查看配额。
+
+- **管理：** 机器人本身可用 `bot` 作用域令牌列出/创建客户；破坏性管理需要你自己持有的管理员令牌。
+
+完整信息请看 [Telegram 机器人章节](https://mrlurix.github.io/zefira-panel/user-guide.html#telegram-bot)，并阅读 `examples/telegram-bot-python/README.md` / `examples/telegram-bot-node/README.md`。
 
 ### API
 
